@@ -1,11 +1,7 @@
 import { app, BrowserWindow } from 'electron';
 import path from 'path';
-import { fileURLToPath } from 'url';
-import { registerIpcHandlers } from './ipc.js';
-import { closeDb } from './database.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import { registerIpcHandlers } from './ipc';
+import { closeDb } from './database';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -34,8 +30,8 @@ function createWindow() {
   });
 }
 
-app.whenReady().then(() => {
-  registerIpcHandlers();
+app.whenReady().then(async () => {
+  await registerIpcHandlers();
   createWindow();
 
   app.on('activate', () => {
