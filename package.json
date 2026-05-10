@@ -9,6 +9,9 @@
     "build": "npm run build:main && vite build",
     "electron:dev": "npm run build:main && concurrently \"vite --port 5173 --strictPort\" \"wait-on http://localhost:5173 && electron .\"",
     "electron:build": "npm run build && electron-builder",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "seed": "npx tsx scripts/seed.ts",
     "typecheck": "tsc --noEmit"
   },
   "keywords": [],
@@ -28,8 +31,10 @@
     "electron-builder": "^26.8.1",
     "react-router-dom": "^7.15.0",
     "tailwindcss": "^4.3.0",
+    "tsx": "^4.21.0",
     "typescript": "^6.0.3",
     "vite": "^8.0.11",
+    "vitest": "^4.1.5",
     "wait-on": "^9.0.5"
   },
   "dependencies": {
