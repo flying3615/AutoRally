@@ -30,3 +30,25 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     </HashRouter>
   </React.StrictMode>,
 );
+
+// Listen for global keyboard shortcuts from main process
+if (window.shortcuts) {
+  window.shortcuts.onNewSession(() => {
+    window.dispatchEvent(new CustomEvent('shortcut:new-session'));
+  });
+  window.shortcuts.onEndSession(() => {
+    window.dispatchEvent(new CustomEvent('shortcut:end-session'));
+  });
+  window.shortcuts.onExport(() => {
+    window.api.exportCSV();
+  });
+  window.shortcuts.onAddPlayer(() => {
+    window.dispatchEvent(new CustomEvent('menu:add-player'));
+  });
+  window.shortcuts.onSearchPlayer(() => {
+    window.dispatchEvent(new CustomEvent('menu:search-player'));
+  });
+  window.shortcuts.onSettings(() => {
+    window.dispatchEvent(new CustomEvent('shortcut:settings'));
+  });
+}

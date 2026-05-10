@@ -1,7 +1,8 @@
-import { ipcMain } from 'electron';
+import { ipcMain, BrowserWindow, dialog } from 'electron';
 import { v4 as uuid } from 'uuid';
 import { SqlValue } from 'sql.js';
 import { initDb, run, queryAll, queryOne } from './database';
+import fs from 'fs';
 
 export async function registerIpcHandlers() {
   const db = await initDb();
@@ -202,6 +203,65 @@ export async function registerIpcHandlers() {
       [playerId, playerId, playerId, playerId, 'completed']
     );
     return { sessionCount: sessionRow?.count ?? 0, gameCount: gameRow?.count ?? 0 };
+  });
+
+  // ── Window controls ──
+  ipcMain.handle('window:isFullscreen', () => {
+    const win = BrowserWindow.getFocusedWindow();
+    return win?.isFullScreen() ?? false;
+  });
+
+  ipcMain.handle('window:setFullscreen', (_e, flag: boolean) => {
+    const win = BrowserWindow.getFocusedWindow();
+    win?.setFullScreen(flag);
+  });
+
+  ipcMain.handle('webFrame:zoomIn', () => {
+    const win = BrowserWindow.getFocusedWindow();
+    if (win) {
+      const factor = win.webContents.getZoomFactor();
+      win.webContents.setZoomFactor(Math.min(factor + 0.1, 3));
+    }
+  });
+
+  ipcMain.handle('webFrame:zoomOut', () => {
+    const win = BrowserWindow.getFocusedWindow();
+    if (win) {
+      const factor = win.webContents.getZoomFactor();
+      win.webContents.setZoomFactor(Math.max(factor - 0.1, 0.5));
+    }
+  });
+
+  ipcMain.handle('webFrame:zoomReset', () => {
+    const win = BrowserWindow.getFocusedWindow();
+    win?.webContents.setZoomFactor(1);
+  });
+
+  ipcMain.handle('app:quit', () => {
+    BrowserWindow.getFocusedWindow()?.close();
+  });
+
+  // ── Export ──
+  ipcMain.handle('export:csv', async () => {
+    const win = BrowserWindow.getFocusedWindow();
+    if (!win) return;
+
+    const { filePath, canceled } = await dialog.showSaveDialog(win, {
+      title: '导出球员数据',
+      defaultPath: 'autorally-players.csv',
+      filters: [{ name: 'CSV', extensions: ['csv'] }],
+    });
+    if (canceled || !filePath) return;
+
+    const players = queryAll<{ name: string; gender: string; level: number; phone: string; balance: number }>(
+      'SELECT p.name, p.gender, p.level, p.phone, COALESCE(b.balance, 0) as balance FROM players p LEFT JOIN balances b ON b.playerId = p.id ORDER BY p.name'
+    );
+
+    const lines = ['姓名,性别,水平,电话,余额'];
+    for (const p of players) {
+      lines.push(`${p.name},${p.gender === 'male' ? '男' : '女'},${p.level},${p.phone},${p.balance}`);
+    }
+    fs.writeFileSync(filePath, '﻿' + lines.join('\n'), 'utf-8');
   });
 
   // Ensure db reference is used

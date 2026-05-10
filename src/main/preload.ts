@@ -53,8 +53,28 @@ const api = {
   // History
   historyPlayerStats: (playerId: string) =>
     ipcRenderer.invoke('history:playerStats', playerId),
+
+  // Window
+  windowIsFullscreen: () => ipcRenderer.invoke('window:isFullscreen'),
+  windowSetFullscreen: (flag: boolean) => ipcRenderer.invoke('window:setFullscreen', flag),
+  webFrameZoomIn: () => ipcRenderer.invoke('webFrame:zoomIn'),
+  webFrameZoomOut: () => ipcRenderer.invoke('webFrame:zoomOut'),
+  webFrameZoomReset: () => ipcRenderer.invoke('webFrame:zoomReset'),
+  appQuit: () => ipcRenderer.invoke('app:quit'),
+  exportCSV: () => ipcRenderer.invoke('export:csv'),
 };
 
 export type ElectronAPI = typeof api;
 
 contextBridge.exposeInMainWorld('api', api);
+
+// Expose shortcut listeners
+contextBridge.exposeInMainWorld('shortcuts', {
+  onNewSession: (cb: () => void) => ipcRenderer.on('shortcut:new-session', cb),
+  onEndSession: (cb: () => void) => ipcRenderer.on('shortcut:end-session', cb),
+  onExport: (cb: () => void) => ipcRenderer.on('shortcut:export', cb),
+  onAddPlayer: (cb: () => void) => ipcRenderer.on('shortcut:add-player', cb),
+  onSearchPlayer: (cb: () => void) => ipcRenderer.on('shortcut:search-player', cb),
+  onSettings: (cb: () => void) => ipcRenderer.on('shortcut:settings', cb),
+  removeAllListeners: (channel: string) => ipcRenderer.removeAllListeners(channel),
+});
