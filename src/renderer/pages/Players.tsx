@@ -71,11 +71,13 @@ function ActionsCell({ data }: ICellRendererParams<PlayerWithBalance>) {
   const [open, setOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
     const close = (e: MouseEvent) => {
-      if (btnRef.current?.parentElement?.contains(e.target as Node)) return;
+      if (btnRef.current?.contains(e.target as Node)) return;
+      if (menuRef.current?.contains(e.target as Node)) return;
       setOpen(false);
       setConfirmDelete(false);
     };
@@ -127,6 +129,7 @@ function ActionsCell({ data }: ICellRendererParams<PlayerWithBalance>) {
       </button>
       {open && createPortal(
         <div
+          ref={menuRef}
           className="fixed z-[200] min-w-[160px] bg-white border border-zinc-200/80 rounded-xl shadow-[0_8px_30px_-12px_rgba(0,0,0,0.15),0_0_0_1px_rgba(0,0,0,0.03)] py-1"
           style={{ top: pos.top, right: pos.right, animation: 'ctxFadeIn 0.12s cubic-bezier(0.16, 1, 0.3, 1)' }}
         >
