@@ -1,4 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
+import { AgGridReact } from 'ag-grid-react';
+import type { ColDef, ICellRendererParams } from 'ag-grid-community';
+import { AllCommunityModule, ModuleRegistry } from 'ag-grid-community';
+
+ModuleRegistry.registerModules([AllCommunityModule]);
 
 interface PlayerWithBalance {
   id: string;
@@ -10,6 +16,180 @@ interface PlayerWithBalance {
   balance: number;
 }
 
+const levelLabels = ['', 'Beginner', 'Novice', 'Intermediate', 'Advanced', 'Elite'];
+
+function NameCell({ value, data }: ICellRendererParams<PlayerWithBalance>) {
+  if (!data) return null;
+  const isMale = data.gender === 'male';
+  return (
+    <div className="flex items-center gap-2.5 h-full">
+      <div
+        className="w-7 h-7 rounded-lg flex items-center justify-center text-[11px] font-bold text-white shrink-0"
+        style={{ backgroundColor: isMale ? '#3b82f6' : '#ec4899' }}
+      >
+        {value?.[0] ?? ''}
+      </div>
+      <span className="font-medium text-zinc-900 truncate">{value}</span>
+    </div>
+  );
+}
+
+function GenderCell({ value }: ICellRendererParams<PlayerWithBalance>) {
+  const isMale = value === 'male';
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold ${
+      isMale ? 'bg-blue-50 text-blue-700' : 'bg-pink-50 text-pink-700'
+    }`}>
+      {isMale ? '♂ Male' : '♀ Female'}
+    </span>
+  );
+}
+
+function LevelCell({ value }: ICellRendererParams<PlayerWithBalance>) {
+  const colors: Record<number, string> = {
+    5: 'bg-emerald-900 text-emerald-100',
+    4: 'bg-emerald-700 text-emerald-100',
+    3: 'bg-emerald-500 text-white',
+    2: 'bg-emerald-300 text-emerald-900',
+    1: 'bg-emerald-100 text-emerald-800',
+  };
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold ${colors[value] ?? 'bg-zinc-100 text-zinc-700'}`}>
+      {levelLabels[value] ?? value}
+    </span>
+  );
+}
+
+function PhoneCell({ value }: ICellRendererParams<PlayerWithBalance>) {
+  return <span className="text-zinc-500 tabular-nums font-mono">{value || <span className="text-zinc-300">—</span>}</span>;
+}
+
+function BalanceCell({ value }: ICellRendererParams<PlayerWithBalance>) {
+  return (
+    <span className={`font-semibold tabular-nums font-mono ${value < 30 ? 'text-red-500' : 'text-zinc-700'}`}>
+      ${value.toFixed(0)}
+    </span>
+  );
+}
+
+function ActionsCell({ data, api, eGridCell }: ICellRendererParams<PlayerWithBalance> & { eGridCell?: HTMLElement }) {
+  const [open, setOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const btnRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => {
+      if (btnRef.current?.parentElement?.contains(e.target as Node)) return;
+      setOpen(false);
+      setConfirmDelete(false);
+    };
+    const keyClose = (e: KeyboardEvent) => { if (e.key === 'Escape') { setOpen(false); setConfirmDelete(false); } };
+    setTimeout(() => {
+      document.addEventListener('mousedown', close);
+      document.addEventListener('keydown', keyClose);
+    }, 0);
+    return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', keyClose); };
+  }, [open]);
+
+  if (!data) return null;
+
+  const handleEdit = () => {
+    setOpen(false);
+    api.dispatchEvent({ type: 'playerEdit', data });
+  };
+
+  const handleTopup = () => {
+    setOpen(false);
+    api.dispatchEvent({ type: 'playerTopup', data });
+  };
+
+  const handleDelete = async () => {
+    await window.api.playersDelete(data.id);
+    setOpen(false);
+    setConfirmDelete(false);
+    api.dispatchEvent({ type: 'playerDeleted' });
+  };
+
+  const menuPos = () => {
+    if (!btnRef.current) return { top: 0, left: 0 };
+    const r = btnRef.current.getBoundingClientRect();
+    return { top: r.bottom + 4, right: window.innerWidth - r.right };
+  };
+
+  const pos = open ? menuPos() : { top: 0, right: 0 };
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        onClick={() => { setOpen(!open); setConfirmDelete(false); }}
+        className="w-7 h-7 rounded-lg text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 transition-all inline-flex items-center justify-center"
+      >
+        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+          <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+        </svg>
+      </button>
+      {open && createPortal(
+        <div
+          className="fixed z-[200] min-w-[160px] bg-white border border-zinc-200/80 rounded-xl shadow-[0_8px_30px_-12px_rgba(0,0,0,0.15),0_0_0_1px_rgba(0,0,0,0.03)] py-1"
+          style={{ top: pos.top, right: pos.right, animation: 'ctxFadeIn 0.12s cubic-bezier(0.16, 1, 0.3, 1)' }}
+        >
+          <button
+            onClick={handleTopup}
+            className="w-full text-left px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50 flex items-center gap-2.5 transition-colors"
+          >
+            <svg className="w-4 h-4 text-zinc-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m6-6H6" />
+            </svg>
+            Top Up
+          </button>
+          <button
+            onClick={handleEdit}
+            className="w-full text-left px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50 flex items-center gap-2.5 transition-colors"
+          >
+            <svg className="w-4 h-4 text-zinc-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" />
+            </svg>
+            Edit Player
+          </button>
+          <div className="my-1 border-t border-zinc-100" />
+          {confirmDelete ? (
+            <div className="px-3 py-2">
+              <p className="text-xs text-zinc-500 mb-2">Delete this player?</p>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleDelete}
+                  className="flex-1 h-7 text-xs font-semibold text-white bg-red-500 hover:bg-red-600 rounded-lg transition-all"
+                >
+                  Delete
+                </button>
+                <button
+                  onClick={() => { setConfirmDelete(false); setOpen(false); }}
+                  className="flex-1 h-7 text-xs text-zinc-500 hover:bg-zinc-100 rounded-lg transition-all"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setConfirmDelete(true)}
+              className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2.5 transition-colors"
+            >
+              <svg className="w-4 h-4 text-red-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+              </svg>
+              Delete
+            </button>
+          )}
+        </div>,
+        document.body,
+      )}
+    </>
+  );
+}
+
 export function Players() {
   const [players, setPlayers] = useState<PlayerWithBalance[]>([]);
   const [showForm, setShowForm] = useState(false);
@@ -17,9 +197,24 @@ export function Players() {
   const [form, setForm] = useState({ name: '', gender: 'male', level: 3, phone: '' });
   const [topupPlayer, setTopupPlayer] = useState<string | null>(null);
   const [topupAmount, setTopupAmount] = useState('');
+  const [search, setSearch] = useState('');
+  const searchRef = useRef<HTMLInputElement>(null);
+  const gridRef = useRef<AgGridReact>(null);
 
-  const load = () => window.api.playersList().then((p: PlayerWithBalance[]) => setPlayers(p));
-  useEffect(() => { load(); }, []);
+  const load = useCallback(() => window.api.playersList().then((p: PlayerWithBalance[]) => setPlayers(p)), []);
+  useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    const handler = () => { setShowForm(true); setEditingId(null); setForm({ name: '', gender: 'male', level: 3, phone: '' }); };
+    window.addEventListener('menu:add-player', handler);
+    return () => window.removeEventListener('menu:add-player', handler);
+  }, []);
+
+  useEffect(() => {
+    const handler = () => { setSearch(''); searchRef.current?.focus(); };
+    window.addEventListener('menu:search-player', handler);
+    return () => window.removeEventListener('menu:search-player', handler);
+  }, []);
 
   const handleSave = async () => {
     if (!form.name.trim()) return;
@@ -40,13 +235,6 @@ export function Players() {
     setShowForm(true);
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('确认删除该球员？')) {
-      await window.api.playersDelete(id);
-      load();
-    }
-  };
-
   const handleTopup = async () => {
     if (!topupPlayer || !topupAmount || Number(topupAmount) <= 0) return;
     await window.api.paymentsTopup(topupPlayer, Number(topupAmount));
@@ -55,133 +243,215 @@ export function Players() {
     load();
   };
 
-  const levelLabels = ['', '入门', '初级', '中级', '高级', '精英'];
+  // Grid event handlers for cell renderer dispatches
+  const onGridReady = useCallback(() => {
+    const api = gridRef.current?.api;
+    if (!api) return;
+    api.addEventListener('playerEdit', (e: any) => handleEdit(e.data));
+    api.addEventListener('playerTopup', (e: any) => setTopupPlayer(e.data.id));
+    api.addEventListener('playerDeleted', () => load());
+  }, [load]);
+
+  // External filter
+  const isExternalFilterPresent = useCallback(() => search.trim().length > 0, [search]);
+  const doesExternalFilterPass = useCallback((node: any) => {
+    const p = node.data as PlayerWithBalance;
+    if (!p) return false;
+    const q = search.toLowerCase();
+    return p.name.toLowerCase().includes(q) || p.phone.includes(q);
+  }, [search]);
+
+  const onSearchChange = (val: string) => {
+    setSearch(val);
+    gridRef.current?.api.onFilterChanged();
+  };
+
+  const colDefs: ColDef<PlayerWithBalance>[] = [
+    { field: 'name', headerName: 'Name', flex: 1, minWidth: 160, cellRenderer: NameCell, sortable: true },
+    { field: 'gender', headerName: 'Gender', width: 110, cellRenderer: GenderCell, sortable: true },
+    { field: 'level', headerName: 'Level', width: 130, cellRenderer: LevelCell, sortable: true },
+    { field: 'phone', headerName: 'Phone', flex: 1, minWidth: 120, cellRenderer: PhoneCell, sortable: true },
+    { field: 'balance', headerName: 'Balance', width: 110, cellRenderer: BalanceCell, sortable: true },
+    { headerName: '', width: 56, cellRenderer: ActionsCell, sortable: false, resizable: false, suppressMovable: true },
+  ];
+
+  const defaultColDef: ColDef = {
+    resizable: true,
+  };
 
   return (
-    <div className="p-8 max-w-5xl">
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold text-gray-900">球员管理</h2>
-        <button
-          onClick={() => { setShowForm(true); setEditingId(null); setForm({ name: '', gender: 'male', level: 3, phone: '' }); }}
-          className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
-        >
-          添加球员
-        </button>
-      </div>
+    <div className="h-full overflow-y-auto">
+      <div className="max-w-5xl mx-auto px-8 py-10" style={{ animation: 'fadeIn 0.3s ease' }}>
 
-      {showForm && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
-          <h3 className="text-lg font-semibold mb-4">{editingId ? '编辑球员' : '添加球员'}</h3>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">姓名</label>
-              <input
-                type="text" value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">性别</label>
-              <select
-                value={form.gender}
-                onChange={(e) => setForm({ ...form, gender: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="male">男</option>
-                <option value="female">女</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">水平 (1-5)</label>
-              <select
-                value={form.level}
-                onChange={(e) => setForm({ ...form, level: Number(e.target.value) })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                {[1, 2, 3, 4, 5].map(l => (
-                  <option key={l} value={l}>{l} - {levelLabels[l]}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">电话</label>
-              <input
-                type="text" value={form.phone}
-                onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
+        {/* Header */}
+        <div className="flex items-end justify-between mb-8">
+          <div>
+            <h2 className="text-xl font-bold text-zinc-900 tracking-tight">Players</h2>
+            <p className="text-sm text-zinc-400 mt-0.5 font-medium">{players.length} registered</p>
           </div>
-          <div className="flex gap-3 mt-4">
-            <button onClick={handleSave} className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700">
-              {editingId ? '保存' : '添加'}
-            </button>
-            <button onClick={() => { setShowForm(false); setEditingId(null); }} className="px-4 py-2 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200">
-              取消
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+              </svg>
+              <input
+                ref={searchRef}
+                type="text"
+                value={search}
+                onChange={(e) => onSearchChange(e.target.value)}
+                placeholder="Search players..."
+                className="h-8 w-48 pl-8 pr-3 text-sm bg-white border border-zinc-200 rounded-lg
+                  focus:outline-none focus:border-zinc-400 focus:ring-2 focus:ring-gray-100 transition-all"
+              />
+            </div>
+            <button
+              onClick={() => { setShowForm(true); setEditingId(null); setForm({ name: '', gender: 'male', level: 3, phone: '' }); }}
+              className="h-8 px-4 text-sm font-medium bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 active:scale-[0.97] shadow-[0_2px_8px_-2px_rgba(0,0,0,0.2)] transition-all inline-flex items-center justify-center"
+            >
+              Add Player
             </button>
           </div>
         </div>
-      )}
 
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50 border-b border-gray-200">
-            <tr>
-              <th className="text-left px-6 py-3 font-medium text-gray-500">姓名</th>
-              <th className="text-left px-6 py-3 font-medium text-gray-500">性别</th>
-              <th className="text-left px-6 py-3 font-medium text-gray-500">水平</th>
-              <th className="text-left px-6 py-3 font-medium text-gray-500">电话</th>
-              <th className="text-left px-6 py-3 font-medium text-gray-500">余额</th>
-              <th className="text-right px-6 py-3 font-medium text-gray-500">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {players.map((p) => (
-              <tr key={p.id} className="border-b border-gray-100 hover:bg-gray-50">
-                <td className="px-6 py-3 font-medium">{p.name}</td>
-                <td className="px-6 py-3">{p.gender === 'male' ? '男' : '女'}</td>
-                <td className="px-6 py-3">
-                  <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
-                    p.level >= 4 ? 'bg-orange-100 text-orange-700' : p.level >= 3 ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'
-                  }`}>
-                    {p.level} - {levelLabels[p.level]}
-                  </span>
-                </td>
-                <td className="px-6 py-3 text-gray-500">{p.phone || '-'}</td>
-                <td className="px-6 py-3">
-                  <span className={p.balance < 30 ? 'text-red-600 font-medium' : 'text-gray-900'}>
-                    ¥{p.balance.toFixed(0)}
-                  </span>
-                </td>
-                <td className="px-6 py-3 text-right">
-                  <button onClick={() => setTopupPlayer(p.id)} className="text-green-600 hover:underline text-xs mr-3">充值</button>
-                  <button onClick={() => handleEdit(p)} className="text-blue-600 hover:underline text-xs mr-3">编辑</button>
-                  <button onClick={() => handleDelete(p.id)} className="text-red-600 hover:underline text-xs">删除</button>
-                </td>
-              </tr>
-            ))}
-            {players.length === 0 && (
-              <tr><td colSpan={6} className="px-6 py-8 text-center text-gray-400">暂无球员，点击上方按钮添加</td></tr>
-            )}
-          </tbody>
-        </table>
+        {/* Add/Edit Form */}
+        {showForm && (
+          <div className="bg-white border border-zinc-200/80 rounded-2xl p-6 mb-6 shadow-[0_2px_8px_-4px_rgba(0,0,0,0.04)]" style={{ animation: 'slideUp 0.2s cubic-bezier(0.16, 1, 0.3, 1)' }}>
+            <h3 className="text-sm font-bold text-zinc-900 mb-4">{editingId ? 'Edit Player' : 'Add Player'}</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-[11px] text-zinc-400 font-semibold uppercase tracking-wider mb-1.5">Name</label>
+                <input
+                  type="text" value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  className="w-full h-9 px-3 text-sm bg-white border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-200/80 focus:border-zinc-300 transition-all"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] text-zinc-400 font-semibold uppercase tracking-wider mb-1.5">Gender</label>
+                <div className="flex gap-2">
+                  {(['male', 'female'] as const).map(g => (
+                    <button
+                      key={g}
+                      onClick={() => setForm({ ...form, gender: g })}
+                      className={`flex-1 h-9 text-sm rounded-lg transition-all duration-150 inline-flex items-center justify-center font-medium ${
+                        form.gender === g
+                          ? 'bg-zinc-900 text-white shadow-[0_1px_3px_rgba(0,0,0,0.12)]'
+                          : 'bg-white border border-zinc-200 text-zinc-500 hover:border-zinc-300'
+                      }`}
+                    >
+                      {g === 'male' ? '♂ Male' : '♀ Female'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="block text-[11px] text-zinc-400 font-semibold uppercase tracking-wider mb-1.5">Level</label>
+                <div className="flex gap-1.5">
+                  {[1, 2, 3, 4, 5].map(l => (
+                    <button
+                      key={l}
+                      onClick={() => setForm({ ...form, level: l })}
+                      className={`flex-1 h-9 text-sm rounded-lg transition-all duration-150 inline-flex items-center justify-center font-medium ${
+                        form.level === l
+                          ? 'bg-zinc-900 text-white shadow-[0_1px_3px_rgba(0,0,0,0.12)]'
+                          : 'bg-white border border-zinc-200 text-zinc-500 hover:border-zinc-300'
+                      }`}
+                    >
+                      {l}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="block text-[11px] text-zinc-400 font-semibold uppercase tracking-wider mb-1.5">Phone</label>
+                <input
+                  type="text" value={form.phone}
+                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                  className="w-full h-9 px-3 text-sm bg-white border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-200/80 focus:border-zinc-300 transition-all"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2 mt-5">
+              <button
+                onClick={handleSave}
+                className="h-8 px-4 text-sm font-medium bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 active:scale-[0.97] shadow-[0_2px_8px_-2px_rgba(0,0,0,0.2)] transition-all inline-flex items-center justify-center"
+              >
+                {editingId ? 'Save' : 'Add'}
+              </button>
+              <button
+                onClick={() => { setShowForm(false); setEditingId(null); }}
+                className="h-8 px-4 text-sm text-zinc-500 hover:text-zinc-700 rounded-lg hover:bg-zinc-100 active:scale-[0.97] transition-all inline-flex items-center justify-center"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* AG Grid */}
+        {players.length > 0 ? (
+          <div className="bg-white rounded-2xl border border-zinc-200/80 overflow-hidden shadow-[0_2px_8px_-4px_rgba(0,0,0,0.04)]">
+            <div className="ag-theme-quartz" style={{ width: '100%' }}>
+              <AgGridReact<PlayerWithBalance>
+                ref={gridRef}
+                rowData={players}
+                columnDefs={colDefs}
+                defaultColDef={defaultColDef}
+                domLayout="autoHeight"
+                rowHeight={52}
+                headerHeight={38}
+                suppressCellFocus
+                suppressRowClickSelection
+                isExternalFilterPresent={isExternalFilterPresent}
+                doesExternalFilterPass={doesExternalFilterPass}
+                onGridReady={onGridReady}
+                pagination={true}
+                paginationPageSize={15}
+                paginationPageSizeSelector={[10, 15, 25, 50]}
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center pt-24">
+            <div className="w-12 h-12 rounded-2xl bg-zinc-50 flex items-center justify-center mb-4 border border-zinc-100">
+              <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-zinc-300">
+                <circle cx="10" cy="7" r="3.5" />
+                <path d="M3 18c0-3.3 3.1-6 7-6s7 2.7 7 6" />
+              </svg>
+            </div>
+            <p className="text-sm font-semibold text-zinc-500 mb-1">No players yet</p>
+            <p className="text-xs text-zinc-400">Click above to add the first player</p>
+          </div>
+        )}
       </div>
 
       {/* Topup Modal */}
       {topupPlayer && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-80">
-            <h3 className="text-lg font-semibold mb-4">充值</h3>
+        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => setTopupPlayer(null)}>
+          <div className="bg-white rounded-2xl p-6 w-80 shadow-[0_16px_40px_-12px_rgba(0,0,0,0.2),0_0_0_1px_rgba(0,0,0,0.03)]" onClick={e => e.stopPropagation()}
+            style={{ animation: 'ctxFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)' }}>
+            <h3 className="text-sm font-bold text-zinc-900 mb-4">Top Up</h3>
             <input
               type="number" value={topupAmount}
               onChange={(e) => setTopupAmount(e.target.value)}
-              placeholder="充值金额"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Top up amount"
+              className="w-full h-9 px-3 text-sm border border-zinc-200 rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-gray-200/80 focus:border-zinc-300 transition-all"
+              autoFocus
             />
-            <div className="flex gap-3">
-              <button onClick={handleTopup} className="flex-1 px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700">确认充值</button>
-              <button onClick={() => setTopupPlayer(null)} className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200">取消</button>
+            <div className="flex gap-2">
+              <button
+                onClick={handleTopup}
+                className="flex-1 h-8 text-sm font-medium bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 active:scale-[0.97] shadow-[0_2px_8px_-2px_rgba(0,0,0,0.2)] transition-all inline-flex items-center justify-center"
+              >
+                Confirm
+              </button>
+              <button
+                onClick={() => setTopupPlayer(null)}
+                className="flex-1 h-8 text-sm text-zinc-500 hover:text-zinc-700 rounded-lg hover:bg-zinc-100 active:scale-[0.97] transition-all inline-flex items-center justify-center"
+              >
+                Cancel
+              </button>
             </div>
           </div>
         </div>

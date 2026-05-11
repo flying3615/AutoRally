@@ -24,6 +24,9 @@ const api = {
     ipcRenderer.invoke('attendance:checkin', playerId, sessionId),
   attendanceListBySession: (sessionId: string) =>
     ipcRenderer.invoke('attendance:listBySession', sessionId),
+  attendanceSetPaused: (id: string, paused: boolean) =>
+    ipcRenderer.invoke('attendance:setPaused', id, paused),
+  attendanceRemove: (id: string) => ipcRenderer.invoke('attendance:remove', id),
 
   // Games
   gamesListBySession: (sessionId: string) => ipcRenderer.invoke('games:listBySession', sessionId),
@@ -36,7 +39,10 @@ const api = {
   gamesStart: (id: string) => ipcRenderer.invoke('games:start', id),
   gamesComplete: (id: string) => ipcRenderer.invoke('games:complete', id),
   gamesDelete: (id: string) => ipcRenderer.invoke('games:delete', id),
+  gamesDeleteAllPending: (sessionId: string) => ipcRenderer.invoke('games:deleteAllPending', sessionId),
   gamesMaxRound: (sessionId: string) => ipcRenderer.invoke('games:maxRound', sessionId),
+  gamesReplacePlayer: (gameId: string, slot: string, newPlayerId: string) =>
+    ipcRenderer.invoke('games:replacePlayer', gameId, slot, newPlayerId),
 
   // Payments
   paymentsListBySession: (sessionId: string) =>

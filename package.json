@@ -4,13 +4,16 @@
   "description": "Badminton Club Manager - Player management, match scheduling, and fee tracking",
   "main": "dist/main/index.js",
   "scripts": {
-    "dev": "vite",
+    "dev": "npm run seed && npm run electron:dev",
+    "dev:web": "vite",
     "build:main": "tsc -p tsconfig.node.json",
     "build": "npm run build:main && vite build",
-    "electron:dev": "npm run build:main && concurrently \"vite --port 5173 --strictPort\" \"wait-on http://localhost:5173 && electron .\"",
+    "electron:dev": "npm run build:main && concurrently \"vite --port 5173 --strictPort\" \"wait-on http://localhost:5173 && VITE_DEV_SERVER_URL=http://localhost:5173 electron .\"",
     "electron:build": "npm run build && electron-builder",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:e2e": "npm run build:main && playwright test",
+    "test:e2e:headed": "npm run build:main && playwright test --headed",
     "seed": "npx tsx scripts/seed.ts",
     "typecheck": "tsc --noEmit"
   },
@@ -19,6 +22,7 @@
   "license": "ISC",
   "type": "commonjs",
   "devDependencies": {
+    "@playwright/test": "^1.59.1",
     "@tailwindcss/vite": "^4.3.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
@@ -38,6 +42,8 @@
     "wait-on": "^9.0.5"
   },
   "dependencies": {
+    "ag-grid-community": "^35.2.1",
+    "ag-grid-react": "^35.2.1",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "sql.js": "^1.14.1",

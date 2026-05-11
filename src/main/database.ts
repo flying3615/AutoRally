@@ -121,6 +121,10 @@ function migrate(db: Database) {
   db.run("INSERT OR IGNORE INTO settings (key, value) VALUES ('courtCount', '3')");
   db.run("INSERT OR IGNORE INTO settings (key, value) VALUES ('sessionFee', '30')");
   db.run("INSERT OR IGNORE INTO settings (key, value) VALUES ('gameDuration', '15')");
+
+  // Migrations for existing databases
+  try { db.run('ALTER TABLE attendance ADD COLUMN paused INTEGER NOT NULL DEFAULT 0'); } catch (_) { /* already exists */ }
+
   save();
 }
 

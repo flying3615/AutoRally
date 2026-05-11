@@ -2,9 +2,19 @@ import initSqlJs from 'sql.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { randomUUID } from 'crypto';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dbPath = path.join(__dirname, '..', 'autorally-seed.db');
+
+function dateStr(d: Date) {
+  return d.toISOString().split('T')[0]!;
+}
+function isoStr(d: Date, h: number, m: number) {
+  const dt = new Date(d);
+  dt.setUTCHours(h, m, 0, 0);
+  return dt.toISOString();
+}
 
 async function seed() {
   const SQL = await initSqlJs();
@@ -29,31 +39,31 @@ async function seed() {
     INSERT INTO settings (key, value) VALUES ('gameDuration', '15');
   `);
 
-  // Players — 20 people, mix of gender and levels
-  const players = [
-    { id: 'p1',  name: '张伟',   gender: 'male',   level: 5, phone: '13800000001', balance: 200 },
-    { id: 'p2',  name: '李娜',   gender: 'female', level: 4, phone: '13800000002', balance: 150 },
-    { id: 'p3',  name: '王强',   gender: 'male',   level: 4, phone: '13800000003', balance: 120 },
-    { id: 'p4',  name: '刘洋',   gender: 'male',   level: 3, phone: '13800000004', balance: 90 },
-    { id: 'p5',  name: '陈静',   gender: 'female', level: 3, phone: '13800000005', balance: 60 },
-    { id: 'p6',  name: '赵磊',   gender: 'male',   level: 5, phone: '13800000006', balance: 300 },
-    { id: 'p7',  name: '孙芳',   gender: 'female', level: 2, phone: '13800000007', balance: 30 },
-    { id: 'p8',  name: '周杰',   gender: 'male',   level: 2, phone: '13800000008', balance: 45 },
-    { id: 'p9',  name: '吴敏',   gender: 'female', level: 5, phone: '13800000009', balance: 250 },
-    { id: 'p10', name: '郑浩',   gender: 'male',   level: 3, phone: '13800000010', balance: 15 },
-    { id: 'p11', name: '黄丽',   gender: 'female', level: 4, phone: '13800000011', balance: 80 },
-    { id: 'p12', name: '林峰',   gender: 'male',   level: 1, phone: '13800000012', balance: 0 },
-    { id: 'p13', name: '何婷',   gender: 'female', level: 1, phone: '13800000013', balance: 10 },
-    { id: 'p14', name: '马超',   gender: 'male',   level: 4, phone: '13800000014', balance: 180 },
-    { id: 'p15', name: '高雪',   gender: 'female', level: 3, phone: '13800000015', balance: 50 },
-    { id: 'p16', name: '罗勇',   gender: 'male',   level: 2, phone: '13800000016', balance: 20 },
-    { id: 'p17', name: '谢琳',   gender: 'female', level: 2, phone: '13800000017', balance: 40 },
-    { id: 'p18', name: '韩飞',   gender: 'male',   level: 3, phone: '13800000018', balance: 70 },
-    { id: 'p19', name: '唐颖',   gender: 'female', level: 5, phone: '13800000019', balance: 160 },
-    { id: 'p20', name: '邓鹏',   gender: 'male',   level: 1, phone: '13800000020', balance: 5 },
-  ];
+  // Dates relative to today so test data always looks fresh
+  const now = new Date();
+  const today = dateStr(now);
+  const lastWeekDate = new Date(now);
+  lastWeekDate.setDate(lastWeekDate.getDate() - 7);
+  const lastWeek = dateStr(lastWeekDate);
 
-  const joinDate = '2025-01-15T10:00:00.000Z';
+  // Players — loaded from CSV
+  const csvPath = path.join(__dirname, '..', 'kapiti_players.csv');
+  const csvContent = fs.readFileSync(csvPath, 'utf-8');
+  const csvLines = csvContent.trim().split('\n').slice(1); // skip header
+  const players = csvLines.map((line, i) => {
+    const [first, last, levelStr, genderStr] = line.split(',');
+    const name = [first, last].filter(Boolean).join(' ').trim();
+    return {
+      id: `p${i + 1}`,
+      name,
+      gender: genderStr.trim() === 'male' ? 'male' : 'female',
+      level: Number(levelStr.trim()),
+      phone: '',
+      balance: Math.floor(Math.random() * 250) + 10,
+    };
+  });
+
+  const joinDate = isoStr(now, 10, 0);
   for (const p of players) {
     db.run('INSERT INTO players (id, name, gender, level, phone, joinDate) VALUES (?, ?, ?, ?, ?, ?)',
       [p.id, p.name, p.gender, p.level, p.phone, joinDate]);
@@ -63,44 +73,46 @@ async function seed() {
 
   // Completed session from last week
   const sessionId1 = 's1';
-  const lastWeek = '2025-05-03';
   db.run('INSERT INTO sessions (id, date, startTime, endTime, courtCount, status) VALUES (?, ?, ?, ?, ?, ?)',
-    [sessionId1, lastWeek, `${lastWeek}T09:00:00.000Z`, `${lastWeek}T12:00:00.000Z`, 3, 'completed']);
+    [sessionId1, lastWeek, isoStr(lastWeekDate, 9, 0), isoStr(lastWeekDate, 12, 0), 3, 'completed']);
 
   // Attendance for completed session — 16 players
   const attendedS1 = players.slice(0, 16);
   for (let i = 0; i < attendedS1.length; i++) {
     const p = attendedS1[i]!;
-    const checkinTime = `${lastWeek}T0${8 + Math.floor(i / 4)}:${(i % 4) * 15}:00.000Z`;
+    const checkinTime = isoStr(lastWeekDate, 8 + Math.floor(i / 4), (i % 4) * 15);
     db.run('INSERT INTO attendance (id, playerId, sessionId, checkinTime) VALUES (?, ?, ?, ?)',
       [`a${p.id}_s1`, p.id, sessionId1, checkinTime]);
   }
 
+  // Helper to get player IDs by slice
+  const pid = (i: number) => players[i]!.id;
+
   // Games for completed session — 2 rounds
   // Round 1 (same-gender): 3 courts
   const round1Games = [
-    { id: 'g1', court: 1, t1: ['p1', 'p12'], t2: ['p6', 'p4'] },
-    { id: 'g2', court: 2, t1: ['p14', 'p8'], t2: ['p3', 'p16'] },
-    { id: 'g3', court: 3, t1: ['p2', 'p13'], t2: ['p9', 'p7'] },
+    { id: 'g1', court: 1, t1: [pid(0), pid(11)], t2: [pid(5), pid(3)] },
+    { id: 'g2', court: 2, t1: [pid(13), pid(7)], t2: [pid(2), pid(15)] },
+    { id: 'g3', court: 3, t1: [pid(1), pid(12)], t2: [pid(8), pid(6)] },
   ];
   for (const g of round1Games) {
     db.run(`INSERT INTO games (id, sessionId, courtNumber, team1Player1Id, team1Player2Id, team2Player1Id, team2Player2Id, status, roundNumber, gameType, startedAt, endedAt)
       VALUES (?, ?, ?, ?, ?, ?, ?, 'completed', 1, 'same-gender', ?, ?)`,
       [g.id, sessionId1, g.court, g.t1[0], g.t1[1], g.t2[0], g.t2[1],
-       `${lastWeek}T09:15:00.000Z`, `${lastWeek}T09:30:00.000Z`]);
+       isoStr(lastWeekDate, 9, 15), isoStr(lastWeekDate, 9, 30)]);
   }
 
   // Round 2 (mixed): 3 courts
   const round2Games = [
-    { id: 'g4', court: 1, t1: ['p1', 'p7'], t2: ['p6', 'p2'] },
-    { id: 'g5', court: 2, t1: ['p3', 'p5'], t2: ['p14', 'p9'] },
-    { id: 'g6', court: 3, t1: ['p4', 'p13'], t2: ['p8', 'p11'] },
+    { id: 'g4', court: 1, t1: [pid(0), pid(6)], t2: [pid(5), pid(1)] },
+    { id: 'g5', court: 2, t1: [pid(2), pid(4)], t2: [pid(13), pid(8)] },
+    { id: 'g6', court: 3, t1: [pid(3), pid(12)], t2: [pid(7), pid(10)] },
   ];
   for (const g of round2Games) {
     db.run(`INSERT INTO games (id, sessionId, courtNumber, team1Player1Id, team1Player2Id, team2Player1Id, team2Player2Id, status, roundNumber, gameType, startedAt, endedAt)
       VALUES (?, ?, ?, ?, ?, ?, ?, 'completed', 2, 'mixed', ?, ?)`,
       [g.id, sessionId1, g.court, g.t1[0], g.t1[1], g.t2[0], g.t2[1],
-       `${lastWeek}T09:35:00.000Z`, `${lastWeek}T09:50:00.000Z`]);
+       isoStr(lastWeekDate, 9, 35), isoStr(lastWeekDate, 9, 50)]);
   }
 
   // Payments for completed session
@@ -109,26 +121,24 @@ async function seed() {
     const paid = p.balance >= 30 || i < 12;
     db.run('INSERT INTO payments (id, playerId, sessionId, amount, status, paidDate, paymentType) VALUES (?, ?, ?, ?, ?, ?, ?)',
       [`py${p.id}_s1`, p.id, sessionId1, 30, paid ? 'paid' : 'unpaid',
-       paid ? `${lastWeek}T09:${String(i).padStart(2, '0')}:00.000Z` : null, 'session']);
+       paid ? isoStr(lastWeekDate, 9, i) : null, 'session']);
   }
 
   // Active session — today
   const sessionId2 = 's2';
-  const today = '2025-05-10';
   db.run('INSERT INTO sessions (id, date, startTime, endTime, courtCount, status) VALUES (?, ?, ?, ?, ?, ?)',
-    [sessionId2, today, `${today}T14:00:00.000Z`, null, 3, 'active']);
+    [sessionId2, today, isoStr(now, 14, 0), null, 3, 'active']);
 
   // Attendance for active session — 12 players so far
   const attendedS2 = players.slice(0, 12);
   for (let i = 0; i < attendedS2.length; i++) {
     const p = attendedS2[i]!;
-    const checkinTime = `${today}T13:${45 + Math.floor(i / 4)}:${(i % 4) * 15}:00.000Z`;
+    const checkinTime = isoStr(now, 13, 45 + Math.floor(i / 4) * 5 + (i % 4) * 3);
     db.run('INSERT INTO attendance (id, playerId, sessionId, checkinTime) VALUES (?, ?, ?, ?)',
       [`a${p.id}_s2`, p.id, sessionId2, checkinTime]);
 
     // Auto-deduct from balance
-    const balance = p.balance;
-    if (balance >= 30) {
+    if (p.balance >= 30) {
       db.run('UPDATE balances SET balance = balance - 30, lastUpdated = ? WHERE playerId = ?',
         [checkinTime, p.id]);
       db.run('INSERT INTO payments (id, playerId, sessionId, amount, status, paidDate, paymentType) VALUES (?, ?, ?, ?, ?, ?, ?)',
@@ -139,17 +149,16 @@ async function seed() {
     }
   }
 
-  // Active games — round 1 playing
-  const activeGames = [
-    { id: 'g7', court: 1, t1: ['p1', 'p10'], t2: ['p6', 'p4'] },
-    { id: 'g8', court: 2, t1: ['p14', 'p8'], t2: ['p3', 'p16'] },
-    { id: 'g9', court: 3, t1: ['p2', 'p7'], t2: ['p9', 'p5'] },
+  // Pending games — round 1 (not started yet)
+  const pendingGames = [
+    { id: 'g7', court: 1, t1: [pid(0), pid(9)], t2: [pid(5), pid(3)] },
+    { id: 'g8', court: 2, t1: [pid(13), pid(7)], t2: [pid(2), pid(15)] },
+    { id: 'g9', court: 3, t1: [pid(1), pid(6)], t2: [pid(8), pid(4)] },
   ];
-  for (const g of activeGames) {
+  for (const g of pendingGames) {
     db.run(`INSERT INTO games (id, sessionId, courtNumber, team1Player1Id, team1Player2Id, team2Player1Id, team2Player2Id, status, roundNumber, gameType, startedAt, endedAt)
-      VALUES (?, ?, ?, ?, ?, ?, ?, 'playing', 1, 'same-gender', ?, NULL)`,
-      [g.id, sessionId2, g.court, g.t1[0], g.t1[1], g.t2[0], g.t2[1],
-       `${today}T14:10:00.000Z`]);
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', 1, 'same-gender', NULL, NULL)`,
+      [g.id, sessionId2, g.court, g.t1[0], g.t1[1], g.t2[0], g.t2[1]]);
   }
 
   // Save
@@ -158,9 +167,10 @@ async function seed() {
   db.close();
 
   console.log(`Seed database created at: ${dbPath}`);
+  console.log(`  Date: ${today} (last session: ${lastWeek})`);
   console.log(`  Players: ${players.length}`);
   console.log(`  Sessions: 2 (1 completed, 1 active)`);
-  console.log(`  Games: 6 completed + 3 playing`);
+  console.log(`  Games: 6 completed + 3 pending`);
   console.log(`  Payments: ~28 records`);
 
   // Also copy to Electron userData dir so the app can use it

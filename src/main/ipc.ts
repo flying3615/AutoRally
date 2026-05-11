@@ -108,10 +108,22 @@ export async function registerIpcHandlers() {
     );
   });
 
+  ipcMain.handle('attendance:setPaused', (_e, id: string, paused: boolean) => {
+    run('UPDATE attendance SET paused = ? WHERE id = ?', [paused ? 1 : 0, id]);
+  });
+
+  ipcMain.handle('attendance:remove', (_e, id: string) => {
+    run('DELETE FROM attendance WHERE id = ?', [id]);
+  });
+
   // ── Games ──
   ipcMain.handle('games:listBySession', (_e, sessionId: string) => {
     return queryAll(
-      `SELECT g.*, p1.name as t1p1Name, p2.name as t1p2Name, p3.name as t2p1Name, p4.name as t2p2Name
+      `SELECT g.*,
+        p1.name as t1p1Name, p1.gender as t1p1Gender, p1.level as t1p1Level,
+        p2.name as t1p2Name, p2.gender as t1p2Gender, p2.level as t1p2Level,
+        p3.name as t2p1Name, p3.gender as t2p1Gender, p3.level as t2p1Level,
+        p4.name as t2p2Name, p4.gender as t2p2Gender, p4.level as t2p2Level
        FROM games g
        JOIN players p1 ON g.team1Player1Id = p1.id
        JOIN players p2 ON g.team1Player2Id = p2.id
@@ -150,9 +162,19 @@ export async function registerIpcHandlers() {
     run('DELETE FROM games WHERE id = ? AND status = ?', [id, 'pending']);
   });
 
+  ipcMain.handle('games:deleteAllPending', (_e, sessionId: string) => {
+    run('DELETE FROM games WHERE sessionId = ? AND status = ?', [sessionId, 'pending']);
+  });
+
   ipcMain.handle('games:maxRound', (_e, sessionId: string) => {
     const row = queryOne<{ maxRound: number | null }>('SELECT MAX(roundNumber) as maxRound FROM games WHERE sessionId = ?', [sessionId]);
     return row?.maxRound ?? 0;
+  });
+
+  ipcMain.handle('games:replacePlayer', (_e, gameId: string, slot: string, newPlayerId: string) => {
+    const validSlots = ['team1Player1Id', 'team1Player2Id', 'team2Player1Id', 'team2Player2Id'];
+    if (!validSlots.includes(slot)) throw new Error('Invalid slot');
+    run(`UPDATE games SET ${slot} = ? WHERE id = ?`, [newPlayerId, gameId]);
   });
 
   // ── Payments ──

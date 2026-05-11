@@ -1,0 +1,89 @@
+import { test as base, type ElectronApplication, type Page } from '@playwright/test';
+import { _electron } from 'playwright';
+import path from 'path';
+import fs from 'fs';
+import os from 'os';
+
+type AppFixture = {
+  app: ElectronApplication;
+  page: Page;
+};
+
+export const test = base.extend<AppFixture>({
+  app: async ({}, use) => {
+    const mainPath = path.join(__dirname, '..', 'dist', 'main', 'index.js');
+    if (!fs.existsSync(mainPath)) {
+      throw new Error('Main process not built. Run `npm run build:main` first.');
+    }
+
+    // Use a temp userData dir to isolate the test DB from real data
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'autorally-e2e-'));
+
+    const app = await _electron.launch({
+      args: [
+        path.join(__dirname, '..', '.'),
+        `--user-data-dir=${tmpDir}`,
+      ],
+    });
+
+    await use(app);
+
+    await app.close();
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+  },
+
+  page: async ({ app }, use) => {
+    const page = await app.firstWindow();
+    await page.waitForLoadState('domcontentloaded');
+    await use(page);
+  },
+});
+
+export const expect = test.expect;
+
+// Add a player and return the created player
+export async function addPlayer(page: Page, name: string, gender: string = 'male', level: number = 3) {
+  return await page.evaluate(
+    ({ name, gender, level }) => window.api.playersCreate({ name, gender, level, phone: '' }),
+    { name, gender, level }
+  );
+}
+
+// Create a session
+export async function createSession(page: Page, courtCount: number = 3) {
+  return await page.evaluate(
+    (courtCount) => window.api.sessionsCreate(courtCount),
+    courtCount
+  );
+}
+
+// Checkin a player to a session
+export async function checkinPlayer(page: Page, playerId: string, sessionId: string) {
+  await page.evaluate(
+    ({ playerId, sessionId }) => window.api.attendanceCheckin(playerId, sessionId),
+    { playerId, sessionId }
+  );
+}
+
+// Get the active session
+export async function getActiveSession(page: Page) {
+  return await page.evaluate(() => window.api.sessionsGetActive());
+}
+
+// Navigate via hash router
+export async function navigateTo(page: Page, route: string) {
+  await page.evaluate((r) => { window.location.hash = r; }, route);
+  await page.waitForTimeout(200);
+}
+
+// Setup: add N players (alternating male/female, levels 2-4) and return their IDs
+export async function addTestPlayers(page: Page, count: number) {
+  const players: { id: string; name: string }[] = [];
+  for (let i = 0; i < count; i++) {
+    const gender = i % 2 === 0 ? 'male' : 'female';
+    const level = 2 + (i % 3);
+    const p = await addPlayer(page, `球员${i + 1}`, gender, level) as { id: string; name: string };
+    players.push(p);
+  }
+  return players;
+}

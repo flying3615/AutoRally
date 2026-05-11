@@ -9,7 +9,8 @@ interface PaymentInfo {
   status: string;
   paidDate: string | null;
   paymentType: string;
-  phone?: string;
+  gender?: string;
+  level?: number;
 }
 
 export function Payments() {
@@ -29,7 +30,6 @@ export function Payments() {
   };
 
   const handleMarkAllPaid = async () => {
-    if (!confirm('确认将所有未缴费标记为已缴？')) return;
     for (const p of unpaid) {
       await window.api.paymentsMarkPaid(p.id);
     }
@@ -37,69 +37,149 @@ export function Payments() {
   };
 
   return (
-    <div className="p-8 max-w-5xl">
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold text-gray-900">会费管理</h2>
-        <div className="flex gap-3">
+    <div className="h-full overflow-y-auto">
+      <div className="max-w-4xl mx-auto px-8 py-10" style={{ animation: 'fadeIn 0.3s ease' }}>
+
+        {/* Header */}
+        <div className="flex items-end justify-between mb-8">
+          <div>
+            <h2 className="text-xl font-bold text-zinc-900 tracking-tight">Fee management</h2>
+            <p className="text-sm text-zinc-400 mt-0.5">Track unpaid records and balance changes</p>
+          </div>
+          <div className="flex items-center gap-2">
+            {unpaid.length > 0 && (
+              <button
+                onClick={handleMarkAllPaid}
+                className="h-8 px-3.5 text-sm font-medium bg-emerald-600 text-white rounded-lg
+                  hover:bg-emerald-500 active:scale-[0.97] shadow-[0_2px_8px_-2px_rgba(5,150,105,0.3)] transition-all inline-flex items-center justify-center gap-1.5"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                </svg>
+                Mark All Paid
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Tab bar */}
+        <div className="flex gap-1 mb-6 p-1 bg-zinc-100/80 rounded-xl w-fit">
           <button
             onClick={() => setTab('unpaid')}
-            className={`px-4 py-2 text-sm rounded-lg ${tab === 'unpaid' ? 'bg-red-100 text-red-700 font-medium' : 'bg-gray-100 text-gray-600'}`}
+            className={`px-4 py-1.5 text-sm font-medium rounded-lg transition-all duration-150 ${
+              tab === 'unpaid'
+                ? 'bg-white text-zinc-900 shadow-[0_1px_3px_rgba(0,0,0,0.06)]'
+                : 'text-zinc-500 hover:text-zinc-700'
+            }`}
           >
-            未缴费 ({unpaid.length})
+            Unpaid
+            {unpaid.length > 0 && (
+              <span className={`ml-1.5 text-xs font-bold px-1.5 py-0.5 rounded-full ${
+                tab === 'unpaid' ? 'bg-red-50 text-red-600' : 'bg-red-50 text-red-600'
+              }`}>
+                {unpaid.length}
+              </span>
+            )}
           </button>
           <button
             onClick={() => setTab('all')}
-            className={`px-4 py-2 text-sm rounded-lg ${tab === 'all' ? 'bg-blue-100 text-blue-700 font-medium' : 'bg-gray-100 text-gray-600'}`}
+            className={`px-4 py-1.5 text-sm font-medium rounded-lg transition-all duration-150 ${
+              tab === 'all'
+                ? 'bg-white text-zinc-900 shadow-[0_1px_3px_rgba(0,0,0,0.06)]'
+                : 'text-zinc-500 hover:text-zinc-700'
+            }`}
           >
-            全部
+            All Records
           </button>
-          {unpaid.length > 0 && (
-            <button
-              onClick={handleMarkAllPaid}
-              className="px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700"
-            >
-              全部标记已缴
-            </button>
-          )}
         </div>
-      </div>
 
-      {tab === 'unpaid' && (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="text-left px-6 py-3 font-medium text-gray-500">球员</th>
-                <th className="text-left px-6 py-3 font-medium text-gray-500">金额</th>
-                <th className="text-left px-6 py-3 font-medium text-gray-500">操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {unpaid.map(p => (
-                <tr key={p.id} className="border-b border-gray-100 hover:bg-gray-50">
-                  <td className="px-6 py-3 font-medium">{p.playerName}</td>
-                  <td className="px-6 py-3 text-red-600 font-medium">¥{p.amount}</td>
-                  <td className="px-6 py-3">
-                    <button
-                      onClick={() => handleMarkPaid(p.id)}
-                      className="text-green-600 hover:underline text-xs"
+        {/* Unpaid tab */}
+        {tab === 'unpaid' && (
+          <>
+            {unpaid.length > 0 ? (
+              <div className="space-y-2">
+                {unpaid.map(p => {
+                  const isMale = (p as any).gender === 'male';
+                  return (
+                    <div
+                      key={p.id}
+                      className="flex items-center gap-4 px-5 py-3.5 bg-white border border-zinc-200/80 rounded-2xl
+                        hover:border-zinc-300 hover:shadow-[0_4px_12px_-4px_rgba(0,0,0,0.06)] transition-all duration-200 group"
                     >
-                      标记已缴
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {unpaid.length === 0 && (
-                <tr><td colSpan={3} className="px-6 py-8 text-center text-gray-400">所有会费已缴清</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
+                      {/* Avatar */}
+                      <div
+                        className="w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold text-white shrink-0"
+                        style={{ backgroundColor: '#ef4444' }}
+                      >
+                        {p.playerName[0]}
+                      </div>
 
-      {tab === 'all' && (
-        <p className="text-gray-500 text-sm">查看球员管理页面的余额信息，或前往具体 Session 查看缴费明细。</p>
-      )}
+                      {/* Info */}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-zinc-900 truncate">{p.playerName}</p>
+                        <p className="text-xs text-zinc-400 mt-0.5 font-medium">
+                          {p.paymentType === 'session' ? 'Session Fee' : 'Top Up'}
+                        </p>
+                      </div>
+
+                      {/* Amount */}
+                      <div className="text-right shrink-0">
+                        <p className="text-base font-bold text-red-500 tabular-nums">
+                          ${p.amount}
+                        </p>
+                        <p className="text-[11px] text-zinc-400 font-medium">Unpaid</p>
+                      </div>
+
+                      {/* Action */}
+                      <button
+                        onClick={() => handleMarkPaid(p.id)}
+                        className="shrink-0 h-8 px-3 text-xs font-semibold text-emerald-600 bg-emerald-50
+                          rounded-lg hover:bg-emerald-100 active:scale-95 transition-all
+                          opacity-0 group-hover:opacity-100"
+                      >
+                        Mark Paid
+                      </button>
+                    </div>
+                  );
+                })}
+
+                {/* Summary bar */}
+                <div className="flex items-center justify-between px-5 py-3 mt-4 rounded-2xl bg-red-50/70 border border-red-100/80">
+                  <span className="text-sm text-red-700 font-medium">
+                    {unpaid.length} players unpaid
+                  </span>
+                  <span className="text-lg font-bold text-red-600 tabular-nums">
+                    ${unpaid.reduce((sum, p) => sum + p.amount, 0).toFixed(0)}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-24 text-zinc-400">
+                <div className="w-12 h-12 rounded-2xl bg-zinc-50 flex items-center justify-center mb-4 border border-zinc-100">
+                  <svg className="w-6 h-6 text-zinc-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <p className="text-sm font-semibold text-zinc-500">All fees are paid</p>
+                <p className="text-xs mt-1 text-zinc-400">No pending payment records</p>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* All tab */}
+        {tab === 'all' && (
+          <div className="flex flex-col items-center justify-center py-24 text-zinc-400">
+            <div className="w-12 h-12 rounded-2xl bg-zinc-50 flex items-center justify-center mb-4 border border-zinc-100">
+              <svg className="w-6 h-6 text-zinc-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z" />
+              </svg>
+            </div>
+            <p className="text-sm font-semibold text-zinc-500">Payment details</p>
+            <p className="text-xs mt-1 text-zinc-400">Check player balances or session details</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

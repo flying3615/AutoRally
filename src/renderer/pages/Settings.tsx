@@ -6,6 +6,15 @@ interface SettingsData {
   gameDuration: string;
 }
 
+const durations = [
+  { value: '10', label: '10 min' },
+  { value: '12', label: '12 min' },
+  { value: '15', label: '15 min' },
+  { value: '20', label: '20 min' },
+  { value: '25', label: '25 min' },
+  { value: '30', label: '30 min' },
+];
+
 export function Settings() {
   const [settings, setSettings] = useState<SettingsData>({ courtCount: '3', sessionFee: '30', gameDuration: '15' });
   const [saved, setSaved] = useState(false);
@@ -29,47 +38,124 @@ export function Settings() {
   };
 
   return (
-    <div className="p-8 max-w-3xl">
-      <h2 className="text-2xl font-bold text-gray-900 mb-6">设置</h2>
+    <div className="h-full overflow-y-auto">
+      <div className="max-w-2xl mx-auto px-8 py-10" style={{ animation: 'fadeIn 0.3s ease' }}>
 
-      <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-6">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">场地数</label>
-          <select
-            value={settings.courtCount}
-            onChange={(e) => setSettings({ ...settings, courtCount: e.target.value })}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            {[1, 2, 3, 4, 5, 6].map(n => <option key={n} value={n}>{n} 片</option>)}
-          </select>
+        {/* Header */}
+        <div className="mb-8">
+          <h2 className="text-xl font-bold text-zinc-900 tracking-tight">Settings</h2>
+          <p className="text-sm text-zinc-400 mt-0.5">Match parameters and fee configuration</p>
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">每次 Session 费用 (元)</label>
-          <input
-            type="number" value={settings.sessionFee}
-            onChange={(e) => setSettings({ ...settings, sessionFee: e.target.value })}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
+        {/* Court Count */}
+        <div className="mb-8">
+          <label className="block text-[11px] font-semibold text-zinc-400 uppercase tracking-wider mb-3">Court Count</label>
+          <div className="flex gap-2">
+            {[1, 2, 3, 4, 5, 6].map(n => (
+              <button
+                key={n}
+                onClick={() => setSettings({ ...settings, courtCount: String(n) })}
+                className={`flex-1 py-3 text-sm font-semibold rounded-xl border-2 transition-all duration-150 active:scale-95 ${
+                  settings.courtCount === String(n)
+                    ? 'bg-zinc-900 border-zinc-900 text-white shadow-[0_2px_8px_-2px_rgba(0,0,0,0.2)]'
+                    : 'bg-white border-zinc-200 text-zinc-500 hover:border-zinc-300 hover:bg-zinc-50'
+                }`}
+              >
+                {n}
+              </button>
+            ))}
+            <div className="flex items-center gap-2 flex-1 min-w-[120px]">
+              <input
+                type="number"
+                min="1"
+                max="20"
+                value={![1,2,3,4,5,6].includes(Number(settings.courtCount)) ? settings.courtCount : ''}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v === '') return;
+                  setSettings({ ...settings, courtCount: v });
+                }}
+                placeholder="Custom"
+                className="w-full py-3 px-3 text-sm font-semibold text-center border-2 border-zinc-200 rounded-xl
+                  focus:outline-none focus:border-zinc-400 focus:ring-2 focus:ring-gray-100 transition-all
+                  [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              />
+            </div>
+          </div>
+          <p className="text-xs text-zinc-400 mt-2.5">Number of concurrent matches</p>
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">每场比赛时长 (分钟)</label>
-          <input
-            type="number" value={settings.gameDuration}
-            onChange={(e) => setSettings({ ...settings, gameDuration: e.target.value })}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
+        {/* Game Duration */}
+        <div className="mb-8">
+          <label className="block text-[11px] font-semibold text-zinc-400 uppercase tracking-wider mb-3">Game Duration</label>
+          <div className="grid grid-cols-3 gap-2">
+            {durations.map(d => (
+              <button
+                key={d.value}
+                onClick={() => setSettings({ ...settings, gameDuration: d.value })}
+                className={`py-3 text-sm font-medium rounded-xl border-2 transition-all duration-150 active:scale-95 ${
+                  settings.gameDuration === d.value
+                    ? 'bg-zinc-900 border-zinc-900 text-white shadow-[0_2px_8px_-2px_rgba(0,0,0,0.2)]'
+                    : 'bg-white border-zinc-200 text-zinc-500 hover:border-zinc-300 hover:bg-zinc-50'
+                }`}
+              >
+                {d.label}
+              </button>
+            ))}
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min="1"
+                max="120"
+                value={!['10','12','15','20','25','30'].includes(settings.gameDuration) ? settings.gameDuration : ''}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v === '') return;
+                  setSettings({ ...settings, gameDuration: v });
+                }}
+                placeholder="Custom (min)"
+                className="w-full py-3 px-3 text-sm font-medium text-center border-2 border-zinc-200 rounded-xl
+                  focus:outline-none focus:border-zinc-400 focus:ring-2 focus:ring-gray-100 transition-all
+                  [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              />
+            </div>
+          </div>
+          <p className="text-xs text-zinc-400 mt-2.5">Auto-warning and next round scheduling 1 min before end</p>
         </div>
 
-        <div className="flex items-center gap-4">
+        {/* Session Fee */}
+        <div className="mb-10">
+          <label className="block text-[11px] font-semibold text-zinc-400 uppercase tracking-wider mb-3">Session Fee</label>
+          <div className="relative">
+            <input
+              type="number"
+              value={settings.sessionFee}
+              onChange={(e) => setSettings({ ...settings, sessionFee: e.target.value })}
+              className="w-full px-4 py-3 text-lg font-bold text-zinc-900 border-2 border-zinc-200 rounded-xl
+                focus:outline-none focus:border-zinc-400 focus:ring-2 focus:ring-gray-100 transition-all"
+            />
+            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-medium text-zinc-400">NZD / person</span>
+          </div>
+          <p className="text-xs text-zinc-400 mt-2.5">Auto-deducted from balance on check-in</p>
+        </div>
+
+        {/* Save */}
+        <div className="flex items-center gap-3">
           <button
             onClick={handleSave}
-            className="px-6 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
+            className="h-10 px-6 text-sm font-semibold bg-zinc-900 text-white rounded-xl
+              hover:bg-zinc-800 active:scale-[0.97] shadow-[0_2px_8px_-2px_rgba(0,0,0,0.2)] transition-all inline-flex items-center justify-center"
           >
-            保存
+            Save Settings
           </button>
-          {saved && <span className="text-green-600 text-sm">已保存</span>}
+          {saved && (
+            <span
+              className="text-sm font-semibold text-emerald-600"
+              style={{ animation: 'ctxFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)' }}
+            >
+              Saved
+            </span>
+          )}
         </div>
       </div>
     </div>
