@@ -359,7 +359,7 @@ function PlayerTag({
 
   return (
     <div
-      className="inline-flex items-center justify-center w-full px-2 py-3 rounded-xl select-none relative min-w-0 overflow-hidden"
+      className="inline-flex items-center justify-center w-full px-2 py-5 rounded-xl select-none relative min-w-0 overflow-hidden"
       style={{
         backgroundColor: paused ? '#f5f5f4' : checkedOut ? '#fef2f2' : gc.bg,
         borderWidth: 1,
@@ -379,11 +379,11 @@ function PlayerTag({
       }}
     >
       <span
-        className="text-2xl font-bold tracking-tight truncate"
+        className="text-3xl font-bold tracking-tight truncate"
         style={{ color: paused ? '#a8a29e' : checkedOut ? '#ef4444' : textClr }}
       >
         {name}
-        <span className="text-base font-semibold opacity-60 ml-0.5">({level})</span>
+        <span className="text-lg font-semibold opacity-60 ml-0.5">({level})</span>
       </span>
       {(paused || checkedOut) && (
         <span
@@ -858,9 +858,9 @@ export function MatchPanel() {
 
       {/* === LEFT: Match Area === */}
       <div className="flex-1 overflow-auto relative">
-        <div className="p-6">
+        <div className="p-4">
           {/* Compact Header */}
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-3">
               <h2 className="text-lg font-bold text-zinc-900 tracking-tight">Match Panel</h2>
               <span className="w-px h-4 bg-zinc-200" />
@@ -986,9 +986,9 @@ export function MatchPanel() {
 
           {/* Active Games */}
           {activeGames.length > 0 && (
-            <div className="mb-6">
-              <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3">In Progress</h3>
-              <div className="grid grid-cols-2 gap-4">
+            <div className="mb-4">
+              <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">In Progress</h3>
+              <div className="grid grid-cols-2 gap-3">
                 {activeGames.map(g => {
                   const timer = timers.get(g.courtNumber);
                   const isWarning = timer?.phase === 'warning';
@@ -998,7 +998,7 @@ export function MatchPanel() {
                   return (
                     <div
                       key={g.id}
-                      className="rounded-2xl border p-4 relative"
+                      className="rounded-2xl border p-6 relative"
                       style={{
                         backgroundColor: isPaused ? '#f5f5f4' : isEnded ? '#fef2f2' : isWarning ? '#fffbeb' : '#f0fdf4',
                         borderColor: isPaused ? '#d6d3d1' : isEnded ? '#fecaca' : isWarning ? '#fde68a' : '#bbf7d0',
@@ -1050,15 +1050,15 @@ export function MatchPanel() {
 
           {/* Pending Games — hidden during warning (shown as overlay) */}
           {pendingGames.length > 0 && !isWarning && (
-            <div className="mb-8">
-              <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3">
+            <div className="mb-4">
+              <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">
                 {activeGames.length > 0 ? 'Next Round' : 'Pending'}
               </h3>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 {pendingGames.map(g => (
                   <div
                     key={g.id}
-                    className="bg-white rounded-2xl border border-zinc-200/70 p-3"
+                    className="bg-white rounded-2xl border border-zinc-200/70 p-5"
                     style={{ boxShadow: '0 2px 12px -4px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.02)' }}
                   >
                     <div className="grid gap-1" style={{ gridTemplateColumns: '1fr auto 1fr', gridTemplateRows: '1fr 1fr' }}>
@@ -1101,30 +1101,31 @@ export function MatchPanel() {
         {isWarning && pendingGames.length > 0 && (
           <div
             className="absolute inset-0 z-30 flex flex-col items-center overflow-hidden"
-            style={{ backgroundColor: 'rgba(0,0,0,0.08)', backdropFilter: 'blur(1px)' }}
+            style={{ backgroundColor: 'rgba(0,0,0,0.12)', backdropFilter: 'blur(2px)' }}
           >
-            <div className="w-full max-w-[720px] px-6 py-6 flex flex-col items-center" style={{ maxHeight: '100%' }}>
-              <div className="flex items-center gap-2 mb-4 shrink-0">
-                <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-                <h3 className="text-base font-bold text-amber-700 tracking-tight">
+            <div className="w-[85%] h-full flex flex-col items-center justify-center" style={{ maxWidth: '900px' }}>
+              <div className="flex items-center gap-3 mb-6 shrink-0">
+                <span className="w-3 h-3 rounded-full bg-amber-400 animate-pulse" />
+                <h3 className="text-xl font-bold text-amber-700 tracking-tight">
                   Next Round Preview
                 </h3>
-                <span className="text-xs text-amber-500 font-medium">
+                <span className="text-sm text-amber-500 font-medium">
                   ({pendingGames.length} courts)
                 </span>
               </div>
               <div
-                className="grid gap-3 w-full"
+                className="grid gap-4 w-full flex-1"
                 style={{
                   gridTemplateColumns: pendingGames.length === 1 ? '1fr' : '1fr 1fr',
-                  maxWidth: pendingGames.length === 1 ? '360px' : undefined,
+                  maxWidth: pendingGames.length === 1 ? '420px' : undefined,
+                  alignContent: 'center',
                 }}
               >
                 {pendingGames.map(g => (
                   <div
                     key={g.id}
-                    className="bg-white/90 rounded-xl border border-amber-200/60 p-2"
-                    style={{ boxShadow: '0 4px 16px -6px rgba(234,179,8,0.2)' }}
+                    className="bg-white/95 rounded-2xl border border-amber-200/60 p-6 flex items-center"
+                    style={{ boxShadow: '0 8px 30px -8px rgba(234,179,8,0.25)' }}
                   >
                     <div className="grid gap-1" style={{ gridTemplateColumns: '1fr auto 1fr', gridTemplateRows: '1fr 1fr' }}>
                       <div className="flex items-center justify-center min-w-0">
