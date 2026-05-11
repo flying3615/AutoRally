@@ -425,6 +425,11 @@ export async function registerIpcHandlers() {
 
   // ── Upcoming Sessions ──
   ipcMain.handle('upcomingSessions:list', () => {
+    // Auto-delete expired sessions
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const nowTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    run('DELETE FROM upcoming_sessions WHERE date < ? OR (date = ? AND time != \'\' AND time < ?)', [today, today, nowTime]);
     return queryAll('SELECT * FROM upcoming_sessions ORDER BY date, time');
   });
 
