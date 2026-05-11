@@ -245,7 +245,7 @@ function TopBar() {
       </div>
 
       {/* Scrolling upcoming-sessions text */}
-      <div className="flex-1 mx-4 overflow-hidden">
+      <div className="flex-1 mx-4 overflow-hidden flex justify-end">
         {marqueeText && (
           <div className="marquee-track text-[13px] font-medium text-red-600">
             <span>{marqueeText}</span>
