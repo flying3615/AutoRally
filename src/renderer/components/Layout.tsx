@@ -158,6 +158,12 @@ function StatusBar() {
 
   const showStats = activeSession && attendanceCount !== null;
 
+  // Format DB date string (YYYY-MM-DD) to readable format
+  const formatSessionDate = (dateStr: string) => {
+    const d = new Date(dateStr + 'T00:00:00');
+    return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  };
+
   return (
     <div className="flex items-center justify-between h-8 px-4 bg-white/80 backdrop-blur-sm border-t border-zinc-200/60 text-xs text-zinc-400 select-none shrink-0 font-mono">
       <div className="flex items-center gap-3">
@@ -168,7 +174,7 @@ function StatusBar() {
               Session active
             </span>
             <span className="text-zinc-200">·</span>
-            <span className="tabular-nums">{activeSession.date}</span>
+            <span className="tabular-nums">{formatSessionDate(activeSession.date)}</span>
             <span className="text-zinc-200">·</span>
             <span>{activeSession.courtCount} courts</span>
           </>
@@ -183,8 +189,24 @@ function StatusBar() {
             <span className="text-zinc-200">·</span>
             <span className="tabular-nums">{playingCount} playing</span>
             <span className="text-zinc-200">·</span>
-            <Link to={`/checkin/${activeSession!.id}`} className="font-sans hover:text-zinc-600 transition-colors font-medium">Check-in</Link>
-            <Link to={`/match/${activeSession!.id}`} className="font-sans hover:text-zinc-600 transition-colors font-medium">Match Panel</Link>
+            <Link
+              to={`/checkin/${activeSession!.id}`}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border border-zinc-200 hover:border-zinc-300 hover:text-zinc-600 active:scale-[0.97] font-sans font-medium transition-all"
+            >
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6.75h3.375c.621 0 1.125.504 1.125 1.125V18a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 18V7.875c0-.621.504-1.125 1.125-1.125H9m3 0V4.5m0 3.75v10.5M12 8.25l3-3m0 0l3 3m-6 0l-3-3" />
+              </svg>
+              Check-in
+            </Link>
+            <Link
+              to={`/match/${activeSession!.id}`}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 hover:border-emerald-300 active:scale-[0.97] font-sans font-medium transition-all"
+            >
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.362 5.214A8.252 8.252 0 0112 21 8.25 8.25 0 016.038 7.048 8.287 8.287 0 009 9.6a8.983 8.983 0 013.361-6.867 8.21 8.21 0 003 2.48z" />
+              </svg>
+              Match Panel
+            </Link>
           </>
         )}
       </div>
