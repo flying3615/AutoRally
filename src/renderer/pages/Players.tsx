@@ -191,6 +191,7 @@ export function Players() {
   const [importResult, setImportResult] = useState<{ imported: number; skipped: number; errors: string[] } | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({ firstName: '', surname: '', gender: 'male', level: 3, phone: '', email: '' });
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [topupPlayer, setTopupPlayer] = useState<string | null>(null);
   const [topupAmount, setTopupAmount] = useState('');
   const [search, setSearch] = useState('');
@@ -201,7 +202,7 @@ export function Players() {
   useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
-    const handler = () => { setShowForm(true); setEditingId(null); setForm({ firstName: '', surname: '', gender: 'male', level: 3, phone: '', email: '' }); };
+    const handler = () => { setShowForm(true); setEditingId(null); setForm({ firstName: '', surname: '', gender: 'male', level: 3, phone: '', email: '' }); setFormErrors({}); };
     window.addEventListener('menu:add-player', handler);
     return () => window.removeEventListener('menu:add-player', handler);
   }, []);
@@ -213,15 +214,24 @@ export function Players() {
   }, []);
 
   const handleSave = async () => {
+    const errors: Record<string, string> = {};
+    if (!form.firstName.trim()) errors.firstName = 'First name is required';
+    if (!form.surname.trim()) errors.surname = 'Surname is required';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email) && form.email.trim()) {
+      errors.email = 'Invalid email format';
+    }
+    setFormErrors(errors);
+    if (Object.keys(errors).length > 0) return;
+
     const name = [form.firstName.trim(), form.surname.trim()].filter(Boolean).join(' ');
-    if (!name) return;
-    const playerData = { name, gender: form.gender, level: form.level, phone: form.phone, email: form.email };
+    const playerData = { name, gender: form.gender, level: form.level, phone: form.phone, email: form.email.trim() };
     if (editingId) {
       await window.api.playersUpdate(editingId, playerData);
     } else {
       await window.api.playersCreate(playerData);
     }
     setForm({ firstName: '', surname: '', gender: 'male', level: 3, phone: '', email: '' });
+    setFormErrors({});
     setEditingId(null);
     setShowForm(false);
     load();
@@ -288,7 +298,7 @@ export function Players() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="max-w-5xl mx-auto px-8 py-10" style={{ animation: 'fadeIn 0.3s ease' }}>
+      <div className="max-w-6xl mx-auto px-8 py-10" style={{ animation: 'fadeIn 0.3s ease' }}>
 
         {/* Header */}
         <div className="flex items-end justify-between mb-8">
@@ -326,7 +336,7 @@ export function Players() {
               {importing ? 'Importing...' : 'Import CSV'}
             </button>
             <button
-              onClick={() => { setShowForm(true); setEditingId(null); setForm({ firstName: '', surname: '', gender: 'male', level: 3, phone: '', email: '' }); }}
+              onClick={() => { setShowForm(true); setEditingId(null); setForm({ firstName: '', surname: '', gender: 'male', level: 3, phone: '', email: '' }); setFormErrors({}); }}
               className="h-8 px-4 text-sm font-medium bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 active:scale-[0.97] shadow-[0_2px_8px_-2px_rgba(0,0,0,0.2)] transition-all inline-flex items-center justify-center"
             >
               Add Player
@@ -340,21 +350,35 @@ export function Players() {
             <h3 className="text-sm font-bold text-zinc-900 mb-4">{editingId ? 'Edit Player' : 'Add Player'}</h3>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-[11px] text-zinc-400 font-semibold uppercase tracking-wider mb-1.5">First Name</label>
+                <label className="block text-[11px] text-zinc-400 font-semibold uppercase tracking-wider mb-1.5">
+                  First Name <span className="text-red-400">*</span>
+                </label>
                 <input
                   type="text" value={form.firstName}
-                  onChange={(e) => setForm({ ...form, firstName: e.target.value })}
-                  className="w-full h-9 px-3 text-sm bg-white border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-200/80 focus:border-zinc-300 transition-all"
+                  onChange={(e) => { setForm({ ...form, firstName: e.target.value }); setFormErrors({ ...formErrors, firstName: '' }); }}
+                  className={`w-full h-9 px-3 text-sm bg-white border rounded-lg focus:outline-none focus:ring-2 transition-all ${
+                    formErrors.firstName
+                      ? 'border-red-300 focus:border-red-400 focus:ring-red-100'
+                      : 'border-zinc-200 focus:ring-gray-200/80 focus:border-zinc-300'
+                  }`}
                   autoFocus
                 />
+                {formErrors.firstName && <p className="text-[11px] text-red-400 mt-1 font-medium">{formErrors.firstName}</p>}
               </div>
               <div>
-                <label className="block text-[11px] text-zinc-400 font-semibold uppercase tracking-wider mb-1.5">Surname</label>
+                <label className="block text-[11px] text-zinc-400 font-semibold uppercase tracking-wider mb-1.5">
+                  Surname <span className="text-red-400">*</span>
+                </label>
                 <input
                   type="text" value={form.surname}
-                  onChange={(e) => setForm({ ...form, surname: e.target.value })}
-                  className="w-full h-9 px-3 text-sm bg-white border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-200/80 focus:border-zinc-300 transition-all"
+                  onChange={(e) => { setForm({ ...form, surname: e.target.value }); setFormErrors({ ...formErrors, surname: '' }); }}
+                  className={`w-full h-9 px-3 text-sm bg-white border rounded-lg focus:outline-none focus:ring-2 transition-all ${
+                    formErrors.surname
+                      ? 'border-red-300 focus:border-red-400 focus:ring-red-100'
+                      : 'border-zinc-200 focus:ring-gray-200/80 focus:border-zinc-300'
+                  }`}
                 />
+                {formErrors.surname && <p className="text-[11px] text-red-400 mt-1 font-medium">{formErrors.surname}</p>}
               </div>
               <div>
                 <label className="block text-[11px] text-zinc-400 font-semibold uppercase tracking-wider mb-1.5">Gender</label>
@@ -411,10 +435,15 @@ export function Players() {
                 <label className="block text-[11px] text-zinc-400 font-semibold uppercase tracking-wider mb-1.5">Email</label>
                 <input
                   type="email" value={form.email}
-                  onChange={(e) => setForm({ ...form, email: e.target.value })}
-                  className="w-full h-9 px-3 text-sm bg-white border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-200/80 focus:border-zinc-300 transition-all"
+                  onChange={(e) => { setForm({ ...form, email: e.target.value }); setFormErrors({ ...formErrors, email: '' }); }}
+                  className={`w-full h-9 px-3 text-sm bg-white border rounded-lg focus:outline-none focus:ring-2 transition-all ${
+                    formErrors.email
+                      ? 'border-red-300 focus:border-red-400 focus:ring-red-100'
+                      : 'border-zinc-200 focus:ring-gray-200/80 focus:border-zinc-300'
+                  }`}
                   placeholder="player@example.com"
                 />
+                {formErrors.email && <p className="text-[11px] text-red-400 mt-1 font-medium">{formErrors.email}</p>}
               </div>
             </div>
             <div className="flex gap-2 mt-5">
@@ -425,7 +454,7 @@ export function Players() {
                 {editingId ? 'Save' : 'Add'}
               </button>
               <button
-                onClick={() => { setShowForm(false); setEditingId(null); }}
+                onClick={() => { setShowForm(false); setEditingId(null); setFormErrors({}); }}
                 className="h-8 px-4 text-sm text-zinc-500 hover:text-zinc-700 rounded-lg hover:bg-zinc-100 active:scale-[0.97] transition-all inline-flex items-center justify-center"
               >
                 Cancel

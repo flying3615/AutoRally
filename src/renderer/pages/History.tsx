@@ -141,7 +141,7 @@ export function History() {
   if (selectedSessionId && selectedSession) {
     return (
       <div className="h-full overflow-y-auto">
-        <div className="max-w-4xl mx-auto px-8 py-10" style={{ animation: 'fadeIn 0.2s ease' }}>
+        <div className="max-w-6xl mx-auto px-8 py-10" style={{ animation: 'fadeIn 0.2s ease' }}>
 
           {/* Back header */}
           <button
