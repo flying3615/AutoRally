@@ -22,6 +22,11 @@ const durations = [
   { value: '30', label: '30 min' },
 ];
 
+function todayStr(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function SessionModal({ session, onClose, onSaved }: {
   session: UpcomingSession | null;
   onClose: () => void;
@@ -36,6 +41,22 @@ function SessionModal({ session, onClose, onSaved }: {
 
   const handleSave = async () => {
     if (!date) return;
+    if (date < todayStr()) {
+      setError('Date cannot be in the past');
+      return;
+    }
+    if (date === todayStr() && time) {
+      const now = new Date();
+      const [h, m] = time.split(':').map(Number);
+      if (h !== undefined && m !== undefined) {
+        const selected = new Date();
+        selected.setHours(h, m, 0, 0);
+        if (selected <= now) {
+          setError('Time cannot be in the past');
+          return;
+        }
+      }
+    }
     setSaving(true);
     setError(null);
     try {
@@ -70,6 +91,7 @@ function SessionModal({ session, onClose, onSaved }: {
             <input
               type="date"
               value={date}
+              min={todayStr()}
               onChange={(e) => setDate(e.target.value)}
               className="w-full px-3 py-2 text-sm border-2 border-zinc-200 rounded-xl
                 focus:outline-none focus:border-zinc-400 focus:ring-2 focus:ring-gray-100 transition-all"
@@ -80,7 +102,10 @@ function SessionModal({ session, onClose, onSaved }: {
             <input
               type="time"
               value={time}
-              onChange={(e) => setTime(e.target.value)}
+              onChange={(e) => {
+                setTime(e.target.value);
+                setError(null);
+              }}
               className="w-full px-3 py-2 text-sm border-2 border-zinc-200 rounded-xl
                 focus:outline-none focus:border-zinc-400 focus:ring-2 focus:ring-gray-100 transition-all"
             />
