@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { AgGridReact } from 'ag-grid-react';
 import type { ColDef, ICellRendererParams } from 'ag-grid-community';
 import { AllCommunityModule, ModuleRegistry } from 'ag-grid-community';
+import { levelBadgeClasses, genderColors } from '../theme';
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -25,7 +26,7 @@ function NameCell({ value, data }: ICellRendererParams<PlayerWithBalance>) {
     <div className="flex items-center gap-2.5 h-full">
       <div
         className="w-7 h-7 rounded-lg flex items-center justify-center text-[11px] font-bold text-white shrink-0"
-        style={{ backgroundColor: isMale ? '#3b82f6' : '#ec4899' }}
+        style={{ backgroundColor: isMale ? genderColors.male.accent : genderColors.female.accent }}
       >
         {value?.[0] ?? ''}
       </div>
@@ -46,15 +47,8 @@ function GenderCell({ value }: ICellRendererParams<PlayerWithBalance>) {
 }
 
 function LevelCell({ value }: ICellRendererParams<PlayerWithBalance>) {
-  const colors: Record<number, string> = {
-    5: 'bg-emerald-900 text-emerald-100',
-    4: 'bg-emerald-700 text-emerald-100',
-    3: 'bg-emerald-500 text-white',
-    2: 'bg-emerald-300 text-emerald-900',
-    1: 'bg-emerald-100 text-emerald-800',
-  };
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold ${colors[value] ?? 'bg-zinc-100 text-zinc-700'}`}>
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold ${levelBadgeClasses[value] ?? 'bg-zinc-100 text-zinc-700'}`}>
       {levelLabels[value] ?? value}
     </span>
   );

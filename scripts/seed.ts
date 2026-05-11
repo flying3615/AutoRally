@@ -34,7 +34,7 @@ async function seed() {
     CREATE TABLE games (id TEXT PRIMARY KEY, sessionId TEXT NOT NULL REFERENCES sessions(id), courtNumber INTEGER NOT NULL, team1Player1Id TEXT NOT NULL REFERENCES players(id), team1Player2Id TEXT NOT NULL REFERENCES players(id), team2Player1Id TEXT NOT NULL REFERENCES players(id), team2Player2Id TEXT NOT NULL REFERENCES players(id), status TEXT NOT NULL, roundNumber INTEGER NOT NULL, gameType TEXT NOT NULL, startedAt TEXT, endedAt TEXT);
     CREATE TABLE balances (id TEXT PRIMARY KEY, playerId TEXT NOT NULL UNIQUE REFERENCES players(id), balance REAL NOT NULL DEFAULT 0, lastUpdated TEXT NOT NULL);
     CREATE TABLE payments (id TEXT PRIMARY KEY, playerId TEXT NOT NULL REFERENCES players(id), sessionId TEXT REFERENCES sessions(id), amount REAL NOT NULL, status TEXT NOT NULL, paidDate TEXT, paymentType TEXT NOT NULL);
-    INSERT INTO settings (key, value) VALUES ('courtCount', '3');
+    INSERT INTO settings (key, value) VALUES ('courtCount', '4');
     INSERT INTO settings (key, value) VALUES ('sessionFee', '30');
     INSERT INTO settings (key, value) VALUES ('gameDuration', '15');
   `);
@@ -74,13 +74,13 @@ async function seed() {
   // Completed session from last week
   const sessionId1 = 's1';
   db.run('INSERT INTO sessions (id, date, startTime, endTime, courtCount, status) VALUES (?, ?, ?, ?, ?, ?)',
-    [sessionId1, lastWeek, isoStr(lastWeekDate, 9, 0), isoStr(lastWeekDate, 12, 0), 3, 'completed']);
+    [sessionId1, lastWeek, isoStr(lastWeekDate, 9, 0), isoStr(lastWeekDate, 12, 0), 4, 'completed']);
 
-  // Attendance for completed session — 16 players
-  const attendedS1 = players.slice(0, 16);
+  // Attendance for completed session — 20 players
+  const attendedS1 = players.slice(0, 20);
   for (let i = 0; i < attendedS1.length; i++) {
     const p = attendedS1[i]!;
-    const checkinTime = isoStr(lastWeekDate, 8 + Math.floor(i / 4), (i % 4) * 15);
+    const checkinTime = isoStr(lastWeekDate, 8 + Math.floor(i / 5), (i % 5) * 12);
     db.run('INSERT INTO attendance (id, playerId, sessionId, checkinTime) VALUES (?, ?, ?, ?)',
       [`a${p.id}_s1`, p.id, sessionId1, checkinTime]);
   }
@@ -88,25 +88,27 @@ async function seed() {
   // Helper to get player IDs by slice
   const pid = (i: number) => players[i]!.id;
 
-  // Games for completed session — 2 rounds
-  // Round 1 (same-gender): 3 courts
+  // Games for completed session — 2 rounds, 4 courts each (always mixed doubles)
+  // Round 1: 4 courts, mixed
   const round1Games = [
-    { id: 'g1', court: 1, t1: [pid(0), pid(11)], t2: [pid(5), pid(3)] },
-    { id: 'g2', court: 2, t1: [pid(13), pid(7)], t2: [pid(2), pid(15)] },
-    { id: 'g3', court: 3, t1: [pid(1), pid(12)], t2: [pid(8), pid(6)] },
+    { id: 'g1', court: 1, t1: [pid(0), pid(14)], t2: [pid(1), pid(15)] },
+    { id: 'g2', court: 2, t1: [pid(2), pid(16)], t2: [pid(3), pid(17)] },
+    { id: 'g3', court: 3, t1: [pid(4), pid(18)], t2: [pid(5), pid(19)] },
+    { id: 'g4', court: 4, t1: [pid(6), pid(19)], t2: [pid(7), pid(18)] },
   ];
   for (const g of round1Games) {
     db.run(`INSERT INTO games (id, sessionId, courtNumber, team1Player1Id, team1Player2Id, team2Player1Id, team2Player2Id, status, roundNumber, gameType, startedAt, endedAt)
-      VALUES (?, ?, ?, ?, ?, ?, ?, 'completed', 1, 'same-gender', ?, ?)`,
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'completed', 1, 'mixed', ?, ?)`,
       [g.id, sessionId1, g.court, g.t1[0], g.t1[1], g.t2[0], g.t2[1],
        isoStr(lastWeekDate, 9, 15), isoStr(lastWeekDate, 9, 30)]);
   }
 
-  // Round 2 (mixed): 3 courts
+  // Round 2: 4 courts, mixed
   const round2Games = [
-    { id: 'g4', court: 1, t1: [pid(0), pid(6)], t2: [pid(5), pid(1)] },
-    { id: 'g5', court: 2, t1: [pid(2), pid(4)], t2: [pid(13), pid(8)] },
-    { id: 'g6', court: 3, t1: [pid(3), pid(12)], t2: [pid(7), pid(10)] },
+    { id: 'g5', court: 1, t1: [pid(0), pid(15)], t2: [pid(3), pid(14)] },
+    { id: 'g6', court: 2, t1: [pid(1), pid(17)], t2: [pid(5), pid(16)] },
+    { id: 'g7', court: 3, t1: [pid(2), pid(18)], t2: [pid(7), pid(19)] },
+    { id: 'g8', court: 4, t1: [pid(4), pid(14)], t2: [pid(6), pid(16)] },
   ];
   for (const g of round2Games) {
     db.run(`INSERT INTO games (id, sessionId, courtNumber, team1Player1Id, team1Player2Id, team2Player1Id, team2Player2Id, status, roundNumber, gameType, startedAt, endedAt)
@@ -127,13 +129,13 @@ async function seed() {
   // Active session — today
   const sessionId2 = 's2';
   db.run('INSERT INTO sessions (id, date, startTime, endTime, courtCount, status) VALUES (?, ?, ?, ?, ?, ?)',
-    [sessionId2, today, isoStr(now, 14, 0), null, 3, 'active']);
+    [sessionId2, today, isoStr(now, 14, 0), null, 4, 'active']);
 
-  // Attendance for active session — 12 players so far
-  const attendedS2 = players.slice(0, 12);
+  // Attendance for active session — 32 players
+  const attendedS2 = players.slice(0, 32);
   for (let i = 0; i < attendedS2.length; i++) {
     const p = attendedS2[i]!;
-    const checkinTime = isoStr(now, 13, 45 + Math.floor(i / 4) * 5 + (i % 4) * 3);
+    const checkinTime = isoStr(now, 13, 45 + Math.floor(i / 8) * 3 + (i % 8) * 1);
     db.run('INSERT INTO attendance (id, playerId, sessionId, checkinTime) VALUES (?, ?, ?, ?)',
       [`a${p.id}_s2`, p.id, sessionId2, checkinTime]);
 
@@ -149,15 +151,16 @@ async function seed() {
     }
   }
 
-  // Pending games — round 1 (not started yet)
+  // Pending games — round 1, 4 courts, all mixed doubles
   const pendingGames = [
-    { id: 'g7', court: 1, t1: [pid(0), pid(9)], t2: [pid(5), pid(3)] },
-    { id: 'g8', court: 2, t1: [pid(13), pid(7)], t2: [pid(2), pid(15)] },
-    { id: 'g9', court: 3, t1: [pid(1), pid(6)], t2: [pid(8), pid(4)] },
+    { id: 'g9',  court: 1, t1: [pid(0), pid(20)], t2: [pid(1), pid(21)] },
+    { id: 'g10', court: 2, t1: [pid(2), pid(22)], t2: [pid(3), pid(23)] },
+    { id: 'g11', court: 3, t1: [pid(4), pid(24)], t2: [pid(5), pid(25)] },
+    { id: 'g12', court: 4, t1: [pid(6), pid(26)], t2: [pid(7), pid(27)] },
   ];
   for (const g of pendingGames) {
     db.run(`INSERT INTO games (id, sessionId, courtNumber, team1Player1Id, team1Player2Id, team2Player1Id, team2Player2Id, status, roundNumber, gameType, startedAt, endedAt)
-      VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', 1, 'same-gender', NULL, NULL)`,
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', 1, 'mixed', NULL, NULL)`,
       [g.id, sessionId2, g.court, g.t1[0], g.t1[1], g.t2[0], g.t2[1]]);
   }
 

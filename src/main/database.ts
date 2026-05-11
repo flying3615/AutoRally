@@ -94,7 +94,7 @@ function migrate(db: Database) {
       team2Player2Id TEXT NOT NULL REFERENCES players(id),
       status TEXT NOT NULL CHECK(status IN ('pending', 'playing', 'completed')),
       roundNumber INTEGER NOT NULL,
-      gameType TEXT NOT NULL CHECK(gameType IN ('same-gender', 'mixed')),
+      gameType TEXT NOT NULL CHECK(gameType IN ('mixed', 'male-double', 'female-double')),
       startedAt TEXT,
       endedAt TEXT
     );
@@ -118,7 +118,7 @@ function migrate(db: Database) {
       paymentType TEXT NOT NULL CHECK(paymentType IN ('session', 'topup'))
     );
   `);
-  db.run("INSERT OR IGNORE INTO settings (key, value) VALUES ('courtCount', '3')");
+  db.run("INSERT OR IGNORE INTO settings (key, value) VALUES ('courtCount', '4')");
   db.run("INSERT OR IGNORE INTO settings (key, value) VALUES ('sessionFee', '30')");
   db.run("INSERT OR IGNORE INTO settings (key, value) VALUES ('gameDuration', '15')");
 

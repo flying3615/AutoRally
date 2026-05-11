@@ -210,7 +210,7 @@ export function History() {
                                 <div className="flex items-center gap-2 mb-3">
                                   <span className="text-xs font-semibold text-zinc-500">Court {g.courtNumber}</span>
                                   <span className="text-zinc-200">·</span>
-                                  <span className="text-xs text-zinc-400">{g.gameType === 'mixed' ? 'Mixed' : 'Same gender'}</span>
+                                  <span className="text-xs text-zinc-400">{g.gameType === 'mixed' ? 'Mixed' : g.gameType === 'male-double' ? 'Men Double' : 'Women Double'}</span>
                                   <span className="text-xs text-zinc-300 ml-auto font-medium">{g.status === 'completed' ? 'Completed' : g.status}</span>
                                 </div>
                                 <div className="flex items-center gap-4">

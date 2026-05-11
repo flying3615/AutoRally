@@ -1,7 +1,8 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { generateMatches } from '../services/matching';
 import { useGameContext, type TimerState } from '../contexts/GameContext';
+import { levelColors, genderColors } from '../theme';
 
 interface GameInfo {
   id: string;
@@ -57,14 +58,6 @@ interface ContextMenuTarget {
   checkedOut: boolean;
 }
 
-const levelColors: Record<number, string> = {
-  5: '#022c22',
-  4: '#064e3b',
-  3: '#047857',
-  2: '#10b981',
-  1: '#6ee7b7',
-};
-
 // ── Context Menu ──
 function ContextMenu({
   x, y, target, onClose,
@@ -108,7 +101,7 @@ function ContextMenu({
       <div className="px-3 py-2 border-b border-zinc-100 flex items-center gap-2">
         <span
           className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0"
-          style={{ backgroundColor: target.checkedOut ? '#ef4444' : isMale ? '#3b82f6' : '#ec4899' }}
+          style={{ backgroundColor: target.checkedOut ? '#ef4444' : isMale ? genderColors.male.accent : genderColors.female.accent }}
         >
           {target.name[0]}
         </span>
@@ -321,7 +314,7 @@ function DropSlot({
   return (
     <div
       draggable
-      className="rounded-lg cursor-grab"
+      className="rounded-lg cursor-grab w-full h-full flex items-center justify-center"
       style={{
         backgroundColor: over ? 'rgba(59,130,246,0.06)' : 'transparent',
       }}
@@ -361,45 +354,52 @@ function PlayerTag({
   checkedOut?: boolean;
 }) {
   const isMale = gender === 'male';
-  const nameColor = levelColors[level] ?? '#6b7280';
-  const showBadge = paused || checkedOut;
+  const gc = isMale ? genderColors.male : genderColors.female;
+  const textClr = levelColors[level] ?? levelColors[3]!;
 
   return (
-    <span
-      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-2xl font-semibold select-none relative"
+    <div
+      className="inline-flex items-center justify-center w-full px-2 py-3 rounded-xl select-none relative min-w-0 overflow-hidden"
       style={{
-        backgroundColor: checkedOut ? '#fef2f2' : isMale ? '#eef4ff' : '#fdf2f8',
-        color: nameColor,
-        borderColor: checkedOut ? '#fecaca' : paused ? '#fde68a' : 'transparent',
+        backgroundColor: paused ? '#f5f5f4' : checkedOut ? '#fef2f2' : gc.bg,
         borderWidth: 1,
         borderStyle: 'solid',
-        transition: 'transform 0.15s ease',
+        borderColor: paused ? '#d6d3d1' : checkedOut ? '#fecaca' : gc.border,
+        transition: 'transform 0.15s ease, box-shadow 0.15s ease',
         cursor: 'context-menu',
       }}
       onContextMenu={(e) => { e.preventDefault(); onContextMenu(e, playerId); }}
-      onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.04)'; }}
-      onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.transform = 'scale(1.04)';
+        e.currentTarget.style.boxShadow = `0 3px 10px -3px ${gc.border}60`;
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.transform = 'scale(1)';
+        e.currentTarget.style.boxShadow = 'none';
+      }}
     >
-      <span className="text-xs opacity-60" style={{ color: isMale ? '#3b82f6' : '#ec4899' }}>
-        {isMale ? 'M' : 'F'}
+      <span
+        className="text-2xl font-bold tracking-tight truncate"
+        style={{ color: paused ? '#a8a29e' : checkedOut ? '#ef4444' : textClr }}
+      >
+        {name}
+        <span className="text-base font-semibold opacity-60 ml-0.5">({level})</span>
       </span>
-      {name}
-      <span className="text-xs opacity-50 ml-0.5">{level}</span>
-      {showBadge && (
+      {(paused || checkedOut) && (
         <span
-          className="text-[10px] font-semibold px-1.5 py-px rounded-full"
+          className="text-[10px] font-semibold px-1.5 py-px rounded-full ml-2 shrink-0"
           style={{
             backgroundColor: checkedOut ? '#fef2f2' : '#fef9c3',
             color: checkedOut ? '#dc2626' : '#a16207',
-            borderColor: checkedOut ? '#fecaca' : '#fde68a',
             borderWidth: 1,
             borderStyle: 'solid',
+            borderColor: checkedOut ? '#fecaca' : '#fde68a',
           }}
         >
           {checkedOut ? 'Left' : 'Paused'}
         </span>
       )}
-    </span>
+    </div>
   );
 }
 
@@ -427,7 +427,7 @@ function PlayerCard({
       }}
       className="group flex items-center gap-2 px-2.5 py-1.5 rounded-lg select-none"
       style={{
-        backgroundColor: isPaused ? '#f5f5f4' : isMale ? '#eef4ff' : '#fdf2f8',
+        backgroundColor: isPaused ? '#f5f5f4' : isMale ? genderColors.male.bg : genderColors.female.bg,
         animation: `fadeSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) ${index * 40}ms forwards`,
         transition: 'background-color 0.15s ease, opacity 0.15s ease',
         cursor: isPaused ? 'context-menu' : 'grab',
@@ -436,16 +436,16 @@ function PlayerCard({
       onContextMenu={(e) => { e.preventDefault(); onContextMenu(e, p.playerId); }}
       onMouseEnter={(e) => {
         if (isPaused) return;
-        e.currentTarget.style.backgroundColor = isMale ? '#dbeafe' : '#fce7f3';
+        e.currentTarget.style.backgroundColor = isMale ? genderColors.male.border : genderColors.female.border;
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.backgroundColor = isPaused ? '#f5f5f4' : isMale ? '#eef4ff' : '#fdf2f8';
+        e.currentTarget.style.backgroundColor = isPaused ? '#f5f5f4' : isMale ? genderColors.male.bg : genderColors.female.bg;
       }}
     >
       <div
         className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 text-white"
         style={{
-          backgroundColor: isPaused ? '#a8a29e' : isMale ? '#3b82f6' : '#ec4899',
+          backgroundColor: isPaused ? '#a8a29e' : isMale ? genderColors.male.accent : genderColors.female.accent,
         }}
       >
         {isPaused ? (
@@ -462,7 +462,7 @@ function PlayerCard({
       {isPaused ? (
         <span className="text-[10px] font-semibold px-1.5 py-px rounded bg-amber-100 text-amber-700 shrink-0">Paused</span>
       ) : (
-        <span className="text-[10px] font-semibold shrink-0" style={{ color: isMale ? '#3b82f6' : '#ec4899' }}>
+        <span className="text-[10px] font-semibold shrink-0" style={{ color: isMale ? genderColors.male.accent : genderColors.female.accent }}>
           {isMale ? '♂' : '♀'}{p.level}
         </span>
       )}
@@ -880,12 +880,6 @@ export function MatchPanel() {
               )}
             </div>
             <div className="flex items-center gap-2">
-              <Link
-                to={`/checkin/${sessionId}`}
-                className="px-3 py-1.5 text-xs font-medium text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 rounded-lg transition-colors"
-              >
-                Check-in
-              </Link>
               {activeGames.length === 0 && pendingGames.length === 0 && (
                 <button
                   onClick={handleGenerate}
@@ -905,15 +899,6 @@ export function MatchPanel() {
                   Start Round ({pendingGames.length} courts)
                 </button>
               )}
-              {activeGames.length > 0 && pendingGames.length === 0 && (
-                <button
-                  onClick={handleGenerate}
-                  className="px-4 py-1.5 bg-emerald-600 text-white text-xs font-semibold rounded-lg
-                    hover:bg-emerald-700 active:scale-[0.97] transition-transform"
-                >
-                  Regenerate
-                </button>
-              )}
             </div>
           </div>
 
@@ -931,33 +916,35 @@ export function MatchPanel() {
             </div>
           )}
 
-          {/* === Compact Timer Bar — only when active games exist === */}
+          {/* === Fixed Timer Overlay — pinned to top-center when games active === */}
           {activeGames.length > 0 && (
             <div
-              className="mb-6 rounded-2xl border flex items-center justify-between"
+              className="fixed top-12 left-1/2 -translate-x-1/2 z-40 flex items-center gap-6 rounded-2xl border"
               style={{
-                padding: '10px 20px',
-                backgroundColor: masterTimer?.phase === 'paused' ? '#f5f5f4' : masterTimer?.phase === 'warning' ? '#fffbeb' : '#f0fdf4',
+                padding: '12px 32px',
+                backgroundColor: masterTimer?.phase === 'paused' ? 'rgba(245,244,241,0.95)' : masterTimer?.phase === 'warning' ? 'rgba(255,251,235,0.95)' : 'rgba(240,253,244,0.95)',
                 borderColor: masterTimer?.phase === 'paused' ? '#d6d3d1' : masterTimer?.phase === 'warning' ? '#fde68a' : '#bbf7d0',
+                backdropFilter: 'blur(8px)',
                 boxShadow: masterTimer?.phase === 'paused'
-                  ? '0 4px 24px -8px rgba(120,113,108,0.12)'
+                  ? '0 8px 30px -8px rgba(120,113,108,0.2)'
                   : masterTimer?.phase === 'warning'
-                    ? '0 4px 24px -8px rgba(234,179,8,0.25)'
-                    : '0 4px 24px -8px rgba(34,197,94,0.15)',
+                    ? '0 8px 30px -8px rgba(234,179,8,0.35)'
+                    : '0 8px 30px -8px rgba(34,197,94,0.25)',
+                animation: 'ctxFadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
               }}
             >
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-5">
                 <span
                   className="font-mono font-bold tabular-nums tracking-tight leading-none"
                   style={{
-                    fontSize: '36px',
+                    fontSize: '56px',
                     color: masterTimer?.phase === 'warning' ? '#d97706' : masterTimer?.phase === 'paused' ? '#a16207' : '#16a34a',
                   }}
                 >
                   {masterTimer ? formatTime(masterTimer.remaining) : `--:--`}
                 </span>
                 <div className="flex flex-col gap-0.5">
-                  <span className="text-[11px] font-semibold uppercase tracking-wider"
+                  <span className="text-xs font-semibold uppercase tracking-wider"
                     style={{ color: masterTimer?.phase === 'paused' ? '#a16207' : masterTimer?.phase === 'warning' ? '#d97706' : '#16a34a' }}>
                     {masterTimer?.phase === 'paused' ? 'Paused' : masterTimer?.phase === 'warning' ? 'Time Warning' : 'In Progress'}
                   </span>
@@ -967,6 +954,7 @@ export function MatchPanel() {
                   </span>
                 </div>
               </div>
+              <div className="w-px h-8 bg-zinc-200" />
               <div className="flex items-center gap-2">
                 {anyPaused ? (
                   <button
@@ -1010,7 +998,7 @@ export function MatchPanel() {
                   return (
                     <div
                       key={g.id}
-                      className="rounded-2xl border p-6 relative"
+                      className="rounded-2xl border p-4 relative"
                       style={{
                         backgroundColor: isPaused ? '#f5f5f4' : isEnded ? '#fef2f2' : isWarning ? '#fffbeb' : '#f0fdf4',
                         borderColor: isPaused ? '#d6d3d1' : isEnded ? '#fecaca' : isWarning ? '#fde68a' : '#bbf7d0',
@@ -1024,39 +1012,33 @@ export function MatchPanel() {
                       }}
                     >
                       {isPaused && (
-                        <div className="absolute top-2 right-2 text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">
+                        <div className="absolute top-2 right-2 text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full z-10">
                           Paused
                         </div>
                       )}
-                      <div className="flex items-center justify-between mb-3">
-                        <span className="text-sm font-semibold text-zinc-500">
-                          Court {g.courtNumber}
-                          <span className="mx-1.5 text-zinc-300">|</span>
-                          {g.gameType === 'mixed' ? 'Mixed' : 'Same Gender'}
-                        </span>
-                      </div>
 
-                      <div className="flex items-center gap-6">
-                        <div className="flex-1 text-center">
-                          <p className="text-[11px] text-zinc-400 mb-2 font-medium uppercase tracking-wide">Team 1</p>
-                          <div className="flex flex-col items-center gap-1">
-                            <PlayerTag name={g.t1p1Name} gender={g.t1p1Gender} level={g.t1p1Level} playerId={g.team1Player1Id} onContextMenu={handlePlayerContextMenu} paused={pausedPlayerIds.has(g.team1Player1Id)} checkedOut={checkedOutPlayerIds.has(g.team1Player1Id)} />
-                            <PlayerTag name={g.t1p2Name} gender={g.t1p2Gender} level={g.t1p2Level} playerId={g.team1Player2Id} onContextMenu={handlePlayerContextMenu} paused={pausedPlayerIds.has(g.team1Player2Id)} checkedOut={checkedOutPlayerIds.has(g.team1Player2Id)} />
-                          </div>
+                      <div className="grid gap-1" style={{ gridTemplateColumns: '1fr auto 1fr', gridTemplateRows: '1fr 1fr' }}>
+                        <div className="flex items-center justify-center min-w-0">
+                          <PlayerTag name={g.t1p1Name} gender={g.t1p1Gender} level={g.t1p1Level} playerId={g.team1Player1Id} onContextMenu={handlePlayerContextMenu} paused={pausedPlayerIds.has(g.team1Player1Id)} checkedOut={checkedOutPlayerIds.has(g.team1Player1Id)} />
                         </div>
 
-                        <div className="flex flex-col items-center gap-1 shrink-0">
-                          <div className="w-px h-8 bg-zinc-200" />
-                          <span className="text-[10px] font-bold text-zinc-300 uppercase">VS</span>
-                          <div className="w-px h-8 bg-zinc-200" />
+                        <div className="flex flex-col items-center justify-center gap-1 px-1 row-span-2" style={{ gridRow: '1 / 3', gridColumn: '2' }}>
+                          <span className="text-[10px] font-semibold text-zinc-400 tabular-nums">C{g.courtNumber}</span>
+                          <div className="w-px flex-1 bg-zinc-200/60" />
+                          <span className="text-[10px] font-bold text-zinc-300">VS</span>
+                          <div className="w-px flex-1 bg-zinc-200/60" />
                         </div>
 
-                        <div className="flex-1 text-center">
-                          <p className="text-[11px] text-zinc-400 mb-2 font-medium uppercase tracking-wide">Team 2</p>
-                          <div className="flex flex-col items-center gap-1">
-                            <PlayerTag name={g.t2p1Name} gender={g.t2p1Gender} level={g.t2p1Level} playerId={g.team2Player1Id} onContextMenu={handlePlayerContextMenu} paused={pausedPlayerIds.has(g.team2Player1Id)} checkedOut={checkedOutPlayerIds.has(g.team2Player1Id)} />
-                            <PlayerTag name={g.t2p2Name} gender={g.t2p2Gender} level={g.t2p2Level} playerId={g.team2Player2Id} onContextMenu={handlePlayerContextMenu} paused={pausedPlayerIds.has(g.team2Player2Id)} checkedOut={checkedOutPlayerIds.has(g.team2Player2Id)} />
-                          </div>
+                        <div className="flex items-center justify-center min-w-0">
+                          <PlayerTag name={g.t2p1Name} gender={g.t2p1Gender} level={g.t2p1Level} playerId={g.team2Player1Id} onContextMenu={handlePlayerContextMenu} paused={pausedPlayerIds.has(g.team2Player1Id)} checkedOut={checkedOutPlayerIds.has(g.team2Player1Id)} />
+                        </div>
+
+                        <div className="flex items-center justify-center min-w-0" style={{ gridRow: '2', gridColumn: '1' }}>
+                          <PlayerTag name={g.t1p2Name} gender={g.t1p2Gender} level={g.t1p2Level} playerId={g.team1Player2Id} onContextMenu={handlePlayerContextMenu} paused={pausedPlayerIds.has(g.team1Player2Id)} checkedOut={checkedOutPlayerIds.has(g.team1Player2Id)} />
+                        </div>
+
+                        <div className="flex items-center justify-center min-w-0" style={{ gridRow: '2', gridColumn: '3' }}>
+                          <PlayerTag name={g.t2p2Name} gender={g.t2p2Gender} level={g.t2p2Level} playerId={g.team2Player2Id} onContextMenu={handlePlayerContextMenu} paused={pausedPlayerIds.has(g.team2Player2Id)} checkedOut={checkedOutPlayerIds.has(g.team2Player2Id)} />
                         </div>
                       </div>
                     </div>
@@ -1076,44 +1058,35 @@ export function MatchPanel() {
                 {pendingGames.map(g => (
                   <div
                     key={g.id}
-                    className="bg-white rounded-2xl border border-zinc-200/70 p-6"
+                    className="bg-white rounded-2xl border border-zinc-200/70 p-3"
                     style={{ boxShadow: '0 2px 12px -4px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.02)' }}
                   >
-                    <div className="flex items-center mb-4">
-                      <span className="text-sm font-semibold text-zinc-500">
-                        Court {g.courtNumber}
-                        <span className="mx-1.5 text-zinc-300">|</span>
-                        {g.gameType === 'mixed' ? 'Mixed' : 'Same Gender'}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-6">
-                      <div className="flex-1 text-center">
-                        <p className="text-[11px] text-zinc-400 mb-2 font-medium uppercase tracking-wide">Team 1</p>
-                        <div className="flex flex-col items-center gap-1">
-                          <DropSlot gameId={g.id} slot="team1Player1Id" playerId={g.team1Player1Id} onDropPlayer={handleDropPlayer}>
-                            <PlayerTag name={g.t1p1Name} gender={g.t1p1Gender} level={g.t1p1Level} playerId={g.team1Player1Id} onContextMenu={handlePlayerContextMenu} paused={pausedPlayerIds.has(g.team1Player1Id)} checkedOut={checkedOutPlayerIds.has(g.team1Player1Id)} />
-                          </DropSlot>
-                          <DropSlot gameId={g.id} slot="team1Player2Id" playerId={g.team1Player2Id} onDropPlayer={handleDropPlayer}>
-                            <PlayerTag name={g.t1p2Name} gender={g.t1p2Gender} level={g.t1p2Level} playerId={g.team1Player2Id} onContextMenu={handlePlayerContextMenu} paused={pausedPlayerIds.has(g.team1Player2Id)} checkedOut={checkedOutPlayerIds.has(g.team1Player2Id)} />
-                          </DropSlot>
-                        </div>
+                    <div className="grid gap-1" style={{ gridTemplateColumns: '1fr auto 1fr', gridTemplateRows: '1fr 1fr' }}>
+                      <div className="flex items-center justify-center min-w-0">
+                        <DropSlot gameId={g.id} slot="team1Player1Id" playerId={g.team1Player1Id} onDropPlayer={handleDropPlayer}>
+                          <PlayerTag name={g.t1p1Name} gender={g.t1p1Gender} level={g.t1p1Level} playerId={g.team1Player1Id} onContextMenu={handlePlayerContextMenu} paused={pausedPlayerIds.has(g.team1Player1Id)} checkedOut={checkedOutPlayerIds.has(g.team1Player1Id)} />
+                        </DropSlot>
                       </div>
-                      <div className="flex flex-col items-center gap-1 shrink-0">
-                        <div className="w-px h-8 bg-zinc-200" />
-                        <span className="text-[10px] font-bold text-zinc-300 uppercase">VS</span>
-                        <div className="w-px h-8 bg-zinc-200" />
+                      <div className="flex flex-col items-center justify-center gap-1 px-1 row-span-2" style={{ gridRow: '1 / 3', gridColumn: '2' }}>
+                        <span className="text-[10px] font-semibold text-zinc-400 tabular-nums">C{g.courtNumber}</span>
+                        <div className="w-px flex-1 bg-zinc-200/60" />
+                        <span className="text-[10px] font-bold text-zinc-300">VS</span>
+                        <div className="w-px flex-1 bg-zinc-200/60" />
                       </div>
-                      <div className="flex-1 text-center">
-                        <p className="text-[11px] text-zinc-400 mb-2 font-medium uppercase tracking-wide">Team 2</p>
-                        <div className="flex flex-col items-center gap-1">
-                          <DropSlot gameId={g.id} slot="team2Player1Id" playerId={g.team2Player1Id} onDropPlayer={handleDropPlayer}>
-                            <PlayerTag name={g.t2p1Name} gender={g.t2p1Gender} level={g.t2p1Level} playerId={g.team2Player1Id} onContextMenu={handlePlayerContextMenu} paused={pausedPlayerIds.has(g.team2Player1Id)} checkedOut={checkedOutPlayerIds.has(g.team2Player1Id)} />
-                          </DropSlot>
-                          <DropSlot gameId={g.id} slot="team2Player2Id" playerId={g.team2Player2Id} onDropPlayer={handleDropPlayer}>
-                            <PlayerTag name={g.t2p2Name} gender={g.t2p2Gender} level={g.t2p2Level} playerId={g.team2Player2Id} onContextMenu={handlePlayerContextMenu} paused={pausedPlayerIds.has(g.team2Player2Id)} checkedOut={checkedOutPlayerIds.has(g.team2Player2Id)} />
-                          </DropSlot>
-                        </div>
+                      <div className="flex items-center justify-center min-w-0">
+                        <DropSlot gameId={g.id} slot="team2Player1Id" playerId={g.team2Player1Id} onDropPlayer={handleDropPlayer}>
+                          <PlayerTag name={g.t2p1Name} gender={g.t2p1Gender} level={g.t2p1Level} playerId={g.team2Player1Id} onContextMenu={handlePlayerContextMenu} paused={pausedPlayerIds.has(g.team2Player1Id)} checkedOut={checkedOutPlayerIds.has(g.team2Player1Id)} />
+                        </DropSlot>
+                      </div>
+                      <div className="flex items-center justify-center min-w-0" style={{ gridRow: '2', gridColumn: '1' }}>
+                        <DropSlot gameId={g.id} slot="team1Player2Id" playerId={g.team1Player2Id} onDropPlayer={handleDropPlayer}>
+                          <PlayerTag name={g.t1p2Name} gender={g.t1p2Gender} level={g.t1p2Level} playerId={g.team1Player2Id} onContextMenu={handlePlayerContextMenu} paused={pausedPlayerIds.has(g.team1Player2Id)} checkedOut={checkedOutPlayerIds.has(g.team1Player2Id)} />
+                        </DropSlot>
+                      </div>
+                      <div className="flex items-center justify-center min-w-0" style={{ gridRow: '2', gridColumn: '3' }}>
+                        <DropSlot gameId={g.id} slot="team2Player2Id" playerId={g.team2Player2Id} onDropPlayer={handleDropPlayer}>
+                          <PlayerTag name={g.t2p2Name} gender={g.t2p2Gender} level={g.t2p2Level} playerId={g.team2Player2Id} onContextMenu={handlePlayerContextMenu} paused={pausedPlayerIds.has(g.team2Player2Id)} checkedOut={checkedOutPlayerIds.has(g.team2Player2Id)} />
+                        </DropSlot>
                       </div>
                     </div>
                   </div>
@@ -1150,37 +1123,27 @@ export function MatchPanel() {
                 {pendingGames.map(g => (
                   <div
                     key={g.id}
-                    className="bg-white/90 rounded-xl border border-amber-200/60 p-4"
+                    className="bg-white/90 rounded-xl border border-amber-200/60 p-2"
                     style={{ boxShadow: '0 4px 16px -6px rgba(234,179,8,0.2)' }}
                   >
-                    <div className="flex items-center gap-2 mb-3">
-                      <span className="text-xs font-semibold text-zinc-500">
-                        Court {g.courtNumber}
-                      </span>
-                      <span className="w-px h-3 bg-zinc-200" />
-                      <span className="text-xs text-zinc-400">
-                        {g.gameType === 'mixed' ? 'Mixed' : 'Same Gender'}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <div className="flex-1 text-center">
-                        <p className="text-[10px] text-zinc-400 mb-1.5 font-medium uppercase tracking-wide">Team 1</p>
-                        <div className="flex flex-col items-center gap-0.5">
-                          <PlayerTag name={g.t1p1Name} gender={g.t1p1Gender} level={g.t1p1Level} playerId={g.team1Player1Id} onContextMenu={handlePlayerContextMenu} paused={pausedPlayerIds.has(g.team1Player1Id)} checkedOut={checkedOutPlayerIds.has(g.team1Player1Id)} />
-                          <PlayerTag name={g.t1p2Name} gender={g.t1p2Gender} level={g.t1p2Level} playerId={g.team1Player2Id} onContextMenu={handlePlayerContextMenu} paused={pausedPlayerIds.has(g.team1Player2Id)} checkedOut={checkedOutPlayerIds.has(g.team1Player2Id)} />
-                        </div>
+                    <div className="grid gap-1" style={{ gridTemplateColumns: '1fr auto 1fr', gridTemplateRows: '1fr 1fr' }}>
+                      <div className="flex items-center justify-center min-w-0">
+                        <PlayerTag name={g.t1p1Name} gender={g.t1p1Gender} level={g.t1p1Level} playerId={g.team1Player1Id} onContextMenu={handlePlayerContextMenu} paused={pausedPlayerIds.has(g.team1Player1Id)} checkedOut={checkedOutPlayerIds.has(g.team1Player1Id)} />
                       </div>
-                      <div className="flex flex-col items-center gap-0.5 shrink-0">
-                        <div className="w-px h-6 bg-zinc-200" />
+                      <div className="flex flex-col items-center justify-center gap-1 px-1 row-span-2" style={{ gridRow: '1 / 3', gridColumn: '2' }}>
+                        <span className="text-[10px] font-semibold text-zinc-400 tabular-nums">C{g.courtNumber}</span>
+                        <div className="w-px flex-1 bg-amber-200/60" />
                         <span className="text-[10px] font-bold text-amber-400">VS</span>
-                        <div className="w-px h-6 bg-zinc-200" />
+                        <div className="w-px flex-1 bg-amber-200/60" />
                       </div>
-                      <div className="flex-1 text-center">
-                        <p className="text-[10px] text-zinc-400 mb-1.5 font-medium uppercase tracking-wide">Team 2</p>
-                        <div className="flex flex-col items-center gap-0.5">
-                          <PlayerTag name={g.t2p1Name} gender={g.t2p1Gender} level={g.t2p1Level} playerId={g.team2Player1Id} onContextMenu={handlePlayerContextMenu} paused={pausedPlayerIds.has(g.team2Player1Id)} checkedOut={checkedOutPlayerIds.has(g.team2Player1Id)} />
-                          <PlayerTag name={g.t2p2Name} gender={g.t2p2Gender} level={g.t2p2Level} playerId={g.team2Player2Id} onContextMenu={handlePlayerContextMenu} paused={pausedPlayerIds.has(g.team2Player2Id)} checkedOut={checkedOutPlayerIds.has(g.team2Player2Id)} />
-                        </div>
+                      <div className="flex items-center justify-center min-w-0">
+                        <PlayerTag name={g.t2p1Name} gender={g.t2p1Gender} level={g.t2p1Level} playerId={g.team2Player1Id} onContextMenu={handlePlayerContextMenu} paused={pausedPlayerIds.has(g.team2Player1Id)} checkedOut={checkedOutPlayerIds.has(g.team2Player1Id)} />
+                      </div>
+                      <div className="flex items-center justify-center min-w-0" style={{ gridRow: '2', gridColumn: '1' }}>
+                        <PlayerTag name={g.t1p2Name} gender={g.t1p2Gender} level={g.t1p2Level} playerId={g.team1Player2Id} onContextMenu={handlePlayerContextMenu} paused={pausedPlayerIds.has(g.team1Player2Id)} checkedOut={checkedOutPlayerIds.has(g.team1Player2Id)} />
+                      </div>
+                      <div className="flex items-center justify-center min-w-0" style={{ gridRow: '2', gridColumn: '3' }}>
+                        <PlayerTag name={g.t2p2Name} gender={g.t2p2Gender} level={g.t2p2Level} playerId={g.team2Player2Id} onContextMenu={handlePlayerContextMenu} paused={pausedPlayerIds.has(g.team2Player2Id)} checkedOut={checkedOutPlayerIds.has(g.team2Player2Id)} />
                       </div>
                     </div>
                   </div>
@@ -1248,7 +1211,7 @@ export function MatchPanel() {
                   >
                     <span
                       className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0"
-                      style={{ backgroundColor: p.gender === 'male' ? '#3b82f6' : '#ec4899' }}
+                      style={{ backgroundColor: p.gender === 'male' ? genderColors.male.accent : genderColors.female.accent }}
                     >
                       {p.name[0]}
                     </span>

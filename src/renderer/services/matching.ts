@@ -8,11 +8,27 @@ interface PlayerInPool {
   checkinTime: string;
 }
 
-interface MatchResult {
+export interface MatchResult {
   team1: [string, string];
   team2: [string, string];
-  gameType: 'same-gender' | 'mixed';
+  gameType: 'mixed' | 'male-double' | 'female-double';
 }
+
+const CANDIDATES = 30;
+
+// ── Seeded random ──
+
+function seededShuffle<T>(arr: T[], seed: number): T[] {
+  const out = [...arr];
+  for (let i = out.length - 1; i > 0; i--) {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+    const j = seed % (i + 1);
+    [out[i], out[j]] = [out[j]!, out[i]!];
+  }
+  return out;
+}
+
+// ── Main entry point ──
 
 export function generateMatches(
   pool: PlayerInPool[],
@@ -22,153 +38,130 @@ export function generateMatches(
 ): MatchResult[] {
   if (pool.length < 4) return [];
 
-  const sorted = [...pool].sort((a, b) =>
-    new Date(a.checkinTime).getTime() - new Date(b.checkinTime).getTime()
-  );
-
-  const isSameGenderRound = currentRound % 2 === 1;
-  const results: MatchResult[] = [];
-  const used = new Set<string>();
-
-  // Separate by gender for matching
-  const males = sorted.filter(p => p.gender === 'male');
-  const females = sorted.filter(p => p.gender === 'female');
-
-  const partnerHistory = buildPartnerHistory(pastGames);
-
-  if (isSameGenderRound) {
-    // Try same-gender matches first
-    const maleMatches = matchGroup(males, courtCount, used, partnerHistory);
-    results.push(...maleMatches.map(m => ({ ...m, gameType: 'same-gender' as const })));
-
-    const remainingCourts = courtCount - results.length;
-    if (remainingCourts > 0 && females.length >= 4) {
-      const femaleMatches = matchGroup(females, remainingCourts, used, partnerHistory);
-      results.push(...femaleMatches.map(m => ({ ...m, gameType: 'same-gender' as const })));
-    }
-  } else {
-    // Mixed doubles: need at least 2 males and 2 females per match
-    const mixedMatches = matchMixed(males, females, courtCount, used, partnerHistory);
-    results.push(...mixedMatches.map(m => ({ ...m, gameType: 'mixed' as const })));
-  }
-
-  // Fill remaining courts with any available players (fallback)
-  const remainingCourts = courtCount - results.length;
-  if (remainingCourts > 0) {
-    const remaining = sorted.filter(p => !used.has(p.id));
-    const fallback = matchByLevel(remaining, remainingCourts, used, partnerHistory);
-    for (const m of fallback) {
-      const hasMixed = m.team1[0] && m.team2[0] &&
-        getPlayerGender(m.team1[0], pool) !== getPlayerGender(m.team1[1], pool);
-      results.push({ ...m, gameType: hasMixed ? 'mixed' : 'same-gender' });
+  // 1. Count games per player
+  const gameCount = new Map<string, number>();
+  for (const g of pastGames) {
+    for (const id of [g.team1Player1Id, g.team1Player2Id, g.team2Player1Id, g.team2Player2Id]) {
+      gameCount.set(id, (gameCount.get(id) ?? 0) + 1);
     }
   }
+  for (const p of pool) gameCount.set(p.id, gameCount.get(p.id) ?? 0);
 
-  return results.slice(0, courtCount);
-}
-
-function matchGroup(
-  players: PlayerInPool[],
-  maxCourts: number,
-  used: Set<string>,
-  partnerHistory: Map<string, Set<string>>,
-): MatchResult[] {
-  const results: MatchResult[] = [];
-  const available = players.filter(p => !used.has(p.id));
-
-  for (let i = 0; i < available.length - 3 && results.length < maxCourts; i += 4) {
-    const group = available.slice(i, i + 4);
-    if (group.length < 4) break;
-
-    const sorted = [...group].sort((a, b) => a.level - b.level);
-    // Strongest + weakest vs middle two
-    const team1: [string, string] = [sorted[3]!.id, sorted[0]!.id];
-    const team2: [string, string] = [sorted[2]!.id, sorted[1]!.id];
-
-    for (const p of group) used.add(p.id);
-    results.push({ team1, team2, gameType: 'same-gender' });
+  // 2. Count past partnerships
+  const partnerCount = new Map<string, number>();
+  const partnerKey = (a: string, b: string) => a < b ? `${a}|${b}` : `${b}|${a}`;
+  for (const g of pastGames) {
+    const k1 = partnerKey(g.team1Player1Id, g.team1Player2Id);
+    const k2 = partnerKey(g.team2Player1Id, g.team2Player2Id);
+    partnerCount.set(k1, (partnerCount.get(k1) ?? 0) + 1);
+    partnerCount.set(k2, (partnerCount.get(k2) ?? 0) + 1);
   }
 
-  return results;
-}
+  // 3. Greedy fairness sort: lowest game count first
+  const byCount = [...pool].sort((a, b) => {
+    const dc = (gameCount.get(a.id) ?? 0) - (gameCount.get(b.id) ?? 0);
+    if (dc !== 0) return dc;
+    // Tiebreaker: earlier checkin first
+    return new Date(a.checkinTime).getTime() - new Date(b.checkinTime).getTime();
+  });
 
-function matchMixed(
-  males: PlayerInPool[],
-  females: PlayerInPool[],
-  maxCourts: number,
-  used: Set<string>,
-  _partnerHistory: Map<string, Set<string>>,
-): MatchResult[] {
-  const results: MatchResult[] = [];
-  const availMales = males.filter(p => !used.has(p.id)).sort((a, b) => b.level - a.level);
-  const availFemales = females.filter(p => !used.has(p.id)).sort((a, b) => b.level - a.level);
+  const allMales = byCount.filter(p => p.gender === 'male');
+  const allFemales = byCount.filter(p => p.gender === 'female');
 
-  const matchCount = Math.min(
-    maxCourts,
-    Math.floor(availMales.length / 2),
-    Math.floor(availFemales.length / 2),
-  );
+  // 4. Court type allocation: maximize mixed courts (most balanced gender usage)
+  const maxMixed = Math.min(Math.floor(allMales.length / 2), Math.floor(allFemales.length / 2), courtCount);
+  const mixedCourts = maxMixed;
+  const remainingCourts = courtCount - mixedCourts;
+  const surplusM = allMales.length - mixedCourts * 2;
+  const surplusF = allFemales.length - mixedCourts * 2;
+  const maleCourts = Math.min(Math.floor(surplusM / 4), remainingCourts);
+  const femaleCourts = Math.min(Math.floor(surplusF / 4), remainingCourts - maleCourts);
 
-  for (let i = 0; i < matchCount; i++) {
-    const m1 = availMales[i * 2]!;
-    const m2 = availMales[i * 2 + 1]!;
-    const f1 = females[i * 2]!;
-    const f2 = females[i * 2 + 1]!;
+  // 5. Generate candidates with different team shuffles for partner diversity.
+  //    All candidates use the same player selection (strict fairness).
+  //    Variation comes from shuffling within courts before team formation.
+  let bestScore = Infinity;
+  let bestResult: MatchResult[] = [];
 
-    // Balance teams: higher male + lower female vs lower male + higher female
-    const team1: [string, string] = [m1.id, f2.id];
-    const team2: [string, string] = [m2.id, f1.id];
+  for (let ci = 0; ci < CANDIDATES; ci++) {
+    const seed = currentRound * CANDIDATES + ci;
 
-    used.add(m1.id);
-    used.add(m2.id);
-    used.add(f1.id);
-    used.add(f2.id);
-    results.push({ team1, team2, gameType: 'mixed' });
+    // Selected players (deterministic: lowest game count)
+    const selM = allMales.slice(0, mixedCourts * 2 + maleCourts * 4);
+    const selF = allFemales.slice(0, mixedCourts * 2 + femaleCourts * 4);
+
+    // Shuffle selected players for this candidate (partner diversity)
+    const shufM = seededShuffle(selM, seed);
+    const shufF = seededShuffle(selF, seed + 1);
+
+    const matches: MatchResult[] = [];
+    let mi = 0, fi = 0;
+
+    // Mixed courts
+    for (let c = 0; c < mixedCourts; c++) {
+      if (mi + 2 > shufM.length || fi + 2 > shufF.length) break;
+      matches.push({
+        team1: [shufM[mi]!.id, shufF[fi]!.id],
+        team2: [shufM[mi + 1]!.id, shufF[fi + 1]!.id],
+        gameType: 'mixed',
+      });
+      mi += 2; fi += 2;
+    }
+
+    // Male-double courts
+    for (let c = 0; c < maleCourts; c++) {
+      if (mi + 4 > shufM.length) break;
+      matches.push({
+        team1: [shufM[mi]!.id, shufM[mi + 1]!.id],
+        team2: [shufM[mi + 2]!.id, shufM[mi + 3]!.id],
+        gameType: 'male-double',
+      });
+      mi += 4;
+    }
+
+    // Female-double courts
+    for (let c = 0; c < femaleCourts; c++) {
+      if (fi + 4 > shufF.length) break;
+      matches.push({
+        team1: [shufF[fi]!.id, shufF[fi + 1]!.id],
+        team2: [shufF[fi + 2]!.id, shufF[fi + 3]!.id],
+        gameType: 'female-double',
+      });
+      fi += 4;
+    }
+
+    // 6. Score this candidate
+    let levelPenalty = 0;
+    for (const m of matches) {
+      const allIds = [...m.team1, ...m.team2];
+      const levels = allIds.map(id => pool.find(p => p.id === id)!.level);
+      const hasL5 = levels.some(l => l === 5);
+      const hasL1 = levels.some(l => l === 1);
+      const hasHigh = levels.some(l => l >= 4);
+      const hasLow = levels.some(l => l <= 3);
+      if (hasL5 && hasL1) levelPenalty += 10;
+      else if (hasHigh && hasLow) levelPenalty += Math.min(
+        levels.filter(l => l >= 4).length,
+        levels.filter(l => l <= 3).length
+      );
+    }
+
+    let partnerPenalty = 0;
+    for (const m of matches) {
+      const k1 = partnerKey(m.team1[0], m.team1[1]);
+      const k2 = partnerKey(m.team2[0], m.team2[1]);
+      partnerPenalty += partnerCount.get(k1) ?? 0;
+      partnerPenalty += partnerCount.get(k2) ?? 0;
+    }
+
+    const unfilled = Math.max(0, courtCount - matches.length);
+    const score = levelPenalty * 100 + partnerPenalty * 50 + unfilled * 10;
+
+    if (score < bestScore) {
+      bestScore = score;
+      bestResult = matches;
+    }
   }
 
-  return results;
-}
-
-function matchByLevel(
-  players: PlayerInPool[],
-  maxCourts: number,
-  used: Set<string>,
-  _partnerHistory: Map<string, Set<string>>,
-): MatchResult[] {
-  const results: MatchResult[] = [];
-  const sorted = players.sort((a, b) => b.level - a.level);
-
-  for (let i = 0; i < sorted.length - 3 && results.length < maxCourts; i += 4) {
-    const group = sorted.slice(i, i + 4);
-    if (group.length < 4) break;
-
-    const byLevel = [...group].sort((a, b) => a.level - b.level);
-    const team1: [string, string] = [byLevel[3]!.id, byLevel[0]!.id];
-    const team2: [string, string] = [byLevel[2]!.id, byLevel[1]!.id];
-
-    for (const p of group) used.add(p.id);
-    results.push({ team1, team2, gameType: 'same-gender' });
-  }
-
-  return results;
-}
-
-function buildPartnerHistory(games: Game[]): Map<string, Set<string>> {
-  const history = new Map<string, Set<string>>();
-  for (const g of games) {
-    addPartner(history, g.team1Player1Id, g.team1Player2Id);
-    addPartner(history, g.team2Player1Id, g.team2Player2Id);
-  }
-  return history;
-}
-
-function addPartner(history: Map<string, Set<string>>, p1: string, p2: string) {
-  if (!history.has(p1)) history.set(p1, new Set());
-  if (!history.has(p2)) history.set(p2, new Set());
-  history.get(p1)!.add(p2);
-  history.get(p2)!.add(p1);
-}
-
-function getPlayerGender(id: string, pool: PlayerInPool[]): 'male' | 'female' {
-  return pool.find(p => p.id === id)?.gender ?? 'male';
+  return bestResult.slice(0, courtCount);
 }

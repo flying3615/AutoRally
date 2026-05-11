@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { levelColors, genderColors } from '../theme';
 
 interface PlayerInfo {
   id: string;
@@ -30,14 +31,6 @@ interface GameInfo {
   team2Player2Id: string;
   status: 'pending' | 'playing' | 'completed';
 }
-
-const levelColors: Record<number, string> = {
-  5: '#022c22',
-  4: '#064e3b',
-  3: '#047857',
-  2: '#10b981',
-  1: '#6ee7b7',
-};
 
 // ── Context Menu ──
 function ContextMenu({
@@ -78,7 +71,7 @@ function ContextMenu({
       <div className="px-3 py-2 border-b border-zinc-100 flex items-center gap-2">
         <span
           className="w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-bold text-white shrink-0"
-          style={{ backgroundColor: isMale ? '#3b82f6' : '#ec4899' }}
+          style={{ backgroundColor: isMale ? genderColors.male.accent : genderColors.female.accent }}
         >
           {player.name[0]}
         </span>
@@ -329,7 +322,7 @@ export function Checkin() {
             e.currentTarget.style.backgroundColor = '#fee2e2';
             e.currentTarget.style.borderColor = '#fecaca';
           } else {
-            e.currentTarget.style.borderColor = isMale ? '#93c5fd' : '#f9a8d4';
+            e.currentTarget.style.borderColor = isMale ? genderColors.male.border : genderColors.female.border;
           }
         }}
         onMouseLeave={(e) => {
@@ -466,8 +459,8 @@ export function Checkin() {
           {groupBy === 'gender' ? (
             <>
               {[
-                { label: 'M', icon: '#93c5fd', players: filtered.filter(p => p.gender === 'male') },
-                { label: 'F', icon: '#f9a8d4', players: filtered.filter(p => p.gender === 'female') },
+                { label: 'M', icon: genderColors.male.border, players: filtered.filter(p => p.gender === 'male') },
+                { label: 'F', icon: genderColors.female.border, players: filtered.filter(p => p.gender === 'female') },
               ].map(group => (
                 <div key={group.label} className="mb-3">
                   <div className="flex items-center gap-1.5 mb-1">
@@ -527,11 +520,11 @@ export function Checkin() {
         {/* Gender summary */}
         <div className="px-4 py-2 border-b border-zinc-100 flex gap-3 text-[11px]">
           <span className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: '#93c5fd' }} />
+            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: genderColors.male.border }} />
             <span className="text-zinc-500">M <strong className="text-zinc-700">{maleWaiting.length}</strong></span>
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: '#f9a8d4' }} />
+            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: genderColors.female.border }} />
             <span className="text-zinc-500">F <strong className="text-zinc-700">{femaleWaiting.length}</strong></span>
           </span>
         </div>
@@ -561,7 +554,7 @@ export function Checkin() {
                   <span
                     className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0"
                     style={{
-                      backgroundColor: p.gender === 'male' ? '#3b82f6' : '#ec4899',
+                      backgroundColor: p.gender === 'male' ? genderColors.male.accent : genderColors.female.accent,
                       boxShadow: p.gender === 'male' ? '0 2px 4px rgba(59,130,246,0.3)' : '0 2px 4px rgba(236,72,153,0.3)',
                     }}
                   >

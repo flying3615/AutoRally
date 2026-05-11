@@ -1,24 +1,24 @@
 import { test, expect, addPlayer, navigateTo } from './helpers';
 
-test.describe('球员管理', () => {
-  test('添加球员后列表中可见', async ({ page }) => {
-    await addPlayer(page, '张三', 'male', 4);
+test.describe('Player Management', () => {
+  test('shows newly added player in list', async ({ page }) => {
+    await addPlayer(page, 'Alice', 'female', 4);
     await navigateTo(page, '/players');
     await page.waitForTimeout(300);
 
-    await expect(page.getByText('张三')).toBeVisible();
+    await expect(page.getByText('Alice')).toBeVisible();
   });
 
-  test('添加多个球员均可见', async ({ page }) => {
-    await addPlayer(page, '李四', 'male', 3);
-    await addPlayer(page, '王五', 'female', 5);
-    await addPlayer(page, '赵六', 'female', 2);
+  test('shows multiple added players in list', async ({ page }) => {
+    await addPlayer(page, 'Bob', 'male', 3);
+    await addPlayer(page, 'Carol', 'female', 5);
+    await addPlayer(page, 'Dave', 'male', 2);
 
     await navigateTo(page, '/players');
     await page.waitForTimeout(300);
 
-    await expect(page.getByText('李四')).toBeVisible();
-    await expect(page.getByText('王五')).toBeVisible();
-    await expect(page.getByText('赵六')).toBeVisible();
+    await expect(page.getByText('Bob')).toBeVisible();
+    await expect(page.getByText('Carol')).toBeVisible();
+    await expect(page.getByText('Dave')).toBeVisible();
   });
 });

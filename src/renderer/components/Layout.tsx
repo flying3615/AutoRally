@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Outlet, Link, useLocation } from 'react-router-dom';
+import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { GameProvider } from '../contexts/GameContext';
 
 interface SessionInfo {
@@ -192,12 +192,53 @@ function StatusBar() {
   );
 }
 
+function TopBar() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [now, setNow] = useState(new Date());
+  const isSubpage = location.pathname.startsWith('/checkin/') || location.pathname.startsWith('/match/');
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  const dateStr = now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+
+  return (
+    <div className="flex items-center justify-between h-10 px-4 border-b border-zinc-200/60 bg-white/80 backdrop-blur-sm shrink-0 select-none"
+      style={{ WebkitAppRegion: 'drag' } as any}
+    >
+      <div className="flex items-center gap-3" style={{ WebkitAppRegion: 'no-drag' } as any}>
+        {isSubpage && (
+          <button
+            onClick={() => navigate(-1)}
+            className="inline-flex items-center gap-1.5 text-[13px] font-medium text-zinc-400 hover:text-zinc-700 transition-colors active:scale-[0.97]"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+            </svg>
+            Back
+          </button>
+        )}
+      </div>
+      <div className="flex items-center gap-2 text-[13px] text-zinc-700 font-semibold tabular-nums">
+        <span className="font-sans">{dateStr}</span>
+        <span className="text-zinc-300">·</span>
+        <span className="font-mono">{timeStr}</span>
+      </div>
+    </div>
+  );
+}
+
 export function Layout() {
   return (
     <GameProvider>
       <div className="flex h-screen bg-[#F7F7F8]">
         <Sidebar />
         <div className="flex-1 flex flex-col overflow-hidden">
+          <TopBar />
           <main className="flex-1 overflow-hidden relative">
             <Outlet />
           </main>

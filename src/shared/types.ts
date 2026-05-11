@@ -33,7 +33,7 @@ export interface Game {
   team2Player2Id: string;
   status: 'pending' | 'playing' | 'completed';
   roundNumber: number;
-  gameType: 'same-gender' | 'mixed';
+  gameType: 'mixed' | 'male-double' | 'female-double';
   startedAt: string | null;
   endedAt: string | null;
 }

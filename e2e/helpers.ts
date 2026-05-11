@@ -82,7 +82,7 @@ export async function addTestPlayers(page: Page, count: number) {
   for (let i = 0; i < count; i++) {
     const gender = i % 2 === 0 ? 'male' : 'female';
     const level = 2 + (i % 3);
-    const p = await addPlayer(page, `球员${i + 1}`, gender, level) as { id: string; name: string };
+    const p = await addPlayer(page, `Player${i + 1}`, gender, level) as { id: string; name: string };
     players.push(p);
   }
   return players;
