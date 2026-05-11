@@ -20,8 +20,8 @@ const api = {
   sessionsEnd: (id: string) => ipcRenderer.invoke('sessions:end', id),
 
   // Attendance
-  attendanceCheckin: (playerId: string, sessionId: string) =>
-    ipcRenderer.invoke('attendance:checkin', playerId, sessionId),
+  attendanceCheckin: (playerId: string, sessionId: string, paymentMethod: string) =>
+    ipcRenderer.invoke('attendance:checkin', playerId, sessionId, paymentMethod),
   attendanceListBySession: (sessionId: string) =>
     ipcRenderer.invoke('attendance:listBySession', sessionId),
   attendanceSetPaused: (id: string, paused: boolean) =>

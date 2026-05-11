@@ -599,7 +599,7 @@ export function MatchPanel() {
 
   const handleRestoreCheckin = async (target: ContextMenuTarget) => {
     if (!sessionId) return;
-    await window.api.attendanceCheckin(target.playerId, sessionId);
+    await window.api.attendanceCheckin(target.playerId, sessionId, 'cash');
     setCtxMenu(null);
     load();
   };
@@ -651,7 +651,7 @@ export function MatchPanel() {
 
   const handleCheckin = async (playerId: string, playerName: string) => {
     if (!sessionId) return;
-    await window.api.attendanceCheckin(playerId, sessionId);
+    await window.api.attendanceCheckin(playerId, sessionId, 'cash');
     setCheckinFeedback(playerName);
     setCheckinSearch('');
     setTimeout(() => setCheckinFeedback(null), 2000);

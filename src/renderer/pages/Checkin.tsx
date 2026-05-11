@@ -230,29 +230,45 @@ export function Checkin() {
   const [lastCheckin, setLastCheckin] = useState<string | null>(null);
   const [groupBy, setGroupBy] = useState<'gender' | 'level'>('gender');
   const [checkedInSet, setCheckedInSet] = useState<Set<string>>(new Set());
+  const [pendingCheckin, setPendingCheckin] = useState<{ player: PlayerInfo; sessionFee: number; error?: string } | null>(null);
+  const [sessionFee, setSessionFee] = useState('10');
 
   const load = async () => {
     if (!sessionId) return;
-    const [allPlayers, attendList, gameList] = await Promise.all([
+    const [allPlayers, attendList, gameList, settings] = await Promise.all([
       window.api.playersList(),
       window.api.attendanceListBySession(sessionId),
       window.api.gamesListBySession(sessionId),
+      window.api.settingsGetAll() as Promise<Record<string, string>>,
     ]);
     setPlayers(allPlayers as PlayerInfo[]);
     setAttendance(attendList as AttendanceInfo[]);
     setGames(gameList as GameInfo[]);
     setCheckedInSet(new Set((attendList as AttendanceInfo[]).map(a => a.playerId)));
+    setSessionFee(settings.sessionFee ?? '10');
   };
 
   useEffect(() => { load(); }, [sessionId]);
 
-  const handleCheckin = async (playerId: string, playerName: string) => {
+  const handleCheckin = (player: PlayerInfo) => {
     if (!sessionId) return;
-    await window.api.attendanceCheckin(playerId, sessionId);
-    setCheckedInSet(prev => new Set(prev).add(playerId));
-    setLastCheckin(playerName);
-    setTimeout(() => setLastCheckin(null), 2000);
-    load();
+    const fee = Number(sessionFee) || 10;
+    setPendingCheckin({ player, sessionFee: fee });
+  };
+
+  const confirmCheckin = async (method: 'credit' | 'cash') => {
+    if (!sessionId || !pendingCheckin) return;
+    try {
+      await window.api.attendanceCheckin(pendingCheckin.player.id, sessionId, method);
+      setCheckedInSet(prev => new Set(prev).add(pendingCheckin.player.id));
+      setLastCheckin(pendingCheckin.player.name);
+      setTimeout(() => setLastCheckin(null), 2000);
+      setPendingCheckin(null);
+      load();
+    } catch (err: any) {
+      // Show error in modal
+      setPendingCheckin({ ...pendingCheckin, error: err?.message ?? 'Check-in failed' });
+    }
   };
 
   const handleUncheck = async (playerId: string, playerName: string) => {
@@ -305,7 +321,7 @@ export function Checkin() {
     return (
       <button
         key={p.id}
-        onClick={() => { checked ? handleUncheck(p.id, p.name) : handleCheckin(p.id, p.name); }}
+        onClick={() => { checked ? handleUncheck(p.id, p.name) : handleCheckin(p); }}
         onContextMenu={(e) => handleContextMenu(e, p)}
         className="relative flex items-center rounded-md text-left transition-all active:scale-[0.98] group/check"
         style={{
@@ -605,6 +621,54 @@ export function Checkin() {
           <span>{inGameIds.size} playing</span>
         </div>
       </aside>
+
+      {/* Payment Method Modal */}
+      {pendingCheckin && (
+        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => setPendingCheckin(null)}>
+          <div className="bg-white rounded-2xl p-6 w-[340px] max-w-[90vw]" onClick={e => e.stopPropagation()}
+            style={{ boxShadow: '0 24px 48px -12px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.04)', animation: 'ctxFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)' }}>
+            <h3 className="text-lg font-bold text-zinc-900 tracking-tight mb-1">Check In</h3>
+            <p className="text-sm text-zinc-500 mb-4">{pendingCheckin.player.name}</p>
+
+            <div className="flex items-center justify-between py-2 px-3 bg-zinc-50 rounded-xl mb-4 text-sm">
+              <span className="text-zinc-500">Balance</span>
+              <span className={`font-semibold tabular-nums font-mono ${pendingCheckin.player.balance < pendingCheckin.sessionFee ? 'text-red-500' : 'text-zinc-900'}`}>
+                ${pendingCheckin.player.balance.toFixed(0)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between py-2 px-3 bg-zinc-50 rounded-xl mb-4 text-sm">
+              <span className="text-zinc-500">Session Fee</span>
+              <span className="font-semibold tabular-nums font-mono text-zinc-900">${pendingCheckin.sessionFee}</span>
+            </div>
+
+            {pendingCheckin.error && (
+              <div className="mb-4 text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{pendingCheckin.error}</div>
+            )}
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => confirmCheckin('credit')}
+                disabled={pendingCheckin.player.balance < pendingCheckin.sessionFee}
+                className="flex-1 h-10 text-sm font-semibold bg-zinc-900 text-white rounded-xl hover:bg-zinc-800 active:scale-[0.97] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Credit
+              </button>
+              <button
+                onClick={() => confirmCheckin('cash')}
+                className="flex-1 h-10 text-sm font-semibold bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 active:scale-[0.97] transition-all"
+              >
+                Cash
+              </button>
+            </div>
+            <button
+              onClick={() => setPendingCheckin(null)}
+              className="w-full h-9 mt-2 text-sm font-medium text-zinc-500 hover:text-zinc-700 hover:bg-zinc-100 rounded-xl transition-all"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -89,7 +89,7 @@ export async function registerIpcHandlers() {
   });
 
   // ── Attendance ──
-  ipcMain.handle('attendance:checkin', (_e, playerId: string, sessionId: string) => {
+  ipcMain.handle('attendance:checkin', (_e, playerId: string, sessionId: string, paymentMethod: 'credit' | 'cash') => {
     const id = uuid();
     const checkinTime = new Date().toISOString();
     try {
@@ -101,15 +101,22 @@ export async function registerIpcHandlers() {
     }
     const fee = queryOne<{ value: string }>("SELECT value FROM settings WHERE key = 'sessionFee'");
     const sessionFee = Number(fee?.value ?? 30);
-    const balance = queryOne<{ balance: number }>('SELECT balance FROM balances WHERE playerId = ?', [playerId]);
-    if (balance && balance.balance >= sessionFee) {
+
+    if (paymentMethod === 'credit') {
+      const balance = queryOne<{ balance: number }>('SELECT balance FROM balances WHERE playerId = ?', [playerId]);
+      if (!balance || balance.balance < sessionFee) {
+        // Rollback attendance
+        run('DELETE FROM attendance WHERE id = ?', [id]);
+        throw new Error('Insufficient balance');
+      }
       run('UPDATE balances SET balance = balance - ?, lastUpdated = ? WHERE playerId = ?',
         [sessionFee, checkinTime, playerId]);
-      run('INSERT INTO payments (id, playerId, sessionId, amount, status, paidDate, paymentType) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [uuid(), playerId, sessionId, sessionFee, 'paid', checkinTime, 'session']);
+      run('INSERT INTO payments (id, playerId, sessionId, amount, status, paidDate, paymentType, paymentMethod) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [uuid(), playerId, sessionId, sessionFee, 'paid', checkinTime, 'session', 'credit']);
     } else {
-      run('INSERT INTO payments (id, playerId, sessionId, amount, status, paidDate, paymentType) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [uuid(), playerId, sessionId, sessionFee, 'unpaid', null, 'session']);
+      // Cash: no balance change, record as paid
+      run('INSERT INTO payments (id, playerId, sessionId, amount, status, paidDate, paymentType, paymentMethod) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [uuid(), playerId, sessionId, sessionFee, 'paid', checkinTime, 'session', 'cash']);
     }
     return { id, playerId, sessionId, checkinTime };
   });

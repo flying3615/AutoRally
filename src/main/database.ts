@@ -134,6 +134,7 @@ function migrate(db: Database) {
   // Migrations for existing databases
   try { db.run('ALTER TABLE players ADD COLUMN email TEXT NOT NULL DEFAULT \'\''); } catch (_) { /* already exists */ }
   try { db.run('ALTER TABLE attendance ADD COLUMN paused INTEGER NOT NULL DEFAULT 0'); } catch (_) { /* already exists */ }
+  try { db.run('ALTER TABLE payments ADD COLUMN paymentMethod TEXT NOT NULL DEFAULT \'\''); } catch (_) { /* already exists */ }
   migrateGameTypeConstraint(db);
 
   save();
