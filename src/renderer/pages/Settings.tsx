@@ -102,6 +102,7 @@ function SessionModal({ session, onClose, onSaved }: {
             <input
               type="time"
               value={time}
+              step="1800"
               onChange={(e) => {
                 setTime(e.target.value);
                 setError(null);
