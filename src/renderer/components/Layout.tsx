@@ -245,14 +245,14 @@ function TopBar() {
       </div>
 
       {/* Scrolling upcoming-sessions text */}
-      {marqueeText && (
-        <div className="flex-1 mx-4 overflow-hidden relative">
+      <div className="flex-1 mx-4 overflow-hidden">
+        {marqueeText && (
           <div className="marquee-track text-[13px] font-medium text-red-600">
             <span>{marqueeText}</span>
-            <span className="ml-16">{marqueeText}</span>
+            <span className="ml-12">{marqueeText}</span>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       <div className="flex items-center gap-2 text-[13px] text-zinc-700 font-semibold tabular-nums shrink-0">
         <span className="font-sans">{dateStr}</span>

@@ -135,14 +135,15 @@ body {
 
 /* ── Marquee scroll ── */
 @keyframes marquee {
-  0%   { transform: translateX(0%); }
+  0%   { transform: translateX(0); }
+  15%  { transform: translateX(0); }
   100% { transform: translateX(-50%); }
 }
 
 .marquee-track {
   display: inline-flex;
   white-space: nowrap;
-  animation: marquee 20s linear infinite;
+  animation: marquee 24s linear infinite;
 }
 
 .marquee-track:hover {
