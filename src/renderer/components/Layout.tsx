@@ -176,6 +176,7 @@ function TopBar() {
   const location = useLocation();
   const navigate = useNavigate();
   const [now, setNow] = useState(new Date());
+  const [nextSession, setNextSession] = useState<{ date: string; time: string; note: string } | null>(null);
   const isSubpage = location.pathname.startsWith('/checkin/') || location.pathname.startsWith('/match/');
 
   useEffect(() => {
@@ -183,14 +184,43 @@ function TopBar() {
     return () => clearInterval(id);
   }, []);
 
+  useEffect(() => {
+    const load = async () => {
+      const s = await window.api.settingsGetAll() as Record<string, string>;
+      if (s.nextSessionDate) {
+        setNextSession({ date: s.nextSessionDate, time: s.nextSessionTime ?? '', note: s.nextSessionNote ?? '' });
+      } else {
+        setNextSession(null);
+      }
+    };
+    load();
+    const id = setInterval(load, 30000);
+    return () => clearInterval(id);
+  }, []);
+
   const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   const dateStr = now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+
+  const formatNextSession = () => {
+    if (!nextSession) return '';
+    const d = new Date(nextSession.date + 'T00:00:00');
+    const datePart = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    const timePart = nextSession.time
+      ? new Date('2000-01-01T' + nextSession.time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+      : '';
+    let text = `Next session: ${datePart}`;
+    if (timePart) text += ` at ${timePart}`;
+    if (nextSession.note) text += ` — ${nextSession.note}`;
+    return text;
+  };
+
+  const nextText = formatNextSession();
 
   return (
     <div className="flex items-center justify-between h-10 px-4 border-b border-zinc-200/60 bg-white/80 backdrop-blur-sm shrink-0 select-none"
       style={{ WebkitAppRegion: 'drag' } as any}
     >
-      <div className="flex items-center gap-3" style={{ WebkitAppRegion: 'no-drag' } as any}>
+      <div className="flex items-center gap-3 shrink-0" style={{ WebkitAppRegion: 'no-drag' } as any}>
         {isSubpage && (
           <button
             onClick={() => navigate(-1)}
@@ -203,7 +233,18 @@ function TopBar() {
           </button>
         )}
       </div>
-      <div className="flex items-center gap-2 text-[13px] text-zinc-700 font-semibold tabular-nums">
+
+      {/* Scrolling next-session text */}
+      {nextText && (
+        <div className="flex-1 mx-4 overflow-hidden relative">
+          <div className="marquee-track text-[13px] font-medium text-emerald-600">
+            <span>{nextText}</span>
+            <span className="ml-16">{nextText}</span>
+          </div>
+        </div>
+      )}
+
+      <div className="flex items-center gap-2 text-[13px] text-zinc-700 font-semibold tabular-nums shrink-0">
         <span className="font-sans">{dateStr}</span>
         <span className="text-zinc-300">·</span>
         <span className="font-mono">{timeStr}</span>

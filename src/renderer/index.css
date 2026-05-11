@@ -133,6 +133,22 @@ body {
   border-radius: 8px;
 }
 
+/* ── Marquee scroll ── */
+@keyframes marquee {
+  0%   { transform: translateX(0%); }
+  100% { transform: translateX(-50%); }
+}
+
+.marquee-track {
+  display: inline-flex;
+  white-space: nowrap;
+  animation: marquee 20s linear infinite;
+}
+
+.marquee-track:hover {
+  animation-play-state: paused;
+}
+
 /* ── Subtle dot pattern for dark surfaces ── */
 .dot-pattern {
   position: absolute;

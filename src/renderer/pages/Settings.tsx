@@ -4,6 +4,9 @@ interface SettingsData {
   courtCount: string;
   sessionFee: string;
   gameDuration: string;
+  nextSessionDate: string;
+  nextSessionTime: string;
+  nextSessionNote: string;
 }
 
 const durations = [
@@ -16,7 +19,10 @@ const durations = [
 ];
 
 export function Settings() {
-  const [settings, setSettings] = useState<SettingsData>({ courtCount: '3', sessionFee: '30', gameDuration: '15' });
+  const [settings, setSettings] = useState<SettingsData>({
+    courtCount: '3', sessionFee: '30', gameDuration: '15',
+    nextSessionDate: '', nextSessionTime: '', nextSessionNote: '',
+  });
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
@@ -25,6 +31,9 @@ export function Settings() {
         courtCount: s.courtCount ?? '3',
         sessionFee: s.sessionFee ?? '30',
         gameDuration: s.gameDuration ?? '15',
+        nextSessionDate: s.nextSessionDate ?? '',
+        nextSessionTime: s.nextSessionTime ?? '',
+        nextSessionNote: s.nextSessionNote ?? '',
       });
     });
   }, []);
@@ -33,6 +42,9 @@ export function Settings() {
     await window.api.settingsSet('courtCount', settings.courtCount);
     await window.api.settingsSet('sessionFee', settings.sessionFee);
     await window.api.settingsSet('gameDuration', settings.gameDuration);
+    await window.api.settingsSet('nextSessionDate', settings.nextSessionDate);
+    await window.api.settingsSet('nextSessionTime', settings.nextSessionTime);
+    await window.api.settingsSet('nextSessionNote', settings.nextSessionNote);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
@@ -137,6 +149,49 @@ export function Settings() {
             <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-medium text-zinc-400">NZD / person</span>
           </div>
           <p className="text-xs text-zinc-400 mt-2.5">Auto-deducted from balance on check-in</p>
+        </div>
+
+        {/* Next Session */}
+        <div className="mb-10">
+          <label className="block text-[11px] font-semibold text-zinc-400 uppercase tracking-wider mb-3">Next Session</label>
+          <p className="text-xs text-zinc-400 mb-4">Schedule an upcoming session to display in the header bar</p>
+
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            <div>
+              <label className="block text-xs font-semibold text-zinc-500 mb-1.5">Date</label>
+              <input
+                type="date"
+                value={settings.nextSessionDate}
+                onChange={(e) => setSettings({ ...settings, nextSessionDate: e.target.value })}
+                className="w-full px-3 py-2.5 text-sm border-2 border-zinc-200 rounded-xl
+                  focus:outline-none focus:border-zinc-400 focus:ring-2 focus:ring-gray-100 transition-all"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-zinc-500 mb-1.5">Time</label>
+              <input
+                type="time"
+                value={settings.nextSessionTime}
+                onChange={(e) => setSettings({ ...settings, nextSessionTime: e.target.value })}
+                className="w-full px-3 py-2.5 text-sm border-2 border-zinc-200 rounded-xl
+                  focus:outline-none focus:border-zinc-400 focus:ring-2 focus:ring-gray-100 transition-all"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-zinc-500 mb-1.5">Note</label>
+            <input
+              type="text"
+              value={settings.nextSessionNote}
+              onChange={(e) => setSettings({ ...settings, nextSessionNote: e.target.value })}
+              placeholder="e.g. Venue change, bring extra shuttlecocks"
+              maxLength={80}
+              className="w-full px-3 py-2.5 text-sm border-2 border-zinc-200 rounded-xl
+                focus:outline-none focus:border-zinc-400 focus:ring-2 focus:ring-gray-100 transition-all"
+            />
+            <p className="text-xs text-zinc-400 mt-1.5">Max 80 characters — displayed as scrolling text in the header</p>
+          </div>
         </div>
 
         {/* Save */}
