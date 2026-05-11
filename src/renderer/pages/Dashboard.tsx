@@ -141,8 +141,8 @@ export function Dashboard() {
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h2 className="text-xl font-bold text-zinc-900 tracking-tight">Dashboard</h2>
-            <p className="text-sm text-zinc-400 mt-0.5 font-medium">{s.playerCount} players registered</p>
+            <h2 className="text-2xl font-bold text-zinc-900 tracking-tight">Dashboard</h2>
+            <p className="text-base text-zinc-400 mt-0.5 font-medium">{s.playerCount} players registered</p>
           </div>
           <button
             onClick={() => setShowCreate(true)}
@@ -207,20 +207,20 @@ export function Dashboard() {
         <div className="grid grid-cols-3 gap-4 mb-8">
           <div className="bg-white border border-zinc-200/60 rounded-2xl p-5">
             <p className="text-[11px] text-zinc-400 font-semibold uppercase tracking-wider mb-2">Sessions</p>
-            <p className="text-2xl font-bold text-zinc-900 tabular-nums tracking-tight font-mono">{s.sessionCount}</p>
+            <p className="text-3xl font-bold text-zinc-900 tabular-nums tracking-tight font-mono">{s.sessionCount}</p>
             {s.avgDurationMin != null && (
-              <p className="text-xs text-zinc-400 mt-1">avg {formatDuration(s.avgDurationMin)}</p>
+              <p className="text-sm text-zinc-400 mt-1">avg {formatDuration(s.avgDurationMin)}</p>
             )}
           </div>
 
           <div className="bg-white border border-zinc-200/60 rounded-2xl p-5">
-            <p className="text-[11px] text-zinc-400 font-semibold uppercase tracking-wider mb-2">Players</p>
-            <p className="text-2xl font-bold text-zinc-900 tabular-nums tracking-tight font-mono">{s.playerCount}</p>
+            <p className="text-xs text-zinc-400 font-semibold uppercase tracking-wider mb-2">Players</p>
+            <p className="text-3xl font-bold text-zinc-900 tabular-nums tracking-tight font-mono">{s.playerCount}</p>
           </div>
 
           <div className="bg-white border border-zinc-200/60 rounded-2xl p-5">
-            <p className="text-[11px] text-zinc-400 font-semibold uppercase tracking-wider mb-2">Games Played</p>
-            <p className="text-2xl font-bold text-zinc-900 tabular-nums tracking-tight font-mono">{s.gamesPlayed}</p>
+            <p className="text-xs text-zinc-400 font-semibold uppercase tracking-wider mb-2">Games Played</p>
+            <p className="text-3xl font-bold text-zinc-900 tabular-nums tracking-tight font-mono">{s.gamesPlayed}</p>
           </div>
         </div>
 

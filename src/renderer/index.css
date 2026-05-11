@@ -13,11 +13,13 @@ html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  font-size: 15px; /* slightly larger base */
 }
 
 body {
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   font-optical-sizing: auto;
+  font-size: 0.9375rem; /* 15px */
 }
 
 ::selection {
@@ -43,10 +45,10 @@ body {
   --ag-row-hover-color: #f4f4f5;
   --ag-row-border-color: #f4f4f5;
   --ag-secondary-foreground-color: #a1a1aa;
-  --ag-font-size: 13px;
+  --ag-font-size: 14px;
   --ag-font-family: inherit;
-  --ag-grid-size: 4px;
-  --ag-cell-horizontal-padding: 14px;
+  --ag-grid-size: 5px;
+  --ag-cell-horizontal-padding: 16px;
   --ag-background-color: #ffffff;
   --ag-row-odd-background-color: #fafafa;
   border-radius: 16px;

@@ -936,7 +936,7 @@ export function MatchPanel() {
                 <span
                   className="font-mono font-bold tabular-nums tracking-tight leading-none"
                   style={{
-                    fontSize: '56px',
+                    fontSize: '64px',
                     color: masterTimer?.phase === 'warning' ? '#d97706' : masterTimer?.phase === 'paused' ? '#a16207' : '#16a34a',
                   }}
                 >

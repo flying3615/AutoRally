@@ -88,7 +88,7 @@ function Sidebar() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M15.362 5.214A8.252 8.252 0 0112 21 8.25 8.25 0 016.038 7.048 8.287 8.287 0 009 9.6a8.983 8.983 0 013.361-6.867 8.21 8.21 0 003 2.48z" />
           </svg>
         </div>
-        <span className="ml-2.5 text-[13px] font-semibold text-zinc-900 tracking-tight whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+        <span className="ml-2.5 text-[15px] font-semibold text-zinc-900 tracking-tight whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200">
           AutoRally
         </span>
       </div>
@@ -110,7 +110,7 @@ function Sidebar() {
               }`}
             >
               <span className="shrink-0">{item.icon}</span>
-              <span className="ml-2.5 text-[13px] font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+              <span className="ml-2.5 text-sm font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                 {item.label}
               </span>
             </Link>
@@ -159,7 +159,7 @@ function StatusBar() {
   const showStats = activeSession && attendanceCount !== null;
 
   return (
-    <div className="flex items-center justify-between h-7 px-4 bg-white/80 backdrop-blur-sm border-t border-zinc-200/60 text-[11px] text-zinc-400 select-none shrink-0 font-mono">
+    <div className="flex items-center justify-between h-8 px-4 bg-white/80 backdrop-blur-sm border-t border-zinc-200/60 text-xs text-zinc-400 select-none shrink-0 font-mono">
       <div className="flex items-center gap-3">
         {activeSession ? (
           <>
