@@ -70,6 +70,10 @@ export async function registerIpcHandlers() {
   });
 
   ipcMain.handle('sessions:create', (_e, courtCount: number) => {
+    // End any currently active session first — only one active at a time
+    run("UPDATE sessions SET endTime = ?, status = 'completed' WHERE status = 'active'",
+      [new Date().toISOString()]);
+
     const id = uuid();
     const d = new Date();
     const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;

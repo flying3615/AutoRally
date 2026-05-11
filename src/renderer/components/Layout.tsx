@@ -1,13 +1,7 @@
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { GameProvider } from '../contexts/GameContext';
-
-interface SessionInfo {
-  id: string;
-  date: string;
-  status: string;
-  courtCount: number;
-}
+import { useSessionStore } from '../stores/sessionStore';
 
 const navItems = [
   {
@@ -122,45 +116,12 @@ function Sidebar() {
 }
 
 function StatusBar() {
-  const [activeSession, setActiveSession] = useState<SessionInfo | null>(null);
-  const [attendanceCount, setAttendanceCount] = useState(0);
-  const [playingCount, setPlayingCount] = useState(0);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const load = useCallback(async () => {
-    try {
-      const s = await window.api.sessionsGetActive() as SessionInfo | undefined;
-      setActiveSession(s ?? null);
-
-      if (s) {
-        const [att, games] = await Promise.all([
-          window.api.attendanceListBySession(s.id) as Promise<any[]>,
-          window.api.gamesListBySession(s.id) as Promise<any[]>,
-        ]);
-        setAttendanceCount(att.length);
-        const playingGames = games.filter((g: any) => g.status === 'playing');
-        const playingIds = new Set<string>();
-        playingGames.forEach((g: any) => {
-          playingIds.add(g.team1Player1Id);
-          playingIds.add(g.team1Player2Id);
-          playingIds.add(g.team2Player1Id);
-          playingIds.add(g.team2Player2Id);
-        });
-        setPlayingCount(playingIds.size);
-      } else {
-        setAttendanceCount(0);
-        setPlayingCount(0);
-      }
-    } catch {
-      // Silently ignore — will retry on next interval
-    }
-  }, []);
+  const { activeSession, attendanceCount, playingCount, startPolling } = useSessionStore();
 
   useEffect(() => {
-    load();
-    intervalRef.current = setInterval(load, 3000);
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  }, [load]);
+    const stop = startPolling();
+    return stop;
+  }, [startPolling]);
 
   const showStats = activeSession !== null;
 
