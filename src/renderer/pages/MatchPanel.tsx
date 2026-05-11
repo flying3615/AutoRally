@@ -1189,9 +1189,9 @@ export function MatchPanel() {
               className="w-full pl-8 pr-3 py-1.5 text-xs border border-zinc-200 rounded-lg focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 transition-all"
             />
           </div>
-          {/* Checkin feedback */}
+          {/* Checkin feedback — absolute to prevent layout shift */}
           {checkinFeedback && (
-            <div className="mt-2 text-xs font-semibold text-emerald-600 bg-emerald-50 rounded-lg px-2.5 py-1.5 text-center animate-pulse">
+            <div className="absolute left-3 right-3 top-full mt-1 z-50 text-xs font-semibold text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-lg px-2.5 py-1.5 text-center shadow-[0_4px_12px_-4px_rgba(5,150,105,0.15)]" style={{ animation: 'ctxFadeIn 0.15s ease' }}>
               {checkinFeedback} checked in
             </div>
           )}
