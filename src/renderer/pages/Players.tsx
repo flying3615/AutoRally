@@ -66,7 +66,7 @@ function BalanceCell({ value }: ICellRendererParams<PlayerWithBalance>) {
   );
 }
 
-function ActionsCell({ data, api, eGridCell }: ICellRendererParams<PlayerWithBalance> & { eGridCell?: HTMLElement }) {
+function ActionsCell({ data }: ICellRendererParams<PlayerWithBalance>) {
   const [open, setOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
@@ -90,19 +90,19 @@ function ActionsCell({ data, api, eGridCell }: ICellRendererParams<PlayerWithBal
 
   const handleEdit = () => {
     setOpen(false);
-    api.dispatchEvent({ type: 'playerEdit', data });
+    window.dispatchEvent(new CustomEvent('playerEdit', { detail: data }));
   };
 
   const handleTopup = () => {
     setOpen(false);
-    api.dispatchEvent({ type: 'playerTopup', data });
+    window.dispatchEvent(new CustomEvent('playerTopup', { detail: data }));
   };
 
   const handleDelete = async () => {
     await window.api.playersDelete(data.id);
     setOpen(false);
     setConfirmDelete(false);
-    api.dispatchEvent({ type: 'playerDeleted' });
+    window.dispatchEvent(new CustomEvent('playerDeleted'));
   };
 
   const menuPos = () => {
@@ -237,13 +237,18 @@ export function Players() {
     load();
   };
 
-  // Grid event handlers for cell renderer dispatches
-  const onGridReady = useCallback(() => {
-    const api = gridRef.current?.api;
-    if (!api) return;
-    api.addEventListener('playerEdit', (e: any) => handleEdit(e.data));
-    api.addEventListener('playerTopup', (e: any) => setTopupPlayer(e.data.id));
-    api.addEventListener('playerDeleted', () => load());
+  useEffect(() => {
+    const onEdit = (e: Event) => handleEdit((e as CustomEvent<PlayerWithBalance>).detail);
+    const onTopup = (e: Event) => setTopupPlayer((e as CustomEvent<PlayerWithBalance>).detail.id);
+    const onDeleted = () => load();
+    window.addEventListener('playerEdit', onEdit);
+    window.addEventListener('playerTopup', onTopup);
+    window.addEventListener('playerDeleted', onDeleted);
+    return () => {
+      window.removeEventListener('playerEdit', onEdit);
+      window.removeEventListener('playerTopup', onTopup);
+      window.removeEventListener('playerDeleted', onDeleted);
+    };
   }, [load]);
 
   // External filter
@@ -399,7 +404,6 @@ export function Players() {
                 suppressRowClickSelection
                 isExternalFilterPresent={isExternalFilterPresent}
                 doesExternalFilterPass={doesExternalFilterPass}
-                onGridReady={onGridReady}
                 pagination={true}
                 paginationPageSize={15}
                 paginationPageSizeSelector={[10, 15, 25, 50]}

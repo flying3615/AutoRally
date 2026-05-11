@@ -43,7 +43,7 @@ export function Sessions() {
   const [activeSession, setActiveSession] = useState<SessionInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [confirmEndId, setConfirmEndId] = useState<string | null>(null);
-  const confirmTimer = useRef<ReturnType<typeof setTimeout>>();
+  const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = async () => {
     const [all, active] = await Promise.all([
@@ -73,7 +73,7 @@ export function Sessions() {
 
   const requestEnd = (id: string) => {
     setConfirmEndId(id);
-    clearTimeout(confirmTimer.current);
+    if (confirmTimer.current) clearTimeout(confirmTimer.current);
     confirmTimer.current = setTimeout(() => setConfirmEndId(null), 3000);
   };
 

@@ -1,8 +1,9 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { generateMatches } from '../services/matching';
-import { useGameContext, type TimerState } from '../contexts/GameContext';
+import { useGameContext } from '../contexts/GameContext';
 import { levelColors, genderColors } from '../theme';
+import type { Game } from '../../shared/types';
 
 interface GameInfo {
   id: string;
@@ -14,7 +15,7 @@ interface GameInfo {
   team2Player2Id: string;
   status: 'pending' | 'playing' | 'completed';
   roundNumber: number;
-  gameType: string;
+  gameType: Game['gameType'];
   startedAt: string | null;
   endedAt: string | null;
   t1p1Name: string; t1p1Gender: string; t1p1Level: number;
@@ -514,7 +515,6 @@ export function MatchPanel() {
 
   const activeGames = games.filter(g => g.status === 'playing');
   const pendingGames = games.filter(g => g.status === 'pending');
-  const completedGames = games.filter(g => g.status === 'completed');
   const currentRound = games.length > 0 ? Math.max(...games.map(g => g.roundNumber)) : 0;
 
   const playingIds = new Set(
@@ -614,6 +614,7 @@ export function MatchPanel() {
       // If dragged from another game slot, swap: put target player into source slot
       if (sourceData) {
         const [srcGameId, srcSlot] = sourceData.split(':');
+        if (!srcGameId || !srcSlot) return;
         // Find the player currently in the target slot
         const allGames = await window.api.gamesListBySession(sessionId!) as GameInfo[];
         const targetGame = allGames.find(g => g.id === targetGameId);
@@ -625,6 +626,7 @@ export function MatchPanel() {
             team2Player2Id: targetGame.team2Player2Id,
           };
           const targetPlayerId = slotToPlayer[targetSlot];
+          if (!targetPlayerId) return;
           // Don't swap if dropping onto self
           if (targetPlayerId === draggedPlayerId) return;
           // Put dragged player into target slot
@@ -721,7 +723,8 @@ export function MatchPanel() {
         pool = [...pool, ...extra];
       }
 
-      const matches = generateMatches(pool, courtCount, nextRound, games);
+      const countedGames = freshGames.filter(g => g.status !== 'pending');
+      const matches = generateMatches(pool, courtCount, nextRound, countedGames);
 
       if (matches.length === 0) {
         alert(`Not enough players to generate matches (waiting pool has ${pool.length} players, need at least ${courtCount * 4})`);
@@ -798,10 +801,6 @@ export function MatchPanel() {
     load();
   };
 
-  const anyRunning = activeGames.some(g => {
-    const t = timers.get(g.courtNumber);
-    return t?.phase === 'running' || t?.phase === 'warning';
-  });
   const anyPaused = activeGames.some(g => timers.get(g.courtNumber)?.phase === 'paused');
 
   // Central timer — use first active game's timer since all courts share same duration

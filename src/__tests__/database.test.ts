@@ -10,7 +10,7 @@ function setupSchema(db: Database) {
     CREATE TABLE players (id TEXT PRIMARY KEY, name TEXT NOT NULL, gender TEXT NOT NULL, level INTEGER NOT NULL CHECK(level BETWEEN 1 AND 5), phone TEXT NOT NULL DEFAULT '', joinDate TEXT NOT NULL);
     CREATE TABLE sessions (id TEXT PRIMARY KEY, date TEXT NOT NULL, startTime TEXT, endTime TEXT, courtCount INTEGER NOT NULL DEFAULT 3, status TEXT NOT NULL CHECK(status IN ('active', 'completed')));
     CREATE TABLE attendance (id TEXT PRIMARY KEY, playerId TEXT NOT NULL REFERENCES players(id), sessionId TEXT NOT NULL REFERENCES sessions(id), checkinTime TEXT NOT NULL, UNIQUE(playerId, sessionId));
-    CREATE TABLE games (id TEXT PRIMARY KEY, sessionId TEXT NOT NULL REFERENCES sessions(id), courtNumber INTEGER NOT NULL, team1Player1Id TEXT NOT NULL REFERENCES players(id), team1Player2Id TEXT NOT NULL REFERENCES players(id), team2Player1Id TEXT NOT NULL REFERENCES players(id), team2Player2Id TEXT NOT NULL REFERENCES players(id), status TEXT NOT NULL CHECK(status IN ('pending', 'playing', 'completed')), roundNumber INTEGER NOT NULL, gameType TEXT NOT NULL CHECK(gameType IN ('same-gender', 'mixed')), startedAt TEXT, endedAt TEXT);
+    CREATE TABLE games (id TEXT PRIMARY KEY, sessionId TEXT NOT NULL REFERENCES sessions(id), courtNumber INTEGER NOT NULL, team1Player1Id TEXT NOT NULL REFERENCES players(id), team1Player2Id TEXT NOT NULL REFERENCES players(id), team2Player1Id TEXT NOT NULL REFERENCES players(id), team2Player2Id TEXT NOT NULL REFERENCES players(id), status TEXT NOT NULL CHECK(status IN ('pending', 'playing', 'completed')), roundNumber INTEGER NOT NULL, gameType TEXT NOT NULL CHECK(gameType IN ('mixed', 'male-double', 'female-double', 'open-double')), startedAt TEXT, endedAt TEXT);
     CREATE TABLE balances (id TEXT PRIMARY KEY, playerId TEXT NOT NULL UNIQUE REFERENCES players(id), balance REAL NOT NULL DEFAULT 0, lastUpdated TEXT NOT NULL);
     CREATE TABLE payments (id TEXT PRIMARY KEY, playerId TEXT NOT NULL REFERENCES players(id), sessionId TEXT REFERENCES sessions(id), amount REAL NOT NULL, status TEXT NOT NULL CHECK(status IN ('paid', 'unpaid')), paidDate TEXT, paymentType TEXT NOT NULL CHECK(paymentType IN ('session', 'topup')));
     INSERT INTO settings (key, value) VALUES ('courtCount', '3');
@@ -197,7 +197,7 @@ describe('Game lifecycle', () => {
 
   it('transitions from pending to playing to completed', () => {
     db.run(`INSERT INTO games (id, sessionId, courtNumber, team1Player1Id, team1Player2Id, team2Player1Id, team2Player2Id, status, roundNumber, gameType)
-      VALUES ('g1', 's1', 1, 'p1', 'p2', 'p3', 'p4', 'pending', 1, 'same-gender')`);
+      VALUES ('g1', 's1', 1, 'p1', 'p2', 'p3', 'p4', 'pending', 1, 'male-double')`);
 
     // pending
     let stmt = db.prepare("SELECT status FROM games WHERE id = 'g1'");
@@ -223,11 +223,22 @@ describe('Game lifecycle', () => {
     stmt.free();
   });
 
+  it('allows open-double game type', () => {
+    db.run(`INSERT INTO games (id, sessionId, courtNumber, team1Player1Id, team1Player2Id, team2Player1Id, team2Player2Id, status, roundNumber, gameType)
+      VALUES ('g1', 's1', 1, 'p1', 'p2', 'p3', 'p4', 'pending', 1, 'open-double')`);
+
+    const stmt = db.prepare("SELECT gameType FROM games WHERE id = 'g1'");
+    stmt.bind([]);
+    expect(stmt.step()).toBe(true);
+    expect((stmt.getAsObject() as Record<string, unknown>).gameType).toBe('open-double');
+    stmt.free();
+  });
+
   it('can only delete pending games', () => {
     db.run(`INSERT INTO games (id, sessionId, courtNumber, team1Player1Id, team1Player2Id, team2Player1Id, team2Player2Id, status, roundNumber, gameType)
-      VALUES ('g1', 's1', 1, 'p1', 'p2', 'p3', 'p4', 'pending', 1, 'same-gender')`);
+      VALUES ('g1', 's1', 1, 'p1', 'p2', 'p3', 'p4', 'pending', 1, 'male-double')`);
     db.run(`INSERT INTO games (id, sessionId, courtNumber, team1Player1Id, team1Player2Id, team2Player1Id, team2Player2Id, status, roundNumber, gameType)
-      VALUES ('g2', 's1', 2, 'p1', 'p2', 'p3', 'p4', 'playing', 1, 'same-gender')`);
+      VALUES ('g2', 's1', 2, 'p1', 'p2', 'p3', 'p4', 'playing', 1, 'male-double')`);
 
     // Delete pending - should work
     db.run("DELETE FROM games WHERE id = 'g1' AND status = 'pending'");

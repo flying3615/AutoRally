@@ -99,7 +99,6 @@ export function Payments() {
             {unpaid.length > 0 ? (
               <div className="space-y-2">
                 {unpaid.map(p => {
-                  const isMale = (p as any).gender === 'male';
                   return (
                     <div
                       key={p.id}

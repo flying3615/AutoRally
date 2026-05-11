@@ -16,7 +16,7 @@ function makePlayer(id: string, name: string, gender: 'male' | 'female', level: 
   return { id, name, gender, level, checkinTime: new Date(Date.now() - minutesAgo * 60_000).toISOString() };
 }
 
-describe('generateMatches — always mixed doubles', () => {
+describe('generateMatches', () => {
   it('returns empty when fewer than 4 players', () => {
     const pool = [
       makePlayer('p1', 'A', 'male', 3),
@@ -98,13 +98,82 @@ describe('generateMatches — always mixed doubles', () => {
     expect(new Set(allIds).size).toBe(allIds.length);
   });
 
+  it('fills all courts when 16 waiting players include a 3M+1F leftover court', () => {
+    const pool = [
+      ...Array.from({ length: 9 }, (_, i) => makePlayer(`m${i + 1}`, `M${i + 1}`, 'male', 3, i)),
+      ...Array.from({ length: 7 }, (_, i) => makePlayer(`f${i + 1}`, `F${i + 1}`, 'female', 3, i + 9)),
+    ];
+
+    const result = generateMatches(pool, 4, 2, []);
+    const allIds = result.flatMap(m => [...m.team1, ...m.team2]);
+
+    expect(result).toHaveLength(4);
+    expect(new Set(allIds).size).toBe(16);
+  });
+
+  it('fills courts from a single-gender waiting pool', () => {
+    const pool = Array.from({ length: 16 }, (_, i) =>
+      makePlayer(`m${i + 1}`, `M${i + 1}`, 'male', 3, i)
+    );
+
+    const result = generateMatches(pool, 4, 2, []);
+    const allIds = result.flatMap(m => [...m.team1, ...m.team2]);
+
+    expect(result).toHaveLength(4);
+    expect(result.every(m => m.gameType === 'male-double')).toBe(true);
+    expect(new Set(allIds).size).toBe(16);
+  });
+
+  it('uses open-double for asymmetric gender courts instead of mixed', () => {
+    const pool = [
+      makePlayer('m1', 'M1', 'male', 3),
+      makePlayer('m2', 'M2', 'male', 3),
+      makePlayer('m3', 'M3', 'male', 3),
+      makePlayer('f1', 'F1', 'female', 3),
+    ];
+
+    const result = generateMatches(pool, 1, 1, []);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]!.gameType).toBe('open-double');
+  });
+
+  it('does not count pending games as played history when selecting players', () => {
+    const pool = [
+      makePlayer('p1', 'P1', 'male', 3, 10),
+      makePlayer('p2', 'P2', 'male', 3, 9),
+      makePlayer('p3', 'P3', 'male', 3, 8),
+      makePlayer('p4', 'P4', 'male', 3, 7),
+      makePlayer('p5', 'P5', 'male', 3, 6),
+    ];
+    const pendingGame = {
+      id: 'pending',
+      sessionId: 's',
+      courtNumber: 1,
+      team1Player1Id: 'p1',
+      team1Player2Id: 'p2',
+      team2Player1Id: 'p3',
+      team2Player2Id: 'p4',
+      status: 'pending',
+      roundNumber: 1,
+      gameType: 'male-double',
+      startedAt: null,
+      endedAt: null,
+    } satisfies Game;
+
+    const result = generateMatches(pool, 1, 2, [pendingGame]);
+    const allIds = result.flatMap(m => [...m.team1, ...m.team2]);
+
+    expect(new Set(allIds)).toEqual(new Set(['p1', 'p2', 'p3', 'p4']));
+  });
+
   it('produces valid game types with consistent teams', () => {
     const pool = Array.from({ length: 32 }, (_, i) =>
       makePlayer(`p${i + 1}`, `P${i + 1}`, i % 2 === 0 ? 'male' : 'female', (i % 5) + 1, i * 3)
     );
     const result = generateMatches(pool, 4, 1, []);
     for (const match of result) {
-      expect(['mixed', 'male-double', 'female-double']).toContain(match.gameType);
+      expect(['mixed', 'male-double', 'female-double', 'open-double']).toContain(match.gameType);
       if (match.gameType === 'mixed') {
         // Each team: 1M + 1F
         for (const team of [match.team1, match.team2]) {

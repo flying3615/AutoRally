@@ -133,8 +133,8 @@ function StatusBar() {
 
       if (s) {
         const [att, games] = await Promise.all([
-          window.api.attendanceListBySession(s.id) as any[],
-          window.api.gamesListBySession(s.id) as any[],
+          window.api.attendanceListBySession(s.id) as Promise<any[]>,
+          window.api.gamesListBySession(s.id) as Promise<any[]>,
         ]);
         setAttendanceCount(att.length);
         const playingGames = games.filter((g: any) => g.status === 'playing');

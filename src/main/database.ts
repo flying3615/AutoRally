@@ -94,7 +94,7 @@ function migrate(db: Database) {
       team2Player2Id TEXT NOT NULL REFERENCES players(id),
       status TEXT NOT NULL CHECK(status IN ('pending', 'playing', 'completed')),
       roundNumber INTEGER NOT NULL,
-      gameType TEXT NOT NULL CHECK(gameType IN ('mixed', 'male-double', 'female-double')),
+      gameType TEXT NOT NULL CHECK(gameType IN ('mixed', 'male-double', 'female-double', 'open-double')),
       startedAt TEXT,
       endedAt TEXT
     );
@@ -124,8 +124,59 @@ function migrate(db: Database) {
 
   // Migrations for existing databases
   try { db.run('ALTER TABLE attendance ADD COLUMN paused INTEGER NOT NULL DEFAULT 0'); } catch (_) { /* already exists */ }
+  migrateGameTypeConstraint(db);
 
   save();
+}
+
+function migrateGameTypeConstraint(db: Database) {
+  const stmt = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'games'");
+  const row = stmt.step() ? stmt.getAsObject() as { sql?: string } : undefined;
+  stmt.free();
+  if (!row?.sql || row.sql.includes("'open-double'")) return;
+
+  db.run('PRAGMA foreign_keys = OFF');
+  db.run('BEGIN TRANSACTION');
+  try {
+    db.run(`
+      CREATE TABLE games_new (
+        id TEXT PRIMARY KEY,
+        sessionId TEXT NOT NULL REFERENCES sessions(id),
+        courtNumber INTEGER NOT NULL,
+        team1Player1Id TEXT NOT NULL REFERENCES players(id),
+        team1Player2Id TEXT NOT NULL REFERENCES players(id),
+        team2Player1Id TEXT NOT NULL REFERENCES players(id),
+        team2Player2Id TEXT NOT NULL REFERENCES players(id),
+        status TEXT NOT NULL CHECK(status IN ('pending', 'playing', 'completed')),
+        roundNumber INTEGER NOT NULL,
+        gameType TEXT NOT NULL CHECK(gameType IN ('mixed', 'male-double', 'female-double', 'open-double')),
+        startedAt TEXT,
+        endedAt TEXT
+      );
+    `);
+    db.run(`
+      INSERT INTO games_new (
+        id, sessionId, courtNumber,
+        team1Player1Id, team1Player2Id, team2Player1Id, team2Player2Id,
+        status, roundNumber, gameType, startedAt, endedAt
+      )
+      SELECT
+        id, sessionId, courtNumber,
+        team1Player1Id, team1Player2Id, team2Player1Id, team2Player2Id,
+        status, roundNumber,
+        CASE WHEN gameType = 'same-gender' THEN 'male-double' ELSE gameType END,
+        startedAt, endedAt
+      FROM games;
+    `);
+    db.run('DROP TABLE games');
+    db.run('ALTER TABLE games_new RENAME TO games');
+    db.run('COMMIT');
+  } catch (err) {
+    db.run('ROLLBACK');
+    throw err;
+  } finally {
+    db.run('PRAGMA foreign_keys = ON');
+  }
 }
 
 export function closeDb() {

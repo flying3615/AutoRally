@@ -1,4 +1,4 @@
-import type { Attendance, Game } from '../../shared/types';
+import type { Game } from '../../shared/types';
 
 interface PlayerInPool {
   id: string;
@@ -11,7 +11,7 @@ interface PlayerInPool {
 export interface MatchResult {
   team1: [string, string];
   team2: [string, string];
-  gameType: 'mixed' | 'male-double' | 'female-double';
+  gameType: 'mixed' | 'male-double' | 'female-double' | 'open-double';
 }
 
 const CANDIDATES = 30;
@@ -28,6 +28,16 @@ function seededShuffle<T>(arr: T[], seed: number): T[] {
   return out;
 }
 
+function chooseFlexibleCourtCounts(remM: number, remF: number): { takeM: number; takeF: number } | null {
+  if (remM + remF < 4) return null;
+  if (remM >= 2 && remF >= 2) return { takeM: 2, takeF: 2 };
+  if (remM >= 3 && remF >= 1) return { takeM: 3, takeF: 1 };
+  if (remM >= 1 && remF >= 3) return { takeM: 1, takeF: 3 };
+  if (remM >= 4) return { takeM: 4, takeF: 0 };
+  if (remF >= 4) return { takeM: 0, takeF: 4 };
+  return null;
+}
+
 // ── Main entry point ──
 
 export function generateMatches(
@@ -37,10 +47,11 @@ export function generateMatches(
   pastGames: Game[],
 ): MatchResult[] {
   if (pool.length < 4) return [];
+  const countedGames = pastGames.filter(g => g.status !== 'pending');
 
   // 1. Count games per player
   const gameCount = new Map<string, number>();
-  for (const g of pastGames) {
+  for (const g of countedGames) {
     for (const id of [g.team1Player1Id, g.team1Player2Id, g.team2Player1Id, g.team2Player2Id]) {
       gameCount.set(id, (gameCount.get(id) ?? 0) + 1);
     }
@@ -50,7 +61,7 @@ export function generateMatches(
   // 2. Count past partnerships
   const partnerCount = new Map<string, number>();
   const partnerKey = (a: string, b: string) => a < b ? `${a}|${b}` : `${b}|${a}`;
-  for (const g of pastGames) {
+  for (const g of countedGames) {
     const k1 = partnerKey(g.team1Player1Id, g.team1Player2Id);
     const k2 = partnerKey(g.team2Player1Id, g.team2Player2Id);
     partnerCount.set(k1, (partnerCount.get(k1) ?? 0) + 1);
@@ -92,14 +103,14 @@ export function generateMatches(
 
       const playingM = mix * 2 + maleC * 4;
       const playingF = mix * 2 + femaleC * 4;
-      const rateM = playingM / allMales.length;
-      const rateF = playingF / allFemales.length;
+      const rateM = allMales.length === 0 ? 0 : playingM / allMales.length;
+      const rateF = allFemales.length === 0 ? 0 : playingF / allFemales.length;
       const rateDiff = Math.abs(rateM - rateF);
       const unfilled = courtCount - mix - maleC - femaleC;
 
-      // Primary: minimize rate difference. Tiebreaker: round-type preference.
+      // Primary: fill courts. Tiebreakers: gender play-rate fairness, then round-type preference.
       const typeScore = preferMixed ? (maxMixedPossible - mix) * 0.0001 : mix * 0.0001;
-      const score = rateDiff * 10000 + unfilled * 10 + typeScore;
+      const score = unfilled * 100000 + rateDiff * 10000 + typeScore;
 
       if (score < bestFairScore) {
         bestFairScore = score;
@@ -185,12 +196,10 @@ export function generateMatches(
     for (let c = 0; c < mixedCourts; c++) {
       const remM = shufM.length - mi;
       const remF = shufF.length - fi;
-      if (remM + remF < 4) break;
-
-      // Take up to 2 from each gender, fill rest from the other
-      const takeMCourt = Math.min(2, remM);
-      const takeFCourt = Math.min(4 - takeMCourt, remF);
-      if (takeMCourt + takeFCourt < 4) break;
+      const counts = chooseFlexibleCourtCounts(remM, remF);
+      if (!counts) break;
+      const takeMCourt = counts.takeM;
+      const takeFCourt = counts.takeF;
 
       // Build teams: pair a male with a female when both available
       const mIds = shufM.slice(mi, mi + takeMCourt).map(p => p.id);
@@ -208,14 +217,14 @@ export function generateMatches(
         matches.push({
           team1: [mIds[0]!, fIds[0]!],
           team2: [fIds[1]!, fIds[2]!],
-          gameType: 'mixed',
+          gameType: 'open-double',
         });
       } else if (takeMCourt >= 2 && takeFCourt === 1) {
         // 3M + 1F: M+F vs M+M
         matches.push({
           team1: [mIds[0]!, fIds[0]!],
           team2: [mIds[1]!, mIds[2]!],
-          gameType: 'mixed',
+          gameType: 'open-double',
         });
       } else if (takeFCourt >= 4) {
         // 0M + 4F → really a female-double court
