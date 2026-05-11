@@ -156,7 +156,32 @@ export function generateMatches(
     const matches: MatchResult[] = [];
     let mi = 0, fi = 0;
 
-    // Mixed courts — flexible gender: each court takes up to 2M + 2F, with fallback
+    // Build single-gender courts FIRST so they get their allocated players.
+    // Mixed courts (built last) flexibly use whatever genders remain.
+
+    // Male-double courts
+    for (let c = 0; c < maleCourts; c++) {
+      if (mi + 4 > shufM.length) break;
+      matches.push({
+        team1: [shufM[mi]!.id, shufM[mi + 1]!.id],
+        team2: [shufM[mi + 2]!.id, shufM[mi + 3]!.id],
+        gameType: 'male-double',
+      });
+      mi += 4;
+    }
+
+    // Female-double courts
+    for (let c = 0; c < femaleCourts; c++) {
+      if (fi + 4 > shufF.length) break;
+      matches.push({
+        team1: [shufF[fi]!.id, shufF[fi + 1]!.id],
+        team2: [shufF[fi + 2]!.id, shufF[fi + 3]!.id],
+        gameType: 'female-double',
+      });
+      fi += 4;
+    }
+
+    // Mixed courts — flexible: each court takes up to 2M + 2F, with fallback
     for (let c = 0; c < mixedCourts; c++) {
       const remM = shufM.length - mi;
       const remF = shufF.length - fi;
@@ -208,28 +233,6 @@ export function generateMatches(
         });
       }
       mi += takeMCourt; fi += takeFCourt;
-    }
-
-    // Male-double courts
-    for (let c = 0; c < maleCourts; c++) {
-      if (mi + 4 > shufM.length) break;
-      matches.push({
-        team1: [shufM[mi]!.id, shufM[mi + 1]!.id],
-        team2: [shufM[mi + 2]!.id, shufM[mi + 3]!.id],
-        gameType: 'male-double',
-      });
-      mi += 4;
-    }
-
-    // Female-double courts
-    for (let c = 0; c < femaleCourts; c++) {
-      if (fi + 4 > shufF.length) break;
-      matches.push({
-        team1: [shufF[fi]!.id, shufF[fi + 1]!.id],
-        team2: [shufF[fi + 2]!.id, shufF[fi + 3]!.id],
-        gameType: 'female-double',
-      });
-      fi += 4;
     }
 
     // 6. Score this candidate
