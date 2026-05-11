@@ -190,7 +190,7 @@ export function Players() {
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<{ imported: number; skipped: number; errors: string[] } | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState({ name: '', gender: 'male', level: 3, phone: '' });
+  const [form, setForm] = useState({ firstName: '', surname: '', gender: 'male', level: 3, phone: '' });
   const [topupPlayer, setTopupPlayer] = useState<string | null>(null);
   const [topupAmount, setTopupAmount] = useState('');
   const [search, setSearch] = useState('');
@@ -201,7 +201,7 @@ export function Players() {
   useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
-    const handler = () => { setShowForm(true); setEditingId(null); setForm({ name: '', gender: 'male', level: 3, phone: '' }); };
+    const handler = () => { setShowForm(true); setEditingId(null); setForm({ firstName: '', surname: '', gender: 'male', level: 3, phone: '' }); };
     window.addEventListener('menu:add-player', handler);
     return () => window.removeEventListener('menu:add-player', handler);
   }, []);
@@ -213,20 +213,25 @@ export function Players() {
   }, []);
 
   const handleSave = async () => {
-    if (!form.name.trim()) return;
+    const name = [form.firstName.trim(), form.surname.trim()].filter(Boolean).join(' ');
+    if (!name) return;
+    const playerData = { name, gender: form.gender, level: form.level, phone: form.phone };
     if (editingId) {
-      await window.api.playersUpdate(editingId, form);
+      await window.api.playersUpdate(editingId, playerData);
     } else {
-      await window.api.playersCreate(form);
+      await window.api.playersCreate(playerData);
     }
-    setForm({ name: '', gender: 'male', level: 3, phone: '' });
+    setForm({ firstName: '', surname: '', gender: 'male', level: 3, phone: '' });
     setEditingId(null);
     setShowForm(false);
     load();
   };
 
   const handleEdit = (p: PlayerWithBalance) => {
-    setForm({ name: p.name, gender: p.gender, level: p.level, phone: p.phone });
+    const spaceIdx = p.name.indexOf(' ');
+    const firstName = spaceIdx > 0 ? p.name.slice(0, spaceIdx) : p.name;
+    const surname = spaceIdx > 0 ? p.name.slice(spaceIdx + 1) : '';
+    setForm({ firstName, surname, gender: p.gender, level: p.level, phone: p.phone });
     setEditingId(p.id);
     setShowForm(true);
   };
@@ -320,7 +325,7 @@ export function Players() {
               {importing ? 'Importing...' : 'Import CSV'}
             </button>
             <button
-              onClick={() => { setShowForm(true); setEditingId(null); setForm({ name: '', gender: 'male', level: 3, phone: '' }); }}
+              onClick={() => { setShowForm(true); setEditingId(null); setForm({ firstName: '', surname: '', gender: 'male', level: 3, phone: '' }); }}
               className="h-8 px-4 text-sm font-medium bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 active:scale-[0.97] shadow-[0_2px_8px_-2px_rgba(0,0,0,0.2)] transition-all inline-flex items-center justify-center"
             >
               Add Player
@@ -334,30 +339,45 @@ export function Players() {
             <h3 className="text-sm font-bold text-zinc-900 mb-4">{editingId ? 'Edit Player' : 'Add Player'}</h3>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-[11px] text-zinc-400 font-semibold uppercase tracking-wider mb-1.5">Name</label>
+                <label className="block text-[11px] text-zinc-400 font-semibold uppercase tracking-wider mb-1.5">First Name</label>
                 <input
-                  type="text" value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  type="text" value={form.firstName}
+                  onChange={(e) => setForm({ ...form, firstName: e.target.value })}
                   className="w-full h-9 px-3 text-sm bg-white border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-200/80 focus:border-zinc-300 transition-all"
                   autoFocus
                 />
               </div>
               <div>
+                <label className="block text-[11px] text-zinc-400 font-semibold uppercase tracking-wider mb-1.5">Surname</label>
+                <input
+                  type="text" value={form.surname}
+                  onChange={(e) => setForm({ ...form, surname: e.target.value })}
+                  className="w-full h-9 px-3 text-sm bg-white border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-200/80 focus:border-zinc-300 transition-all"
+                />
+              </div>
+              <div>
                 <label className="block text-[11px] text-zinc-400 font-semibold uppercase tracking-wider mb-1.5">Gender</label>
                 <div className="flex gap-2">
-                  {(['male', 'female'] as const).map(g => (
-                    <button
-                      key={g}
-                      onClick={() => setForm({ ...form, gender: g })}
-                      className={`flex-1 h-9 text-sm rounded-lg transition-all duration-150 inline-flex items-center justify-center font-medium ${
-                        form.gender === g
-                          ? 'bg-zinc-900 text-white shadow-[0_1px_3px_rgba(0,0,0,0.12)]'
-                          : 'bg-white border border-zinc-200 text-zinc-500 hover:border-zinc-300'
-                      }`}
-                    >
-                      {g === 'male' ? '♂ Male' : '♀ Female'}
-                    </button>
-                  ))}
+                  <button
+                    onClick={() => setForm({ ...form, gender: 'male' })}
+                    className={`flex-1 h-9 text-sm rounded-lg transition-all duration-150 inline-flex items-center justify-center font-medium ${
+                      form.gender === 'male'
+                        ? 'bg-blue-600 text-white shadow-[0_1px_3px_rgba(37,99,235,0.3)]'
+                        : 'bg-white border border-zinc-200 text-zinc-500 hover:border-blue-200 hover:text-blue-600'
+                    }`}
+                  >
+                    ♂ Male
+                  </button>
+                  <button
+                    onClick={() => setForm({ ...form, gender: 'female' })}
+                    className={`flex-1 h-9 text-sm rounded-lg transition-all duration-150 inline-flex items-center justify-center font-medium ${
+                      form.gender === 'female'
+                        ? 'bg-rose-600 text-white shadow-[0_1px_3px_rgba(225,29,72,0.3)]'
+                        : 'bg-white border border-zinc-200 text-zinc-500 hover:border-rose-200 hover:text-rose-600'
+                    }`}
+                  >
+                    ♀ Female
+                  </button>
                 </div>
               </div>
               <div>
