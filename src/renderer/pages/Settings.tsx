@@ -198,9 +198,28 @@ export function Settings() {
       <div className="max-w-3xl mx-auto px-8 py-10" style={{ animation: 'fadeIn 0.3s ease' }}>
 
         {/* Header */}
-        <div className="mb-8">
-          <h2 className="text-xl font-bold text-zinc-900 tracking-tight">Settings</h2>
-          <p className="text-sm text-zinc-400 mt-0.5">Match parameters, fee configuration, and upcoming sessions</p>
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h2 className="text-xl font-bold text-zinc-900 tracking-tight">Settings</h2>
+            <p className="text-sm text-zinc-400 mt-0.5">Match parameters, fee configuration, and upcoming sessions</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleSave}
+              className="h-9 px-4 text-sm font-semibold bg-zinc-900 text-white rounded-lg
+                hover:bg-zinc-800 active:scale-[0.97] shadow-[0_2px_8px_-2px_rgba(0,0,0,0.15)] transition-all inline-flex items-center justify-center"
+            >
+              Save Settings
+            </button>
+            {saved && (
+              <span
+                className="text-sm font-semibold text-emerald-600"
+                style={{ animation: 'ctxFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)' }}
+              >
+                Saved
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Court Count */}
@@ -293,25 +312,6 @@ export function Settings() {
             <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-medium text-zinc-400">NZD / person</span>
           </div>
           <p className="text-xs text-zinc-400 mt-2.5">Auto-deducted from balance on check-in</p>
-        </div>
-
-        {/* Save */}
-        <div className="flex items-center gap-3 mb-10">
-          <button
-            onClick={handleSave}
-            className="h-10 px-6 text-sm font-semibold bg-zinc-900 text-white rounded-xl
-              hover:bg-zinc-800 active:scale-[0.97] shadow-[0_2px_8px_-2px_rgba(0,0,0,0.2)] transition-all inline-flex items-center justify-center"
-          >
-            Save Settings
-          </button>
-          {saved && (
-            <span
-              className="text-sm font-semibold text-emerald-600"
-              style={{ animation: 'ctxFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)' }}
-            >
-              Saved
-            </span>
-          )}
         </div>
 
         {/* Upcoming Sessions */}
