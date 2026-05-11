@@ -89,59 +89,14 @@ function SessionModal({ session, onClose, onSaved }: {
         <div className="grid grid-cols-2 gap-3 mb-3">
           <div>
             <label className="block text-xs font-semibold text-zinc-500 mb-1">Date</label>
-            <div className="flex gap-2">
-              <select
-                value={date ? date.split('-')[0] : ''}
-                onChange={(e) => {
-                  const y = e.target.value;
-                  const m = date ? date.split('-')[1] ?? '01' : '01';
-                  const d = date ? date.split('-')[2] ?? '01' : '01';
-                  setDate(y ? `${y}-${m}-${d}` : '');
-                  setError(null);
-                }}
-                className="flex-1 px-2 py-2 text-sm border-2 border-zinc-200 rounded-xl
-                  focus:outline-none focus:border-zinc-400 focus:ring-2 focus:ring-gray-100 transition-all bg-white"
-              >
-                <option value="">Year</option>
-                {Array.from({ length: 3 }, (_, i) => new Date().getFullYear() + i).map(y => (
-                  <option key={y} value={y}>{y}</option>
-                ))}
-              </select>
-              <select
-                value={date ? date.split('-')[1] : ''}
-                onChange={(e) => {
-                  const m = e.target.value;
-                  const y = date ? date.split('-')[0] ?? String(new Date().getFullYear()) : String(new Date().getFullYear());
-                  const d = date ? date.split('-')[2] ?? '01' : '01';
-                  setDate(m ? `${y}-${m}-${d}` : '');
-                  setError(null);
-                }}
-                className="flex-[1.5] px-2 py-2 text-sm border-2 border-zinc-200 rounded-xl
-                  focus:outline-none focus:border-zinc-400 focus:ring-2 focus:ring-gray-100 transition-all bg-white"
-              >
-                <option value="">Month</option>
-                {['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].map((label, i) => (
-                  <option key={i} value={String(i + 1).padStart(2, '0')}>{label}</option>
-                ))}
-              </select>
-              <select
-                value={date ? date.split('-')[2] : ''}
-                onChange={(e) => {
-                  const d = e.target.value;
-                  const y = date ? date.split('-')[0] ?? String(new Date().getFullYear()) : String(new Date().getFullYear());
-                  const m = date ? date.split('-')[1] ?? '01' : '01';
-                  setDate(d ? `${y}-${m}-${d}` : '');
-                  setError(null);
-                }}
-                className="flex-1 px-2 py-2 text-sm border-2 border-zinc-200 rounded-xl
-                  focus:outline-none focus:border-zinc-400 focus:ring-2 focus:ring-gray-100 transition-all bg-white"
-              >
-                <option value="">Day</option>
-                {Array.from({ length: 31 }, (_, i) => i + 1).map(d => (
-                  <option key={d} value={String(d).padStart(2, '0')}>{d}</option>
-                ))}
-              </select>
-            </div>
+            <input
+              type="date"
+              value={date}
+              min={todayStr()}
+              onChange={(e) => { setDate(e.target.value); setError(null); }}
+              className="w-full px-3 py-2 text-sm border-2 border-zinc-200 rounded-xl
+                focus:outline-none focus:border-zinc-400 focus:ring-2 focus:ring-gray-100 transition-all"
+            />
           </div>
           <div>
             <label className="block text-xs font-semibold text-zinc-500 mb-1">Time</label>
