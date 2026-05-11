@@ -72,6 +72,7 @@ export function generateMatches(
   //    When genders are imbalanced, reduce mixed courts so the minority gender
   //    isn't forced to play every round. Round parity acts as a tiebreaker only
   //    when multiple allocations are equally fair (balanced gender scenario).
+  //    Falls back to "best-effort" courts when standard types can't fill available players.
   const maxMixedPossible = Math.min(Math.floor(allMales.length / 2), Math.floor(allFemales.length / 2), courtCount);
   const preferMixed = currentRound % 2 === 1;
 
@@ -109,6 +110,22 @@ export function generateMatches(
     }
   }
 
+  // Fallback: fill remaining courts with leftover players regardless of gender balance.
+  // This handles skewed leftovers (e.g. 3F+1M → 1 mixed court, or 5F+3M → 1 mixed + 1 leftover).
+  const allocatedCourts = mixedCourts + maleCourts + femaleCourts;
+  const allocatedM = mixedCourts * 2 + maleCourts * 4;
+  const allocatedF = mixedCourts * 2 + femaleCourts * 4;
+  const leftoverM = allMales.length - allocatedM;
+  const leftoverF = allFemales.length - allocatedF;
+  const leftoverCourts = Math.min(
+    courtCount - allocatedCourts,
+    Math.floor((leftoverM + leftoverF) / 4)
+  );
+  if (leftoverCourts > 0) {
+    // Tag as mixed — team formation below handles asymmetric gender splits
+    mixedCourts += leftoverCourts;
+  }
+
   // 5. Generate candidates with different team shuffles for partner diversity.
   //    All candidates use the same player selection (strict fairness).
   //    Variation comes from shuffling within courts before team formation.
@@ -118,9 +135,19 @@ export function generateMatches(
   for (let ci = 0; ci < CANDIDATES; ci++) {
     const seed = currentRound * CANDIDATES + ci;
 
-    // Selected players (deterministic: lowest game count)
-    const selM = allMales.slice(0, mixedCourts * 2 + maleCourts * 4);
-    const selF = allFemales.slice(0, mixedCourts * 2 + femaleCourts * 4);
+    // Selected players (deterministic: lowest game count).
+    // Fill ideal gender quotas, then backfill shortages from the other gender.
+    const idealM = mixedCourts * 2 + maleCourts * 4;
+    const idealF = mixedCourts * 2 + femaleCourts * 4;
+    let takeM = Math.min(idealM, allMales.length);
+    let takeF = Math.min(idealF, allFemales.length);
+    // Backfill: if one gender is short, use surplus from the other
+    const totalNeed = (mixedCourts + maleCourts + femaleCourts) * 4;
+    takeM = Math.min(takeM + Math.max(0, totalNeed - takeM - takeF), allMales.length);
+    takeF = Math.min(takeF + Math.max(0, totalNeed - takeM - takeF), allFemales.length);
+
+    const selM = allMales.slice(0, takeM);
+    const selF = allFemales.slice(0, takeF);
 
     // Shuffle selected players for this candidate (partner diversity)
     const shufM = seededShuffle(selM, seed);
@@ -129,15 +156,58 @@ export function generateMatches(
     const matches: MatchResult[] = [];
     let mi = 0, fi = 0;
 
-    // Mixed courts
+    // Mixed courts — flexible gender: each court takes up to 2M + 2F, with fallback
     for (let c = 0; c < mixedCourts; c++) {
-      if (mi + 2 > shufM.length || fi + 2 > shufF.length) break;
-      matches.push({
-        team1: [shufM[mi]!.id, shufF[fi]!.id],
-        team2: [shufM[mi + 1]!.id, shufF[fi + 1]!.id],
-        gameType: 'mixed',
-      });
-      mi += 2; fi += 2;
+      const remM = shufM.length - mi;
+      const remF = shufF.length - fi;
+      if (remM + remF < 4) break;
+
+      // Take up to 2 from each gender, fill rest from the other
+      const takeMCourt = Math.min(2, remM);
+      const takeFCourt = Math.min(4 - takeMCourt, remF);
+      if (takeMCourt + takeFCourt < 4) break;
+
+      // Build teams: pair a male with a female when both available
+      const mIds = shufM.slice(mi, mi + takeMCourt).map(p => p.id);
+      const fIds = shufF.slice(fi, fi + takeFCourt).map(p => p.id);
+
+      if (takeMCourt === 2 && takeFCourt === 2) {
+        // Standard mixed: 1M+1F per team
+        matches.push({
+          team1: [mIds[0]!, fIds[0]!],
+          team2: [mIds[1]!, fIds[1]!],
+          gameType: 'mixed',
+        });
+      } else if (takeMCourt === 1 && takeFCourt >= 2) {
+        // 1M + 3F: M+F vs F+F
+        matches.push({
+          team1: [mIds[0]!, fIds[0]!],
+          team2: [fIds[1]!, fIds[2]!],
+          gameType: 'mixed',
+        });
+      } else if (takeMCourt >= 2 && takeFCourt === 1) {
+        // 3M + 1F: M+F vs M+M
+        matches.push({
+          team1: [mIds[0]!, fIds[0]!],
+          team2: [mIds[1]!, mIds[2]!],
+          gameType: 'mixed',
+        });
+      } else if (takeFCourt >= 4) {
+        // 0M + 4F → really a female-double court
+        matches.push({
+          team1: [fIds[0]!, fIds[1]!],
+          team2: [fIds[2]!, fIds[3]!],
+          gameType: 'female-double',
+        });
+      } else if (takeMCourt >= 4) {
+        // 4M + 0F → really a male-double court
+        matches.push({
+          team1: [mIds[0]!, mIds[1]!],
+          team2: [mIds[2]!, mIds[3]!],
+          gameType: 'male-double',
+        });
+      }
+      mi += takeMCourt; fi += takeFCourt;
     }
 
     // Male-double courts
