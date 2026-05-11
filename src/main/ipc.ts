@@ -71,7 +71,8 @@ export async function registerIpcHandlers() {
 
   ipcMain.handle('sessions:create', (_e, courtCount: number) => {
     const id = uuid();
-    const date = new Date().toISOString().split('T')[0]!;
+    const d = new Date();
+    const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     const startTime = new Date().toISOString();
     run('INSERT INTO sessions (id, date, startTime, endTime, courtCount, status) VALUES (?, ?, ?, ?, ?, ?)',
       [id, date, startTime, null, courtCount, 'active']);

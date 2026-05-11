@@ -8,7 +8,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dbPath = path.join(__dirname, '..', 'autorally-seed.db');
 
 function dateStr(d: Date) {
-  return d.toISOString().split('T')[0]!;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 function isoStr(d: Date, h: number, m: number) {
   const dt = new Date(d);

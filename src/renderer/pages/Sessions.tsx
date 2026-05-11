@@ -155,7 +155,7 @@ export function Sessions() {
                   ) : (
                     <button
                       onClick={() => requestEnd(activeSession.id)}
-                      className="h-8 px-3.5 text-sm font-medium text-zinc-400 hover:text-zinc-200 hover:bg-white/5 rounded-lg active:scale-[0.97] transition-all inline-flex items-center justify-center"
+                      className="h-8 px-3.5 text-sm font-medium bg-red-500 text-white rounded-lg hover:bg-red-600 active:scale-[0.97] shadow-[0_2px_8px_-2px_rgba(239,68,68,0.3)] transition-all inline-flex items-center justify-center"
                     >
                       End
                     </button>
