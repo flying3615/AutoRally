@@ -1,3 +1,6 @@
+import warningSound from '../../alarm/classic-alarm-995.wav';
+import endSound from '../../alarm/mixkit-security-facility-breach-alarm-994.wav';
+
 export type TimerCallback = (remaining: number, phase: 'running' | 'warning' | 'ended' | 'paused') => void;
 
 type TimerEntry = {
@@ -15,8 +18,8 @@ export class GameTimer {
   private endBell: HTMLAudioElement;
 
   constructor() {
-    this.warningBell = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdH2JkZeWkYh/fHJ2lJ6gpKafoKCdm5aHhYOAe3V1dXd7hIeMj5CTkI+OiIeFg4CBfX19fn+AgYOFiIuNjpCRkJCPjoiHhoWDgYB/fX19fn+AgYOFiIuNjpCRkJCPjoiHhoWDgYB/');
-    this.endBell = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdH2JkZeWkYh/fHJ2lJ6gpKafoKCdm5aHhYOAe3V1dXd7hIeMj5CTkI+OiIeFg4CBfX19fn+AgYOFiIuNjpCRkJCPjoiHhoWDgYB/fX19fn+AgYOFiIuNjpCRkJCPjoiHhoWDgYB/');
+    this.warningBell = new Audio(warningSound);
+    this.endBell = new Audio(endSound);
   }
 
   start(courtNumber: number, durationMinutes: number, callback: TimerCallback) {
