@@ -359,7 +359,7 @@ function PlayerTag({
 
   return (
     <div
-      className="inline-flex items-center justify-center w-full px-2 py-5 rounded-xl select-none relative min-w-0 overflow-hidden"
+      className="inline-flex items-center justify-center w-full h-full px-2 py-5 rounded-xl select-none relative min-w-0 overflow-hidden"
       style={{
         backgroundColor: paused ? '#f5f5f4' : checkedOut ? '#fef2f2' : gc.bg,
         borderWidth: 1,
@@ -1022,10 +1022,10 @@ export function MatchPanel() {
                           <PlayerTag name={g.t1p1Name} gender={g.t1p1Gender} level={g.t1p1Level} playerId={g.team1Player1Id} onContextMenu={handlePlayerContextMenu} paused={pausedPlayerIds.has(g.team1Player1Id)} checkedOut={checkedOutPlayerIds.has(g.team1Player1Id)} />
                         </div>
 
-                        <div className="flex flex-col items-center justify-center gap-1 px-1 row-span-2" style={{ gridRow: '1 / 3', gridColumn: '2' }}>
-                          <span className="text-[10px] font-semibold text-zinc-400 tabular-nums">C{g.courtNumber}</span>
+                        <div className="flex flex-col items-center justify-center gap-2 px-2 row-span-2" style={{ gridRow: '1 / 3', gridColumn: '2' }}>
+                          <span className="text-base font-extrabold text-zinc-500 tabular-nums tracking-tight">C{g.courtNumber}</span>
                           <div className="w-px flex-1 bg-zinc-200/60" />
-                          <span className="text-[10px] font-bold text-zinc-300">VS</span>
+                          <span className="text-xs font-bold text-zinc-400">VS</span>
                           <div className="w-px flex-1 bg-zinc-200/60" />
                         </div>
 
@@ -1067,10 +1067,10 @@ export function MatchPanel() {
                           <PlayerTag name={g.t1p1Name} gender={g.t1p1Gender} level={g.t1p1Level} playerId={g.team1Player1Id} onContextMenu={handlePlayerContextMenu} paused={pausedPlayerIds.has(g.team1Player1Id)} checkedOut={checkedOutPlayerIds.has(g.team1Player1Id)} />
                         </DropSlot>
                       </div>
-                      <div className="flex flex-col items-center justify-center gap-1 px-1 row-span-2" style={{ gridRow: '1 / 3', gridColumn: '2' }}>
-                        <span className="text-[10px] font-semibold text-zinc-400 tabular-nums">C{g.courtNumber}</span>
+                      <div className="flex flex-col items-center justify-center gap-2 px-2 row-span-2" style={{ gridRow: '1 / 3', gridColumn: '2' }}>
+                        <span className="text-base font-extrabold text-zinc-500 tabular-nums tracking-tight">C{g.courtNumber}</span>
                         <div className="w-px flex-1 bg-zinc-200/60" />
-                        <span className="text-[10px] font-bold text-zinc-300">VS</span>
+                        <span className="text-xs font-bold text-zinc-400">VS</span>
                         <div className="w-px flex-1 bg-zinc-200/60" />
                       </div>
                       <div className="flex items-center justify-center min-w-0 h-full">
@@ -1131,10 +1131,10 @@ export function MatchPanel() {
                       <div className="flex items-center justify-center min-w-0 h-full">
                         <PlayerTag name={g.t1p1Name} gender={g.t1p1Gender} level={g.t1p1Level} playerId={g.team1Player1Id} onContextMenu={handlePlayerContextMenu} paused={pausedPlayerIds.has(g.team1Player1Id)} checkedOut={checkedOutPlayerIds.has(g.team1Player1Id)} />
                       </div>
-                      <div className="flex flex-col items-center justify-center gap-1 px-1 row-span-2" style={{ gridRow: '1 / 3', gridColumn: '2' }}>
-                        <span className="text-[10px] font-semibold text-zinc-400 tabular-nums">C{g.courtNumber}</span>
+                      <div className="flex flex-col items-center justify-center gap-2 px-2 row-span-2" style={{ gridRow: '1 / 3', gridColumn: '2' }}>
+                        <span className="text-base font-extrabold text-amber-600 tabular-nums tracking-tight">C{g.courtNumber}</span>
                         <div className="w-px flex-1 bg-amber-200/60" />
-                        <span className="text-[10px] font-bold text-amber-400">VS</span>
+                        <span className="text-xs font-bold text-amber-400">VS</span>
                         <div className="w-px flex-1 bg-amber-200/60" />
                       </div>
                       <div className="flex items-center justify-center min-w-0 h-full">
