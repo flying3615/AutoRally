@@ -34,7 +34,6 @@ function formatDuration(min: number | null): string {
 }
 
 function CreateSessionModal({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
-  const [courtCount, setCourtCount] = useState(4);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -42,6 +41,8 @@ function CreateSessionModal({ onClose, onCreated }: { onClose: () => void; onCre
     setCreating(true);
     setError(null);
     try {
+      const settings = await window.api.settingsGetAll() as Record<string, string>;
+      const courtCount = Number(settings.courtCount ?? '4');
       const id = await window.api.sessionsCreate(courtCount) as string;
       onCreated(id);
     } catch (err: any) {
@@ -53,7 +54,7 @@ function CreateSessionModal({ onClose, onCreated }: { onClose: () => void; onCre
 
   return (
     <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-white rounded-2xl p-8 w-[400px] max-w-[90vw]" onClick={e => e.stopPropagation()}
+      <div className="bg-white rounded-2xl p-8 w-[360px] max-w-[90vw]" onClick={e => e.stopPropagation()}
         style={{ boxShadow: '0 24px 48px -12px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.04)', animation: 'ctxFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)' }}>
         <h3 className="text-lg font-bold text-zinc-900 tracking-tight mb-1">New Session</h3>
         <p className="text-sm text-zinc-500 mb-6">Create a new badminton session for today</p>
@@ -61,25 +62,6 @@ function CreateSessionModal({ onClose, onCreated }: { onClose: () => void; onCre
         {error && (
           <div className="mb-4 text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</div>
         )}
-
-        <div className="mb-6">
-          <label className="block text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">Courts</label>
-          <div className="flex gap-2">
-            {[1, 2, 3, 4, 5, 6].map(n => (
-              <button
-                key={n}
-                onClick={() => setCourtCount(n)}
-                className={`flex-1 h-10 text-sm font-semibold rounded-xl transition-all active:scale-95 ${
-                  courtCount === n
-                    ? 'bg-zinc-900 text-white shadow-[0_2px_8px_-2px_rgba(0,0,0,0.2)]'
-                    : 'bg-white border border-zinc-200 text-zinc-500 hover:border-zinc-300'
-                }`}
-              >
-                {n}
-              </button>
-            ))}
-          </div>
-        </div>
 
         <div className="flex gap-2">
           <button
