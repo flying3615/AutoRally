@@ -133,6 +133,19 @@ export async function registerIpcHandlers() {
   });
 
   ipcMain.handle('attendance:remove', (_e, id: string) => {
+    const att = queryOne<{ playerId: string; sessionId: string }>('SELECT playerId, sessionId FROM attendance WHERE id = ?', [id]);
+    if (att) {
+      const payment = queryOne<{ id: string; paymentMethod: string; amount: number }>(
+        "SELECT id, paymentMethod, amount FROM payments WHERE playerId = ? AND sessionId = ? AND paymentType = 'session'", [att.playerId, att.sessionId]
+      );
+      if (payment) {
+        if (payment.paymentMethod === 'credit') {
+          run('UPDATE balances SET balance = balance + ?, lastUpdated = ? WHERE playerId = ?',
+            [payment.amount, new Date().toISOString(), att.playerId]);
+        }
+        run('DELETE FROM payments WHERE id = ?', [payment.id]);
+      }
+    }
     run('DELETE FROM attendance WHERE id = ?', [id]);
   });
 
