@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { GameProvider } from '../contexts/GameContext';
 
@@ -123,11 +123,12 @@ function Sidebar() {
 
 function StatusBar() {
   const [activeSession, setActiveSession] = useState<SessionInfo | null>(null);
-  const [attendanceCount, setAttendanceCount] = useState<number | null>(null);
-  const [playingCount, setPlayingCount] = useState<number | null>(null);
+  const [attendanceCount, setAttendanceCount] = useState(0);
+  const [playingCount, setPlayingCount] = useState(0);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  useEffect(() => {
-    const load = async () => {
+  const load = useCallback(async () => {
+    try {
       const s = await window.api.sessionsGetActive() as SessionInfo | undefined;
       setActiveSession(s ?? null);
 
@@ -147,16 +148,21 @@ function StatusBar() {
         });
         setPlayingCount(playingIds.size);
       } else {
-        setAttendanceCount(null);
-        setPlayingCount(null);
+        setAttendanceCount(0);
+        setPlayingCount(0);
       }
-    };
-    load();
-    const interval = setInterval(load, 2000);
-    return () => clearInterval(interval);
+    } catch {
+      // Silently ignore — will retry on next interval
+    }
   }, []);
 
-  const showStats = activeSession && attendanceCount !== null;
+  useEffect(() => {
+    load();
+    intervalRef.current = setInterval(load, 3000);
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+  }, [load]);
+
+  const showStats = activeSession !== null;
 
   // Format DB date string (YYYY-MM-DD) to readable format
   const formatSessionDate = (dateStr: string) => {
