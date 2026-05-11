@@ -68,14 +68,43 @@ export function generateMatches(
   const allMales = byCount.filter(p => p.gender === 'male');
   const allFemales = byCount.filter(p => p.gender === 'female');
 
-  // 4. Court type allocation: maximize mixed courts (most balanced gender usage)
-  const maxMixed = Math.min(Math.floor(allMales.length / 2), Math.floor(allFemales.length / 2), courtCount);
-  const mixedCourts = maxMixed;
-  const remainingCourts = courtCount - mixedCourts;
-  const surplusM = allMales.length - mixedCourts * 2;
-  const surplusF = allFemales.length - mixedCourts * 2;
-  const maleCourts = Math.min(Math.floor(surplusM / 4), remainingCourts);
-  const femaleCourts = Math.min(Math.floor(surplusF / 4), remainingCourts - maleCourts);
+  // 4. Court type allocation: alternate between mixed-preferred and single-gender-preferred rounds
+  const preferMixed = currentRound % 2 === 1; // odd rounds = mixed, even rounds = single-gender
+
+  let mixedCourts: number;
+  let maleCourts: number;
+  let femaleCourts: number;
+
+  if (preferMixed) {
+    // Maximize mixed courts first, fill remaining with single-gender
+    const maxMixed = Math.min(Math.floor(allMales.length / 2), Math.floor(allFemales.length / 2), courtCount);
+    mixedCourts = maxMixed;
+    const remainingCourts = courtCount - mixedCourts;
+    const surplusM = allMales.length - mixedCourts * 2;
+    const surplusF = allFemales.length - mixedCourts * 2;
+    maleCourts = Math.min(Math.floor(surplusM / 4), remainingCourts);
+    femaleCourts = Math.min(Math.floor(surplusF / 4), remainingCourts - maleCourts);
+  } else {
+    // Single-gender priority: maximize male + female courts, mixed as last resort
+    const maxMale = Math.floor(allMales.length / 4);
+    const maxFemale = Math.floor(allFemales.length / 4);
+    // Try to balance between male and female courts
+    maleCourts = Math.min(maxMale, Math.ceil(courtCount / 2));
+    femaleCourts = Math.min(maxFemale, Math.floor(courtCount / 2));
+    // Fill remaining courts with whichever gender has spare capacity
+    let remaining = courtCount - maleCourts - femaleCourts;
+    if (remaining > 0) {
+      const extraMale = Math.min(maxMale - maleCourts, remaining);
+      maleCourts += extraMale;
+      remaining -= extraMale;
+      femaleCourts += Math.min(maxFemale - femaleCourts, remaining);
+    }
+    // Remaining courts → mixed
+    const remainingCourts = courtCount - maleCourts - femaleCourts;
+    const remainingM = allMales.length - maleCourts * 4;
+    const remainingF = allFemales.length - femaleCourts * 4;
+    mixedCourts = Math.min(Math.floor(remainingM / 2), Math.floor(remainingF / 2), remainingCourts);
+  }
 
   // 5. Generate candidates with different team shuffles for partner diversity.
   //    All candidates use the same player selection (strict fairness).
