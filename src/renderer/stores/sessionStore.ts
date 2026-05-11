@@ -7,12 +7,21 @@ interface ActiveSession {
   courtCount: number;
 }
 
+interface UpcomingSession {
+  id: string;
+  date: string;
+  time: string;
+  note: string;
+}
+
 interface SessionState {
   activeSession: ActiveSession | null;
   attendanceCount: number;
   playingCount: number;
+  upcomingSessions: UpcomingSession[];
   lastRefresh: number;
   refresh: () => Promise<void>;
+  refreshUpcoming: () => Promise<void>;
   startPolling: () => () => void;
 }
 
@@ -20,6 +29,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   activeSession: null,
   attendanceCount: 0,
   playingCount: 0,
+  upcomingSessions: [],
   lastRefresh: 0,
 
   refresh: async () => {
@@ -47,9 +57,22 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     }
   },
 
+  refreshUpcoming: async () => {
+    try {
+      const list = await window.api.upcomingSessionsList();
+      set({ upcomingSessions: list });
+    } catch {
+      // Silently ignore
+    }
+  },
+
   startPolling: () => {
     get().refresh();
-    const id = setInterval(() => get().refresh(), 3000);
+    get().refreshUpcoming();
+    const id = setInterval(() => {
+      get().refresh();
+      get().refreshUpcoming();
+    }, 3000);
     return () => clearInterval(id);
   },
 }));

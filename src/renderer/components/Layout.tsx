@@ -195,7 +195,7 @@ function TopBar() {
   const location = useLocation();
   const navigate = useNavigate();
   const [now, setNow] = useState(new Date());
-  const [marqueeText, setMarqueeText] = useState('');
+  const { upcomingSessions } = useSessionStore();
   const isSubpage = location.pathname.startsWith('/checkin/') || location.pathname.startsWith('/match/');
 
   useEffect(() => {
@@ -203,25 +203,9 @@ function TopBar() {
     return () => clearInterval(id);
   }, []);
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const list = await window.api.upcomingSessionsList();
-        if (list.length === 0) {
-          setMarqueeText('');
-          return;
-        }
-        const recent = list.slice(0, 2);
-        const parts = recent.map(s => formatUpcoming(s));
-        setMarqueeText(`Next: ${parts.join('  ·  |  ·  ')}`);
-      } catch {
-        setMarqueeText('');
-      }
-    };
-    load();
-    const id = setInterval(load, 30000);
-    return () => clearInterval(id);
-  }, []);
+  const marqueeText = upcomingSessions.length > 0
+    ? `Next: ${upcomingSessions.slice(0, 2).map(s => formatUpcoming(s)).join('  ·  |  ·  ')}`
+    : '';
 
   const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   const dateStr = now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });

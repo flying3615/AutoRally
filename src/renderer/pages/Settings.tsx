@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useSessionStore } from '../stores/sessionStore';
 
 interface SettingsData {
   courtCount: string;
@@ -149,7 +150,7 @@ function SessionModal({ session, onClose, onSaved }: {
 export function Settings() {
   const [settings, setSettings] = useState<SettingsData>({ courtCount: '3', sessionFee: '30', gameDuration: '15' });
   const [saved, setSaved] = useState(false);
-  const [upcoming, setUpcoming] = useState<UpcomingSession[]>([]);
+  const { upcomingSessions: upcoming, refreshUpcoming } = useSessionStore();
   const [modalSession, setModalSession] = useState<UpcomingSession | null>(null);
   const [showAdd, setShowAdd] = useState(false);
 
@@ -161,17 +162,8 @@ export function Settings() {
         gameDuration: s.gameDuration ?? '15',
       });
     });
-    loadUpcoming();
+    refreshUpcoming();
   }, []);
-
-  const loadUpcoming = async () => {
-    try {
-      const list = await window.api.upcomingSessionsList();
-      setUpcoming(list);
-    } catch {
-      // IPC not available yet — retry on next interaction
-    }
-  };
 
   const handleSave = async () => {
     await window.api.settingsSet('courtCount', settings.courtCount);
@@ -183,7 +175,7 @@ export function Settings() {
 
   const handleDelete = async (id: string) => {
     await window.api.upcomingSessionsDelete(id);
-    loadUpcoming();
+    refreshUpcoming();
   };
 
   const formatDate = (dateStr: string, timeStr: string) => {
@@ -396,7 +388,7 @@ export function Settings() {
             onSaved={() => {
               setShowAdd(false);
               setModalSession(null);
-              loadUpcoming();
+              refreshUpcoming();
             }}
           />
         )}
