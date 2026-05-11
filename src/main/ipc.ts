@@ -29,18 +29,18 @@ export async function registerIpcHandlers() {
     return queryAll('SELECT p.*, COALESCE(b.balance, 0) as balance FROM players p LEFT JOIN balances b ON b.playerId = p.id ORDER BY p.name');
   });
 
-  ipcMain.handle('players:create', (_e, player: { name: string; gender: string; level: number; phone: string }) => {
+  ipcMain.handle('players:create', (_e, player: { name: string; gender: string; level: number; phone: string; email?: string }) => {
     const id = uuid();
     const joinDate = new Date().toISOString();
     const name = titleCase(player.name.trim());
-    run('INSERT INTO players (id, name, gender, level, phone, joinDate) VALUES (?, ?, ?, ?, ?, ?)',
-      [id, name, player.gender, player.level, player.phone, joinDate]);
+    run('INSERT INTO players (id, name, gender, level, phone, email, joinDate) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [id, name, player.gender, player.level, player.phone ?? '', player.email ?? '', joinDate]);
     run('INSERT INTO balances (id, playerId, balance, lastUpdated) VALUES (?, ?, 0, ?)',
       [uuid(), id, joinDate]);
-    return { id, name, gender: player.gender, level: player.level, phone: player.phone, joinDate };
+    return { id, name, gender: player.gender, level: player.level, phone: player.phone ?? '', email: player.email ?? '', joinDate };
   });
 
-  ipcMain.handle('players:update', (_e, id: string, data: { name?: string; gender?: string; level?: number; phone?: string }) => {
+  ipcMain.handle('players:update', (_e, id: string, data: { name?: string; gender?: string; level?: number; phone?: string; email?: string }) => {
     const sets: string[] = [];
     const vals: SqlValue[] = [];
     const formatted = { ...data };
@@ -321,13 +321,13 @@ export async function registerIpcHandlers() {
     });
     if (canceled || !filePath) return;
 
-    const players = queryAll<{ name: string; gender: string; level: number; phone: string; balance: number }>(
-      'SELECT p.name, p.gender, p.level, p.phone, COALESCE(b.balance, 0) as balance FROM players p LEFT JOIN balances b ON b.playerId = p.id ORDER BY p.name'
+    const players = queryAll<{ name: string; gender: string; level: number; phone: string; email: string; balance: number }>(
+      'SELECT p.name, p.gender, p.level, p.phone, p.email, COALESCE(b.balance, 0) as balance FROM players p LEFT JOIN balances b ON b.playerId = p.id ORDER BY p.name'
     );
 
-    const lines = ['姓名,性别,水平,电话,余额'];
+    const lines = ['姓名,性别,水平,电话,邮箱,余额'];
     for (const p of players) {
-      lines.push(`${p.name},${p.gender === 'male' ? '男' : '女'},${p.level},${p.phone},${p.balance}`);
+      lines.push(`${p.name},${p.gender === 'male' ? '男' : '女'},${p.level},${p.phone},${p.email ?? ''},${p.balance}`);
     }
     fs.writeFileSync(filePath, '﻿' + lines.join('\n'), 'utf-8');
   });
@@ -357,6 +357,7 @@ export async function registerIpcHandlers() {
     const nameIdx = cols.findIndex(c => c === 'name' || c === '姓名');
     const levelIdx = cols.findIndex(c => c === 'level' || c === '水平');
     const genderIdx = cols.findIndex(c => c === 'gender' || c === '性别');
+    const emailIdx = cols.findIndex(c => c === 'email' || c === '邮箱');
 
     if (levelIdx === -1 || genderIdx === -1) {
       return { imported: 0, skipped: 0, errors: ['CSV must have Level and Gender columns'] };
@@ -399,10 +400,12 @@ export async function registerIpcHandlers() {
           continue;
         }
 
+        const email = emailIdx !== -1 ? (parts[emailIdx] ?? '') : '';
+
         const id = uuid();
         const joinDate = new Date().toISOString();
-        run('INSERT INTO players (id, name, gender, level, phone, joinDate) VALUES (?, ?, ?, ?, ?, ?)',
-          [id, name, gender, level, '', joinDate]);
+        run('INSERT INTO players (id, name, gender, level, phone, email, joinDate) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [id, name, gender, level, '', email, joinDate]);
         run('INSERT INTO balances (id, playerId, balance, lastUpdated) VALUES (?, ?, ?, ?)',
           [uuid(), id, 0, joinDate]);
         existingNames.add(name.toLowerCase());

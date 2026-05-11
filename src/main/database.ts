@@ -61,6 +61,7 @@ function migrate(db: Database) {
       gender TEXT NOT NULL CHECK(gender IN ('male', 'female')),
       level INTEGER NOT NULL CHECK(level BETWEEN 1 AND 5),
       phone TEXT NOT NULL DEFAULT '',
+      email TEXT NOT NULL DEFAULT '',
       joinDate TEXT NOT NULL
     );
   `);
@@ -123,6 +124,7 @@ function migrate(db: Database) {
   db.run("INSERT OR IGNORE INTO settings (key, value) VALUES ('gameDuration', '15')");
 
   // Migrations for existing databases
+  try { db.run('ALTER TABLE players ADD COLUMN email TEXT NOT NULL DEFAULT \'\''); } catch (_) { /* already exists */ }
   try { db.run('ALTER TABLE attendance ADD COLUMN paused INTEGER NOT NULL DEFAULT 0'); } catch (_) { /* already exists */ }
   migrateGameTypeConstraint(db);
 
