@@ -100,17 +100,41 @@ function SessionModal({ session, onClose, onSaved }: {
           </div>
           <div>
             <label className="block text-xs font-semibold text-zinc-500 mb-1">Time</label>
-            <input
-              type="time"
-              value={time}
-              step="1800"
-              onChange={(e) => {
-                setTime(e.target.value);
-                setError(null);
-              }}
-              className="w-full px-3 py-2 text-sm border-2 border-zinc-200 rounded-xl
-                focus:outline-none focus:border-zinc-400 focus:ring-2 focus:ring-gray-100 transition-all"
-            />
+            <div className="flex gap-2">
+              <select
+                value={time ? time.split(':')[0] : ''}
+                onChange={(e) => {
+                  const h = e.target.value;
+                  const m = time ? time.split(':')[1] ?? '00' : '00';
+                  setTime(h ? `${h}:${m}` : '');
+                  setError(null);
+                }}
+                className="flex-1 px-3 py-2 text-sm border-2 border-zinc-200 rounded-xl
+                  focus:outline-none focus:border-zinc-400 focus:ring-2 focus:ring-gray-100 transition-all bg-white"
+              >
+                <option value="">Hour</option>
+                {Array.from({ length: 24 }, (_, i) => (
+                  <option key={i} value={String(i).padStart(2, '0')}>
+                    {String(i).padStart(2, '0')}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={time ? time.split(':')[1] ?? '' : ''}
+                onChange={(e) => {
+                  const m = e.target.value;
+                  const h = time ? time.split(':')[0] ?? '00' : '00';
+                  setTime(m ? `${h}:${m}` : '');
+                  setError(null);
+                }}
+                className="flex-1 px-3 py-2 text-sm border-2 border-zinc-200 rounded-xl
+                  focus:outline-none focus:border-zinc-400 focus:ring-2 focus:ring-gray-100 transition-all bg-white"
+              >
+                <option value="">Min</option>
+                <option value="00">00</option>
+                <option value="30">30</option>
+              </select>
+            </div>
           </div>
         </div>
 
