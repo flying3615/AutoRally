@@ -13,6 +13,7 @@ interface PlayerWithBalance {
   gender: string;
   level: number;
   phone: string;
+  email: string;
   joinDate: string;
   balance: number;
 }
