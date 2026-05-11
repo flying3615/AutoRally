@@ -119,6 +119,14 @@ function migrate(db: Database) {
       paymentType TEXT NOT NULL CHECK(paymentType IN ('session', 'topup'))
     );
   `);
+  db.run(`
+    CREATE TABLE IF NOT EXISTS upcoming_sessions (
+      id TEXT PRIMARY KEY,
+      date TEXT NOT NULL,
+      time TEXT NOT NULL DEFAULT '',
+      note TEXT NOT NULL DEFAULT ''
+    );
+  `);
   db.run("INSERT OR IGNORE INTO settings (key, value) VALUES ('courtCount', '4')");
   db.run("INSERT OR IGNORE INTO settings (key, value) VALUES ('sessionFee', '10')");
   db.run("INSERT OR IGNORE INTO settings (key, value) VALUES ('gameDuration', '15')");

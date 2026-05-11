@@ -423,6 +423,27 @@ export async function registerIpcHandlers() {
     return { imported, skipped, errors };
   });
 
+  // ── Upcoming Sessions ──
+  ipcMain.handle('upcomingSessions:list', () => {
+    return queryAll('SELECT * FROM upcoming_sessions ORDER BY date, time');
+  });
+
+  ipcMain.handle('upcomingSessions:create', (_e, data: { date: string; time: string; note: string }) => {
+    const id = uuid();
+    run('INSERT INTO upcoming_sessions (id, date, time, note) VALUES (?, ?, ?, ?)',
+      [id, data.date, data.time, data.note]);
+    return { id, ...data };
+  });
+
+  ipcMain.handle('upcomingSessions:update', (_e, id: string, data: { date: string; time: string; note: string }) => {
+    run('UPDATE upcoming_sessions SET date = ?, time = ?, note = ? WHERE id = ?',
+      [data.date, data.time, data.note, id]);
+  });
+
+  ipcMain.handle('upcomingSessions:delete', (_e, id: string) => {
+    run('DELETE FROM upcoming_sessions WHERE id = ?', [id]);
+  });
+
   // Ensure db reference is used
   void db;
 }

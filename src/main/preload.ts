@@ -56,6 +56,14 @@ const api = {
   balancesGet: (playerId: string) => ipcRenderer.invoke('balances:get', playerId),
   balancesListLow: (threshold: number) => ipcRenderer.invoke('balances:listLow', threshold),
 
+  // Upcoming Sessions
+  upcomingSessionsList: () => ipcRenderer.invoke('upcomingSessions:list') as Promise<{ id: string; date: string; time: string; note: string }[]>,
+  upcomingSessionsCreate: (data: { date: string; time: string; note: string }) =>
+    ipcRenderer.invoke('upcomingSessions:create', data),
+  upcomingSessionsUpdate: (id: string, data: { date: string; time: string; note: string }) =>
+    ipcRenderer.invoke('upcomingSessions:update', id, data),
+  upcomingSessionsDelete: (id: string) => ipcRenderer.invoke('upcomingSessions:delete', id),
+
   // History
   historyPlayerStats: (playerId: string) =>
     ipcRenderer.invoke('history:playerStats', playerId),

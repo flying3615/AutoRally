@@ -172,11 +172,30 @@ function StatusBar() {
   );
 }
 
+interface UpcomingSession {
+  id: string;
+  date: string;
+  time: string;
+  note: string;
+}
+
+function formatUpcoming(s: UpcomingSession): string {
+  const d = new Date(s.date + 'T00:00:00');
+  const datePart = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  const timePart = s.time
+    ? new Date('2000-01-01T' + s.time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+    : '';
+  let text = `${datePart}`;
+  if (timePart) text += ` at ${timePart}`;
+  if (s.note) text += ` — ${s.note}`;
+  return text;
+}
+
 function TopBar() {
   const location = useLocation();
   const navigate = useNavigate();
   const [now, setNow] = useState(new Date());
-  const [nextSession, setNextSession] = useState<{ date: string; time: string; note: string } | null>(null);
+  const [marqueeText, setMarqueeText] = useState('');
   const isSubpage = location.pathname.startsWith('/checkin/') || location.pathname.startsWith('/match/');
 
   useEffect(() => {
@@ -186,11 +205,17 @@ function TopBar() {
 
   useEffect(() => {
     const load = async () => {
-      const s = await window.api.settingsGetAll() as Record<string, string>;
-      if (s.nextSessionDate) {
-        setNextSession({ date: s.nextSessionDate, time: s.nextSessionTime ?? '', note: s.nextSessionNote ?? '' });
-      } else {
-        setNextSession(null);
+      try {
+        const list = await window.api.upcomingSessionsList();
+        if (list.length === 0) {
+          setMarqueeText('');
+          return;
+        }
+        const recent = list.slice(0, 2);
+        const parts = recent.map(s => formatUpcoming(s));
+        setMarqueeText(`Next: ${parts.join('  ·  |  ·  ')}`);
+      } catch {
+        setMarqueeText('');
       }
     };
     load();
@@ -200,21 +225,6 @@ function TopBar() {
 
   const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   const dateStr = now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-
-  const formatNextSession = () => {
-    if (!nextSession) return '';
-    const d = new Date(nextSession.date + 'T00:00:00');
-    const datePart = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-    const timePart = nextSession.time
-      ? new Date('2000-01-01T' + nextSession.time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
-      : '';
-    let text = `Next session: ${datePart}`;
-    if (timePart) text += ` at ${timePart}`;
-    if (nextSession.note) text += ` — ${nextSession.note}`;
-    return text;
-  };
-
-  const nextText = formatNextSession();
 
   return (
     <div className="flex items-center justify-between h-10 px-4 border-b border-zinc-200/60 bg-white/80 backdrop-blur-sm shrink-0 select-none"
@@ -234,12 +244,12 @@ function TopBar() {
         )}
       </div>
 
-      {/* Scrolling next-session text */}
-      {nextText && (
+      {/* Scrolling upcoming-sessions text */}
+      {marqueeText && (
         <div className="flex-1 mx-4 overflow-hidden relative">
           <div className="marquee-track text-[13px] font-medium text-emerald-600">
-            <span>{nextText}</span>
-            <span className="ml-16">{nextText}</span>
+            <span>{marqueeText}</span>
+            <span className="ml-16">{marqueeText}</span>
           </div>
         </div>
       )}

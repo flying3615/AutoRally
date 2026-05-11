@@ -4,9 +4,13 @@ interface SettingsData {
   courtCount: string;
   sessionFee: string;
   gameDuration: string;
-  nextSessionDate: string;
-  nextSessionTime: string;
-  nextSessionNote: string;
+}
+
+interface UpcomingSession {
+  id: string;
+  date: string;
+  time: string;
+  note: string;
 }
 
 const durations = [
@@ -18,12 +22,102 @@ const durations = [
   { value: '30', label: '30 min' },
 ];
 
+function SessionModal({ session, onClose, onSaved }: {
+  session: UpcomingSession | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const isEdit = session !== null;
+  const [date, setDate] = useState(session?.date ?? '');
+  const [time, setTime] = useState(session?.time ?? '');
+  const [note, setNote] = useState(session?.note ?? '');
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    if (!date) return;
+    setSaving(true);
+    try {
+      if (isEdit && session) {
+        await window.api.upcomingSessionsUpdate(session.id, { date, time, note });
+      } else {
+        await window.api.upcomingSessionsCreate({ date, time, note });
+      }
+      onSaved();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50" onClick={onClose}>
+      <div className="bg-white rounded-2xl p-6 w-[400px] max-w-[90vw]" onClick={e => e.stopPropagation()}
+        style={{ boxShadow: '0 24px 48px -12px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.04)', animation: 'ctxFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)' }}>
+        <h3 className="text-lg font-bold text-zinc-900 tracking-tight mb-4">
+          {isEdit ? 'Edit Session' : 'Add Session'}
+        </h3>
+
+        <div className="grid grid-cols-2 gap-3 mb-3">
+          <div>
+            <label className="block text-xs font-semibold text-zinc-500 mb-1">Date</label>
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="w-full px-3 py-2 text-sm border-2 border-zinc-200 rounded-xl
+                focus:outline-none focus:border-zinc-400 focus:ring-2 focus:ring-gray-100 transition-all"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-zinc-500 mb-1">Time</label>
+            <input
+              type="time"
+              value={time}
+              onChange={(e) => setTime(e.target.value)}
+              className="w-full px-3 py-2 text-sm border-2 border-zinc-200 rounded-xl
+                focus:outline-none focus:border-zinc-400 focus:ring-2 focus:ring-gray-100 transition-all"
+            />
+          </div>
+        </div>
+
+        <div className="mb-5">
+          <label className="block text-xs font-semibold text-zinc-500 mb-1">Note</label>
+          <input
+            type="text"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="e.g. Venue change, bring extra shuttlecocks"
+            maxLength={80}
+            className="w-full px-3 py-2 text-sm border-2 border-zinc-200 rounded-xl
+              focus:outline-none focus:border-zinc-400 focus:ring-2 focus:ring-gray-100 transition-all"
+          />
+        </div>
+
+        <div className="flex gap-2">
+          <button
+            onClick={handleSave}
+            disabled={saving || !date}
+            className="flex-1 h-10 text-sm font-semibold bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 active:scale-[0.97] transition-all disabled:opacity-50"
+          >
+            {saving ? 'Saving...' : isEdit ? 'Save Changes' : 'Add Session'}
+          </button>
+          <button
+            onClick={onClose}
+            className="h-10 px-5 text-sm font-medium text-zinc-500 hover:text-zinc-700 hover:bg-zinc-100 rounded-xl transition-all"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function Settings() {
-  const [settings, setSettings] = useState<SettingsData>({
-    courtCount: '3', sessionFee: '30', gameDuration: '15',
-    nextSessionDate: '', nextSessionTime: '', nextSessionNote: '',
-  });
+  const [settings, setSettings] = useState<SettingsData>({ courtCount: '3', sessionFee: '30', gameDuration: '15' });
   const [saved, setSaved] = useState(false);
+  const [upcoming, setUpcoming] = useState<UpcomingSession[]>([]);
+  const [modalSession, setModalSession] = useState<UpcomingSession | null>(null);
+  const [showAdd, setShowAdd] = useState(false);
 
   useEffect(() => {
     window.api.settingsGetAll().then((s: Record<string, string>) => {
@@ -31,22 +125,35 @@ export function Settings() {
         courtCount: s.courtCount ?? '3',
         sessionFee: s.sessionFee ?? '30',
         gameDuration: s.gameDuration ?? '15',
-        nextSessionDate: s.nextSessionDate ?? '',
-        nextSessionTime: s.nextSessionTime ?? '',
-        nextSessionNote: s.nextSessionNote ?? '',
       });
     });
+    loadUpcoming();
   }, []);
+
+  const loadUpcoming = async () => {
+    const list = await window.api.upcomingSessionsList();
+    setUpcoming(list);
+  };
 
   const handleSave = async () => {
     await window.api.settingsSet('courtCount', settings.courtCount);
     await window.api.settingsSet('sessionFee', settings.sessionFee);
     await window.api.settingsSet('gameDuration', settings.gameDuration);
-    await window.api.settingsSet('nextSessionDate', settings.nextSessionDate);
-    await window.api.settingsSet('nextSessionTime', settings.nextSessionTime);
-    await window.api.settingsSet('nextSessionNote', settings.nextSessionNote);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
+  };
+
+  const handleDelete = async (id: string) => {
+    await window.api.upcomingSessionsDelete(id);
+    loadUpcoming();
+  };
+
+  const formatDate = (dateStr: string, timeStr: string) => {
+    const d = new Date(dateStr + 'T00:00:00');
+    const datePart = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    if (!timeStr) return datePart;
+    const timePart = new Date('2000-01-01T' + timeStr).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    return `${datePart} at ${timePart}`;
   };
 
   return (
@@ -56,7 +163,7 @@ export function Settings() {
         {/* Header */}
         <div className="mb-8">
           <h2 className="text-xl font-bold text-zinc-900 tracking-tight">Settings</h2>
-          <p className="text-sm text-zinc-400 mt-0.5">Match parameters and fee configuration</p>
+          <p className="text-sm text-zinc-400 mt-0.5">Match parameters, fee configuration, and upcoming sessions</p>
         </div>
 
         {/* Court Count */}
@@ -151,51 +258,8 @@ export function Settings() {
           <p className="text-xs text-zinc-400 mt-2.5">Auto-deducted from balance on check-in</p>
         </div>
 
-        {/* Next Session */}
-        <div className="mb-10">
-          <label className="block text-[11px] font-semibold text-zinc-400 uppercase tracking-wider mb-3">Next Session</label>
-          <p className="text-xs text-zinc-400 mb-4">Schedule an upcoming session to display in the header bar</p>
-
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            <div>
-              <label className="block text-xs font-semibold text-zinc-500 mb-1.5">Date</label>
-              <input
-                type="date"
-                value={settings.nextSessionDate}
-                onChange={(e) => setSettings({ ...settings, nextSessionDate: e.target.value })}
-                className="w-full px-3 py-2.5 text-sm border-2 border-zinc-200 rounded-xl
-                  focus:outline-none focus:border-zinc-400 focus:ring-2 focus:ring-gray-100 transition-all"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-zinc-500 mb-1.5">Time</label>
-              <input
-                type="time"
-                value={settings.nextSessionTime}
-                onChange={(e) => setSettings({ ...settings, nextSessionTime: e.target.value })}
-                className="w-full px-3 py-2.5 text-sm border-2 border-zinc-200 rounded-xl
-                  focus:outline-none focus:border-zinc-400 focus:ring-2 focus:ring-gray-100 transition-all"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-zinc-500 mb-1.5">Note</label>
-            <input
-              type="text"
-              value={settings.nextSessionNote}
-              onChange={(e) => setSettings({ ...settings, nextSessionNote: e.target.value })}
-              placeholder="e.g. Venue change, bring extra shuttlecocks"
-              maxLength={80}
-              className="w-full px-3 py-2.5 text-sm border-2 border-zinc-200 rounded-xl
-                focus:outline-none focus:border-zinc-400 focus:ring-2 focus:ring-gray-100 transition-all"
-            />
-            <p className="text-xs text-zinc-400 mt-1.5">Max 80 characters — displayed as scrolling text in the header</p>
-          </div>
-        </div>
-
         {/* Save */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 mb-10">
           <button
             onClick={handleSave}
             className="h-10 px-6 text-sm font-semibold bg-zinc-900 text-white rounded-xl
@@ -212,6 +276,92 @@ export function Settings() {
             </span>
           )}
         </div>
+
+        {/* Upcoming Sessions */}
+        <div className="border-t border-zinc-200 pt-10">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-lg font-bold text-zinc-900 tracking-tight">Upcoming Sessions</h3>
+              <p className="text-sm text-zinc-400 mt-0.5">Scheduled sessions displayed as scrolling text in the header bar</p>
+            </div>
+            <button
+              onClick={() => setShowAdd(true)}
+              className="h-9 px-4 text-sm font-semibold bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 active:scale-[0.97] shadow-[0_2px_8px_-2px_rgba(0,0,0,0.15)] transition-all inline-flex items-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+              </svg>
+              Add Session
+            </button>
+          </div>
+
+          {upcoming.length === 0 ? (
+            <div className="text-center py-8 bg-white border-2 border-dashed border-zinc-200 rounded-2xl">
+              <p className="text-sm text-zinc-400">No upcoming sessions scheduled</p>
+            </div>
+          ) : (
+            <div className="bg-white border border-zinc-200/60 rounded-2xl overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-zinc-100">
+                    <th className="text-left px-5 py-3 text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">Date & Time</th>
+                    <th className="text-left px-5 py-3 text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">Note</th>
+                    <th className="w-20 px-5 py-3"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {upcoming.map(s => (
+                    <tr key={s.id} className="border-b border-zinc-50 last:border-0 hover:bg-zinc-50/50 transition-colors">
+                      <td className="px-5 py-3 font-medium text-zinc-800 tabular-nums">{formatDate(s.date, s.time)}</td>
+                      <td className="px-5 py-3 text-zinc-500">{s.note || '—'}</td>
+                      <td className="px-5 py-3">
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => {
+                              setModalSession(s);
+                              setShowAdd(true);
+                            }}
+                            className="p-1.5 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 rounded-lg transition-all"
+                            title="Edit"
+                          >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={() => handleDelete(s.id)}
+                            className="p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                            title="Delete"
+                          >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                            </svg>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* Modal */}
+        {showAdd && (
+          <SessionModal
+            session={modalSession}
+            onClose={() => {
+              setShowAdd(false);
+              setModalSession(null);
+            }}
+            onSaved={() => {
+              setShowAdd(false);
+              setModalSession(null);
+              loadUpcoming();
+            }}
+          />
+        )}
       </div>
     </div>
   );
