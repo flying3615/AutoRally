@@ -128,7 +128,8 @@ export function Dashboard() {
           </div>
           <button
             onClick={() => setShowCreate(true)}
-            className="h-9 px-4 text-sm font-medium bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 active:scale-[0.97] shadow-[0_2px_8px_-2px_rgba(0,0,0,0.15)] transition-all inline-flex items-center gap-2"
+            disabled={!!s.activeSession}
+            className="h-9 px-4 text-sm font-medium bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 active:scale-[0.97] shadow-[0_2px_8px_-2px_rgba(0,0,0,0.15)] transition-all inline-flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
