@@ -286,6 +286,88 @@ export async function registerIpcHandlers() {
     fs.writeFileSync(filePath, '﻿' + lines.join('\n'), 'utf-8');
   });
 
+  // ── Import ──
+  ipcMain.handle('players:importCsv', async () => {
+    const win = BrowserWindow.getFocusedWindow();
+    if (!win) return { imported: 0, skipped: 0, errors: [] as string[] };
+
+    const { filePaths, canceled } = await dialog.showOpenDialog(win, {
+      title: 'Import Players from CSV',
+      filters: [{ name: 'CSV', extensions: ['csv'] }],
+      properties: ['openFile'],
+    });
+    if (canceled || filePaths.length === 0) return { imported: 0, skipped: 0, errors: [] as string[] };
+
+    const filePath = filePaths[0]!;
+    const content = fs.readFileSync(filePath, 'utf-8');
+    const lines = content.trim().split('\n').map(l => l.trim()).filter(Boolean);
+    if (lines.length < 2) return { imported: 0, skipped: 0, errors: ['CSV file is empty or has no data rows'] };
+
+    // Detect header: look for columns by name
+    const header = lines[0]!.toLowerCase();
+    const cols = header.split(',').map(c => c.trim());
+    const firstNameIdx = cols.findIndex(c => c.includes('first') && c.includes('name'));
+    const lastNameIdx = cols.findIndex(c => c.includes('last') && c.includes('name'));
+    const nameIdx = cols.findIndex(c => c === 'name' || c === '姓名');
+    const levelIdx = cols.findIndex(c => c === 'level' || c === '水平');
+    const genderIdx = cols.findIndex(c => c === 'gender' || c === '性别');
+
+    if (levelIdx === -1 || genderIdx === -1) {
+      return { imported: 0, skipped: 0, errors: ['CSV must have Level and Gender columns'] };
+    }
+    const hasNameCol = nameIdx !== -1 || (firstNameIdx !== -1 && lastNameIdx !== -1);
+
+    if (!hasNameCol) {
+      return { imported: 0, skipped: 0, errors: ['CSV must have Name column, or First name + Last name columns'] };
+    }
+
+    // Check existing names
+    const existing = queryAll<{ name: string }>('SELECT name FROM players');
+    const existingNames = new Set(existing.map(p => p.name.toLowerCase()));
+
+    let imported = 0;
+    let skipped = 0;
+    const errors: string[] = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const parts = lines[i]!.split(',').map(c => c.trim());
+      try {
+        let name: string;
+        if (nameIdx !== -1) {
+          name = parts[nameIdx]!;
+        } else {
+          name = [parts[firstNameIdx], parts[lastNameIdx]].filter(Boolean).join(' ').trim();
+        }
+        const level = Number(parts[levelIdx]);
+        const genderRaw = parts[genderIdx]!.toLowerCase();
+        const gender = genderRaw === 'male' || genderRaw === '男' ? 'male' : 'female';
+
+        if (!name || isNaN(level) || level < 1 || level > 5) {
+          errors.push(`Row ${i + 1}: invalid name or level`);
+          continue;
+        }
+
+        if (existingNames.has(name.toLowerCase())) {
+          skipped++;
+          continue;
+        }
+
+        const id = uuid();
+        const joinDate = new Date().toISOString();
+        run('INSERT INTO players (id, name, gender, level, phone, joinDate) VALUES (?, ?, ?, ?, ?, ?)',
+          [id, name, gender, level, '', joinDate]);
+        run('INSERT INTO balances (id, playerId, balance, lastUpdated) VALUES (?, ?, ?, ?)',
+          [uuid(), id, 0, joinDate]);
+        existingNames.add(name.toLowerCase());
+        imported++;
+      } catch {
+        errors.push(`Row ${i + 1}: failed to parse`);
+      }
+    }
+
+    return { imported, skipped, errors };
+  });
+
   // Ensure db reference is used
   void db;
 }

@@ -187,6 +187,8 @@ function ActionsCell({ data }: ICellRendererParams<PlayerWithBalance>) {
 export function Players() {
   const [players, setPlayers] = useState<PlayerWithBalance[]>([]);
   const [showForm, setShowForm] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<{ imported: number; skipped: number; errors: string[] } | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({ name: '', gender: 'male', level: 3, phone: '' });
   const [topupPlayer, setTopupPlayer] = useState<string | null>(null);
@@ -304,6 +306,20 @@ export function Players() {
               />
             </div>
             <button
+              onClick={async () => {
+                setImporting(true);
+                setImportResult(null);
+                const result = await window.api.playersImportCsv();
+                setImportResult(result);
+                setImporting(false);
+                if (result.imported > 0) load();
+              }}
+              disabled={importing}
+              className="h-8 px-3 text-sm font-medium text-zinc-600 bg-white border border-zinc-200 rounded-lg hover:bg-zinc-50 active:scale-[0.97] transition-all inline-flex items-center justify-center disabled:opacity-50"
+            >
+              {importing ? 'Importing...' : 'Import CSV'}
+            </button>
+            <button
               onClick={() => { setShowForm(true); setEditingId(null); setForm({ name: '', gender: 'male', level: 3, phone: '' }); }}
               className="h-8 px-4 text-sm font-medium bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 active:scale-[0.97] shadow-[0_2px_8px_-2px_rgba(0,0,0,0.2)] transition-all inline-flex items-center justify-center"
             >
@@ -385,6 +401,41 @@ export function Players() {
                 Cancel
               </button>
             </div>
+          </div>
+        )}
+
+        {/* Import result notification */}
+        {importResult && (
+          <div className={`mb-4 rounded-xl border p-4 text-sm ${
+            importResult.errors.length > 0
+              ? 'bg-amber-50 border-amber-200 text-amber-800'
+              : 'bg-emerald-50 border-emerald-200 text-emerald-800'
+          }`}>
+            <div className="flex items-center gap-2 mb-2">
+              {importResult.errors.length > 0 ? (
+                <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                </svg>
+              ) : (
+                <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              )}
+              <span className="font-semibold">
+                Imported <strong>{importResult.imported}</strong> players
+                {importResult.skipped > 0 && <>, skipped <strong>{importResult.skipped}</strong> duplicates</>}
+              </span>
+              <button onClick={() => setImportResult(null)} className="ml-auto text-zinc-400 hover:text-zinc-600">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            {importResult.errors.length > 0 && (
+              <ul className="text-xs mt-1 space-y-0.5 text-amber-700">
+                {importResult.errors.map((e, i) => <li key={i}>{e}</li>)}
+              </ul>
+            )}
           </div>
         )}
 
