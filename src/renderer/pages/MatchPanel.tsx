@@ -858,9 +858,9 @@ export function MatchPanel() {
 
       {/* === LEFT: Match Area === */}
       <div className="flex-1 overflow-auto relative">
-        <div className="p-4">
+        <div className="p-4 min-h-full flex flex-col">
           {/* Compact Header */}
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center justify-between mb-3 shrink-0">
             <div className="flex items-center gap-3">
               <h2 className="text-lg font-bold text-zinc-900 tracking-tight">Match Panel</h2>
               <span className="w-px h-4 bg-zinc-200" />
@@ -986,9 +986,9 @@ export function MatchPanel() {
 
           {/* Active Games */}
           {activeGames.length > 0 && (
-            <div className="mb-4">
-              <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">In Progress</h3>
-              <div className="grid grid-cols-2 gap-3">
+            <div className="flex-1 min-h-0 mb-4 flex flex-col">
+              <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2 shrink-0">In Progress</h3>
+              <div className="grid grid-cols-2 gap-3 flex-1 min-h-0" style={{ gridTemplateRows: '1fr 1fr' }}>
                 {activeGames.map(g => {
                   const timer = timers.get(g.courtNumber);
                   const isWarning = timer?.phase === 'warning';
@@ -998,7 +998,7 @@ export function MatchPanel() {
                   return (
                     <div
                       key={g.id}
-                      className="rounded-2xl border p-6 relative"
+                      className="rounded-2xl border p-6 relative h-full flex items-center"
                       style={{
                         backgroundColor: isPaused ? '#f5f5f4' : isEnded ? '#fef2f2' : isWarning ? '#fffbeb' : '#f0fdf4',
                         borderColor: isPaused ? '#d6d3d1' : isEnded ? '#fecaca' : isWarning ? '#fde68a' : '#bbf7d0',
@@ -1017,8 +1017,8 @@ export function MatchPanel() {
                         </div>
                       )}
 
-                      <div className="grid gap-1" style={{ gridTemplateColumns: '1fr auto 1fr', gridTemplateRows: '1fr 1fr' }}>
-                        <div className="flex items-center justify-center min-w-0">
+                      <div className="grid gap-1 w-full h-full" style={{ gridTemplateColumns: '1fr auto 1fr', gridTemplateRows: '1fr 1fr' }}>
+                        <div className="flex items-center justify-center min-w-0 h-full">
                           <PlayerTag name={g.t1p1Name} gender={g.t1p1Gender} level={g.t1p1Level} playerId={g.team1Player1Id} onContextMenu={handlePlayerContextMenu} paused={pausedPlayerIds.has(g.team1Player1Id)} checkedOut={checkedOutPlayerIds.has(g.team1Player1Id)} />
                         </div>
 
@@ -1029,15 +1029,15 @@ export function MatchPanel() {
                           <div className="w-px flex-1 bg-zinc-200/60" />
                         </div>
 
-                        <div className="flex items-center justify-center min-w-0">
+                        <div className="flex items-center justify-center min-w-0 h-full">
                           <PlayerTag name={g.t2p1Name} gender={g.t2p1Gender} level={g.t2p1Level} playerId={g.team2Player1Id} onContextMenu={handlePlayerContextMenu} paused={pausedPlayerIds.has(g.team2Player1Id)} checkedOut={checkedOutPlayerIds.has(g.team2Player1Id)} />
                         </div>
 
-                        <div className="flex items-center justify-center min-w-0" style={{ gridRow: '2', gridColumn: '1' }}>
+                        <div className="flex items-center justify-center min-w-0 h-full" style={{ gridRow: '2', gridColumn: '1' }}>
                           <PlayerTag name={g.t1p2Name} gender={g.t1p2Gender} level={g.t1p2Level} playerId={g.team1Player2Id} onContextMenu={handlePlayerContextMenu} paused={pausedPlayerIds.has(g.team1Player2Id)} checkedOut={checkedOutPlayerIds.has(g.team1Player2Id)} />
                         </div>
 
-                        <div className="flex items-center justify-center min-w-0" style={{ gridRow: '2', gridColumn: '3' }}>
+                        <div className="flex items-center justify-center min-w-0 h-full" style={{ gridRow: '2', gridColumn: '3' }}>
                           <PlayerTag name={g.t2p2Name} gender={g.t2p2Gender} level={g.t2p2Level} playerId={g.team2Player2Id} onContextMenu={handlePlayerContextMenu} paused={pausedPlayerIds.has(g.team2Player2Id)} checkedOut={checkedOutPlayerIds.has(g.team2Player2Id)} />
                         </div>
                       </div>
@@ -1050,19 +1050,19 @@ export function MatchPanel() {
 
           {/* Pending Games — hidden during warning (shown as overlay) */}
           {pendingGames.length > 0 && !isWarning && (
-            <div className="mb-4">
-              <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">
+            <div className="flex-1 min-h-0 mb-4 flex flex-col">
+              <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2 shrink-0">
                 {activeGames.length > 0 ? 'Next Round' : 'Pending'}
               </h3>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-3 flex-1 min-h-0" style={{ gridTemplateRows: '1fr 1fr' }}>
                 {pendingGames.map(g => (
                   <div
                     key={g.id}
-                    className="bg-white rounded-2xl border border-zinc-200/70 p-5"
+                    className="bg-white rounded-2xl border border-zinc-200/70 p-5 h-full flex items-center"
                     style={{ boxShadow: '0 2px 12px -4px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.02)' }}
                   >
-                    <div className="grid gap-1" style={{ gridTemplateColumns: '1fr auto 1fr', gridTemplateRows: '1fr 1fr' }}>
-                      <div className="flex items-center justify-center min-w-0">
+                    <div className="grid gap-1 w-full h-full" style={{ gridTemplateColumns: '1fr auto 1fr', gridTemplateRows: '1fr 1fr' }}>
+                      <div className="flex items-center justify-center min-w-0 h-full">
                         <DropSlot gameId={g.id} slot="team1Player1Id" playerId={g.team1Player1Id} onDropPlayer={handleDropPlayer}>
                           <PlayerTag name={g.t1p1Name} gender={g.t1p1Gender} level={g.t1p1Level} playerId={g.team1Player1Id} onContextMenu={handlePlayerContextMenu} paused={pausedPlayerIds.has(g.team1Player1Id)} checkedOut={checkedOutPlayerIds.has(g.team1Player1Id)} />
                         </DropSlot>
@@ -1073,17 +1073,17 @@ export function MatchPanel() {
                         <span className="text-[10px] font-bold text-zinc-300">VS</span>
                         <div className="w-px flex-1 bg-zinc-200/60" />
                       </div>
-                      <div className="flex items-center justify-center min-w-0">
+                      <div className="flex items-center justify-center min-w-0 h-full">
                         <DropSlot gameId={g.id} slot="team2Player1Id" playerId={g.team2Player1Id} onDropPlayer={handleDropPlayer}>
                           <PlayerTag name={g.t2p1Name} gender={g.t2p1Gender} level={g.t2p1Level} playerId={g.team2Player1Id} onContextMenu={handlePlayerContextMenu} paused={pausedPlayerIds.has(g.team2Player1Id)} checkedOut={checkedOutPlayerIds.has(g.team2Player1Id)} />
                         </DropSlot>
                       </div>
-                      <div className="flex items-center justify-center min-w-0" style={{ gridRow: '2', gridColumn: '1' }}>
+                      <div className="flex items-center justify-center min-w-0 h-full" style={{ gridRow: '2', gridColumn: '1' }}>
                         <DropSlot gameId={g.id} slot="team1Player2Id" playerId={g.team1Player2Id} onDropPlayer={handleDropPlayer}>
                           <PlayerTag name={g.t1p2Name} gender={g.t1p2Gender} level={g.t1p2Level} playerId={g.team1Player2Id} onContextMenu={handlePlayerContextMenu} paused={pausedPlayerIds.has(g.team1Player2Id)} checkedOut={checkedOutPlayerIds.has(g.team1Player2Id)} />
                         </DropSlot>
                       </div>
-                      <div className="flex items-center justify-center min-w-0" style={{ gridRow: '2', gridColumn: '3' }}>
+                      <div className="flex items-center justify-center min-w-0 h-full" style={{ gridRow: '2', gridColumn: '3' }}>
                         <DropSlot gameId={g.id} slot="team2Player2Id" playerId={g.team2Player2Id} onDropPlayer={handleDropPlayer}>
                           <PlayerTag name={g.t2p2Name} gender={g.t2p2Gender} level={g.t2p2Level} playerId={g.team2Player2Id} onContextMenu={handlePlayerContextMenu} paused={pausedPlayerIds.has(g.team2Player2Id)} checkedOut={checkedOutPlayerIds.has(g.team2Player2Id)} />
                         </DropSlot>
@@ -1124,11 +1124,11 @@ export function MatchPanel() {
                 {pendingGames.map(g => (
                   <div
                     key={g.id}
-                    className="bg-white/95 rounded-2xl border border-amber-200/60 p-6 flex items-center"
+                    className="bg-white/95 rounded-2xl border border-amber-200/60 p-6 h-full flex items-center"
                     style={{ boxShadow: '0 8px 30px -8px rgba(234,179,8,0.25)' }}
                   >
-                    <div className="grid gap-1" style={{ gridTemplateColumns: '1fr auto 1fr', gridTemplateRows: '1fr 1fr' }}>
-                      <div className="flex items-center justify-center min-w-0">
+                    <div className="grid gap-1 w-full h-full" style={{ gridTemplateColumns: '1fr auto 1fr', gridTemplateRows: '1fr 1fr' }}>
+                      <div className="flex items-center justify-center min-w-0 h-full">
                         <PlayerTag name={g.t1p1Name} gender={g.t1p1Gender} level={g.t1p1Level} playerId={g.team1Player1Id} onContextMenu={handlePlayerContextMenu} paused={pausedPlayerIds.has(g.team1Player1Id)} checkedOut={checkedOutPlayerIds.has(g.team1Player1Id)} />
                       </div>
                       <div className="flex flex-col items-center justify-center gap-1 px-1 row-span-2" style={{ gridRow: '1 / 3', gridColumn: '2' }}>
@@ -1137,13 +1137,13 @@ export function MatchPanel() {
                         <span className="text-[10px] font-bold text-amber-400">VS</span>
                         <div className="w-px flex-1 bg-amber-200/60" />
                       </div>
-                      <div className="flex items-center justify-center min-w-0">
+                      <div className="flex items-center justify-center min-w-0 h-full">
                         <PlayerTag name={g.t2p1Name} gender={g.t2p1Gender} level={g.t2p1Level} playerId={g.team2Player1Id} onContextMenu={handlePlayerContextMenu} paused={pausedPlayerIds.has(g.team2Player1Id)} checkedOut={checkedOutPlayerIds.has(g.team2Player1Id)} />
                       </div>
-                      <div className="flex items-center justify-center min-w-0" style={{ gridRow: '2', gridColumn: '1' }}>
+                      <div className="flex items-center justify-center min-w-0 h-full" style={{ gridRow: '2', gridColumn: '1' }}>
                         <PlayerTag name={g.t1p2Name} gender={g.t1p2Gender} level={g.t1p2Level} playerId={g.team1Player2Id} onContextMenu={handlePlayerContextMenu} paused={pausedPlayerIds.has(g.team1Player2Id)} checkedOut={checkedOutPlayerIds.has(g.team1Player2Id)} />
                       </div>
-                      <div className="flex items-center justify-center min-w-0" style={{ gridRow: '2', gridColumn: '3' }}>
+                      <div className="flex items-center justify-center min-w-0 h-full" style={{ gridRow: '2', gridColumn: '3' }}>
                         <PlayerTag name={g.t2p2Name} gender={g.t2p2Gender} level={g.t2p2Level} playerId={g.team2Player2Id} onContextMenu={handlePlayerContextMenu} paused={pausedPlayerIds.has(g.team2Player2Id)} checkedOut={checkedOutPlayerIds.has(g.team2Player2Id)} />
                       </div>
                     </div>
