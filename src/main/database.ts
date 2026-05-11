@@ -119,7 +119,7 @@ function migrate(db: Database) {
     );
   `);
   db.run("INSERT OR IGNORE INTO settings (key, value) VALUES ('courtCount', '4')");
-  db.run("INSERT OR IGNORE INTO settings (key, value) VALUES ('sessionFee', '30')");
+  db.run("INSERT OR IGNORE INTO settings (key, value) VALUES ('sessionFee', '10')");
   db.run("INSERT OR IGNORE INTO settings (key, value) VALUES ('gameDuration', '15')");
 
   // Migrations for existing databases

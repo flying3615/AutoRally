@@ -35,7 +35,7 @@ async function seed() {
     CREATE TABLE balances (id TEXT PRIMARY KEY, playerId TEXT NOT NULL UNIQUE REFERENCES players(id), balance REAL NOT NULL DEFAULT 0, lastUpdated TEXT NOT NULL);
     CREATE TABLE payments (id TEXT PRIMARY KEY, playerId TEXT NOT NULL REFERENCES players(id), sessionId TEXT REFERENCES sessions(id), amount REAL NOT NULL, status TEXT NOT NULL, paidDate TEXT, paymentType TEXT NOT NULL);
     INSERT INTO settings (key, value) VALUES ('courtCount', '4');
-    INSERT INTO settings (key, value) VALUES ('sessionFee', '30');
+    INSERT INTO settings (key, value) VALUES ('sessionFee', '10');
     INSERT INTO settings (key, value) VALUES ('gameDuration', '15');
   `);
 
@@ -120,9 +120,9 @@ async function seed() {
   // Payments for completed session
   for (let i = 0; i < attendedS1.length; i++) {
     const p = attendedS1[i]!;
-    const paid = p.balance >= 30 || i < 12;
+    const paid = p.balance >= 10 || i < 12;
     db.run('INSERT INTO payments (id, playerId, sessionId, amount, status, paidDate, paymentType) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [`py${p.id}_s1`, p.id, sessionId1, 30, paid ? 'paid' : 'unpaid',
+      [`py${p.id}_s1`, p.id, sessionId1, 10, paid ? 'paid' : 'unpaid',
        paid ? isoStr(lastWeekDate, 9, i) : null, 'session']);
   }
 
@@ -140,14 +140,14 @@ async function seed() {
       [`a${p.id}_s2`, p.id, sessionId2, checkinTime]);
 
     // Auto-deduct from balance
-    if (p.balance >= 30) {
-      db.run('UPDATE balances SET balance = balance - 30, lastUpdated = ? WHERE playerId = ?',
+    if (p.balance >= 10) {
+      db.run('UPDATE balances SET balance = balance - 10, lastUpdated = ? WHERE playerId = ?',
         [checkinTime, p.id]);
       db.run('INSERT INTO payments (id, playerId, sessionId, amount, status, paidDate, paymentType) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [`py${p.id}_s2`, p.id, sessionId2, 30, 'paid', checkinTime, 'session']);
+        [`py${p.id}_s2`, p.id, sessionId2, 10, 'paid', checkinTime, 'session']);
     } else {
       db.run('INSERT INTO payments (id, playerId, sessionId, amount, status, paidDate, paymentType) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [`py${p.id}_s2`, p.id, sessionId2, 30, 'unpaid', null, 'session']);
+        [`py${p.id}_s2`, p.id, sessionId2, 10, 'unpaid', null, 'session']);
     }
   }
 

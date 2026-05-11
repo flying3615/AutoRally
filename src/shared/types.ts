@@ -63,6 +63,6 @@ export interface Settings {
 
 export const DEFAULT_SETTINGS: Settings = {
   courtCount: 3,
-  sessionFee: 30,
+  sessionFee: 10,
   gameDuration: 15,
 };
