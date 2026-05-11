@@ -54,6 +54,10 @@ const navItems = [
 
 function Sidebar() {
   const location = useLocation();
+  const { activeSession } = useSessionStore();
+  const [pinned, setPinned] = useState(false);
+  const [hovered, setHovered] = useState(false);
+  const expanded = pinned || hovered;
 
   const isActive = (to: string) => {
     if (to === '/') return location.pathname === '/';
@@ -61,10 +65,15 @@ function Sidebar() {
   };
 
   const isSessionSubpage = location.pathname.startsWith('/checkin/') || location.pathname.startsWith('/match/');
+  const isCheckinActive = location.pathname.startsWith('/checkin/');
+  const isMatchActive = location.pathname.startsWith('/match/');
 
   return (
-    <nav className="group flex flex-col shrink-0 bg-white border-r border-zinc-200/60 overflow-hidden transition-all duration-200 ease-[cubic-bezier(0.25,0.1,0.25,1)] w-[52px] hover:w-[192px]"
-      style={{ WebkitAppRegion: 'drag' } as any}
+    <nav
+      className="flex flex-col shrink-0 bg-white border-r border-zinc-200/60 overflow-hidden transition-all duration-200 ease-[cubic-bezier(0.25,0.1,0.25,1)]"
+      style={{ width: expanded ? 192 : 52, WebkitAppRegion: 'drag' } as any}
+      onMouseEnter={() => !pinned && setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
     >
       {/* Header */}
       <div className="flex items-center h-11 px-3.5 shrink-0 border-b border-zinc-100">
@@ -73,7 +82,7 @@ function Sidebar() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M15.362 5.214A8.252 8.252 0 0112 21 8.25 8.25 0 016.038 7.048 8.287 8.287 0 009 9.6a8.983 8.983 0 013.361-6.867 8.21 8.21 0 003 2.48z" />
           </svg>
         </div>
-        <span className="ml-2.5 text-[15px] font-semibold text-zinc-900 tracking-tight whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+        <span className={`ml-2.5 text-[15px] font-semibold text-zinc-900 tracking-tight whitespace-nowrap transition-opacity duration-200 ${expanded ? 'opacity-100' : 'opacity-0'}`}>
           AutoRally
         </span>
       </div>
@@ -85,22 +94,79 @@ function Sidebar() {
             ? isActive('/sessions') || isSessionSubpage
             : isActive(item.to);
           return (
-            <Link
-              key={item.to}
-              to={item.to}
-              className={`flex items-center h-9 mx-1.5 px-2 rounded-lg transition-all duration-150 ${
-                active
-                  ? 'bg-zinc-800 text-white shadow-[0_1px_3px_rgba(0,0,0,0.1)]'
-                  : 'text-zinc-400 hover:bg-zinc-50 hover:text-zinc-600'
-              }`}
-            >
-              <span className="shrink-0">{item.icon}</span>
-              <span className="ml-2.5 text-sm font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                {item.label}
-              </span>
-            </Link>
+            <div key={item.to}>
+              <Link
+                to={item.to}
+                className={`flex items-center h-9 mx-1.5 px-2 rounded-lg transition-all duration-150 ${
+                  active
+                    ? 'bg-zinc-800 text-white shadow-[0_1px_3px_rgba(0,0,0,0.1)]'
+                    : 'text-zinc-400 hover:bg-zinc-50 hover:text-zinc-600'
+                }`}
+              >
+                <span className="shrink-0">{item.icon}</span>
+                <span className={`ml-2.5 text-sm font-medium whitespace-nowrap transition-opacity duration-200 ${expanded ? 'opacity-100' : 'opacity-0'}`}>
+                  {item.label}
+                </span>
+              </Link>
+
+              {/* Sub-items under Sessions when active */}
+              {item.to === '/sessions' && activeSession && (
+                <div className={`mt-0.5 space-y-0.5 overflow-hidden transition-all duration-200 ${expanded ? 'max-h-20' : 'max-h-0'}`}>
+                  <Link
+                    to={`/checkin/${activeSession.id}`}
+                    className={`flex items-center h-8 mx-1.5 pl-5 pr-2 rounded-lg text-[13px] transition-all duration-150 ${
+                      isCheckinActive
+                        ? 'bg-zinc-100 text-zinc-900 font-medium'
+                        : 'text-zinc-400 hover:bg-zinc-50 hover:text-zinc-600'
+                    }`}
+                  >
+                    <svg className="w-[14px] h-[14px] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span className={`ml-1.5 whitespace-nowrap transition-opacity duration-200 ${expanded ? 'opacity-100' : 'opacity-0'}`}>
+                      Check-in
+                    </span>
+                  </Link>
+                  <Link
+                    to={`/match/${activeSession.id}`}
+                    className={`flex items-center h-8 mx-1.5 pl-5 pr-2 rounded-lg text-[13px] transition-all duration-150 ${
+                      isMatchActive
+                        ? 'bg-zinc-100 text-zinc-900 font-medium'
+                        : 'text-zinc-400 hover:bg-zinc-50 hover:text-zinc-600'
+                    }`}
+                  >
+                    <svg className="w-[14px] h-[14px] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.362 5.214A8.252 8.252 0 0112 21 8.25 8.25 0 016.038 7.048 8.287 8.287 0 009 9.6a8.983 8.983 0 013.361-6.867 8.21 8.21 0 003 2.48z" />
+                    </svg>
+                    <span className={`ml-1.5 whitespace-nowrap transition-opacity duration-200 ${expanded ? 'opacity-100' : 'opacity-0'}`}>
+                      Match Panel
+                    </span>
+                  </Link>
+                </div>
+              )}
+            </div>
           );
         })}
+      </div>
+
+      {/* Pin toggle */}
+      <div className="shrink-0 border-t border-zinc-100 py-1.5 px-2 flex justify-center" style={{ WebkitAppRegion: 'no-drag' } as any}>
+        <button
+          onClick={() => setPinned(p => !p)}
+          className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all active:scale-90 ${
+            pinned
+              ? 'bg-zinc-800 text-white shadow-[0_1px_3px_rgba(0,0,0,0.1)]'
+              : 'text-zinc-400 hover:bg-zinc-50 hover:text-zinc-600'
+          }`}
+          title={pinned ? 'Unpin sidebar' : 'Pin sidebar'}
+        >
+          <svg
+            className={`w-4 h-4 transition-transform duration-200 ${pinned ? '' : '-rotate-45'}`}
+            fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+          </svg>
+        </button>
       </div>
     </nav>
   );

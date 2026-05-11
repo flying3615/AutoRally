@@ -319,12 +319,38 @@ export async function registerIpcHandlers() {
       "SELECT COUNT(*) as c FROM games WHERE status = 'completed'"
     ))?.c ?? 0;
 
+    // Active session check-in stats
+    let sessionStats: { checkinCount: number; maleCount: number; femaleCount: number; creditCount: number; cashCount: number } | null = null;
+    if (activeSession) {
+      const attRow = queryOne<{ checkinCount: number; maleCount: number; femaleCount: number }>(
+        `SELECT COUNT(*) as checkinCount,
+                SUM(CASE WHEN p.gender = 'male' THEN 1 ELSE 0 END) as maleCount,
+                SUM(CASE WHEN p.gender = 'female' THEN 1 ELSE 0 END) as femaleCount
+         FROM attendance a JOIN players p ON a.playerId = p.id WHERE a.sessionId = ?`,
+        [activeSession.id]
+      );
+      const payRow = queryOne<{ creditCount: number; cashCount: number }>(
+        `SELECT SUM(CASE WHEN paymentMethod = 'credit' THEN 1 ELSE 0 END) as creditCount,
+                SUM(CASE WHEN paymentMethod = 'cash' THEN 1 ELSE 0 END) as cashCount
+         FROM payments WHERE sessionId = ? AND paymentType = 'session'`,
+        [activeSession.id]
+      );
+      sessionStats = {
+        checkinCount: attRow?.checkinCount ?? 0,
+        maleCount: attRow?.maleCount ?? 0,
+        femaleCount: attRow?.femaleCount ?? 0,
+        creditCount: payRow?.creditCount ?? 0,
+        cashCount: payRow?.cashCount ?? 0,
+      };
+    }
+
     return {
       playerCount,
       sessionCount,
       gamesPlayed,
       avgDurationMin: avgRow?.avg ?? null,
       activeSession,
+      sessionStats,
       recentSessions: recentSessions.map(s => {
         const duration = s.startTime && s.endTime
           ? Math.round((new Date(s.endTime).getTime() - new Date(s.startTime).getTime()) / 60000)

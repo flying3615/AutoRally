@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
 interface ActiveSession {
@@ -23,6 +23,13 @@ interface DashboardStats {
   gamesPlayed: number;
   avgDurationMin: number | null;
   activeSession: ActiveSession | null;
+  sessionStats: {
+    checkinCount: number;
+    maleCount: number;
+    femaleCount: number;
+    creditCount: number;
+    cashCount: number;
+  } | null;
   recentSessions: RecentSession[];
 }
 
@@ -31,6 +38,30 @@ function formatDuration(min: number | null): string {
   const h = Math.floor(min / 60);
   const m = min % 60;
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+function useElapsedDuration(startTime: string | null | undefined): string {
+  const [elapsed, setElapsed] = useState('');
+  const timerRef = useRef<ReturnType<typeof setInterval>>(undefined);
+
+  useEffect(() => {
+    if (!startTime) { setElapsed(''); return; }
+
+    const tick = () => {
+      const start = new Date(startTime).getTime();
+      const diff = Math.max(0, Date.now() - start);
+      const totalMin = Math.floor(diff / 60000);
+      const h = Math.floor(totalMin / 60);
+      const m = totalMin % 60;
+      setElapsed(h > 0 ? `${h}h ${String(m).padStart(2, '0')}m` : `${m}m`);
+    };
+
+    tick();
+    timerRef.current = setInterval(tick, 30000);
+    return () => clearInterval(timerRef.current);
+  }, [startTime]);
+
+  return elapsed;
 }
 
 function CreateSessionModal({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
@@ -103,7 +134,10 @@ export function Dashboard() {
     return () => window.removeEventListener('shortcut:new-session', handler);
   }, []);
 
-  if (loading) {
+  const s = stats;
+  const elapsed = useElapsedDuration(s?.activeSession?.startTime);
+
+  if (loading || !s) {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="flex flex-col items-center gap-3">
@@ -113,8 +147,6 @@ export function Dashboard() {
       </div>
     );
   }
-
-  const s = stats!;
 
   return (
     <div className="h-full overflow-y-auto">
@@ -148,23 +180,13 @@ export function Dashboard() {
                   <div>
                     <p className="text-lg font-semibold text-white tracking-tight">Session active</p>
                     <p className="text-sm text-zinc-400 mt-1 tabular-nums font-mono font-medium">
-                      {s.activeSession.date} · {s.activeSession.courtCount} courts
+                      {s.activeSession.startTime
+                        ? `Started at ${new Date(s.activeSession.startTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })} · ${elapsed} · ${s.activeSession.courtCount} courts`
+                        : `${s.activeSession.date} · ${s.activeSession.courtCount} courts`}
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Link
-                    to={`/checkin/${s.activeSession.id}`}
-                    className="h-9 px-4 text-sm font-medium bg-white/10 text-white rounded-lg hover:bg-white/15 active:scale-[0.97] transition-all inline-flex items-center"
-                  >
-                    Check-in
-                  </Link>
-                  <Link
-                    to={`/match/${s.activeSession.id}`}
-                    className="h-9 px-4 text-sm font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 active:scale-[0.97] shadow-[0_2px_8px_-2px_rgba(5,150,105,0.3)] transition-all inline-flex items-center"
-                  >
-                    Enter match
-                  </Link>
                   <button
                     onClick={async () => {
                       await window.api.sessionsEnd(s.activeSession!.id);
@@ -176,6 +198,40 @@ export function Dashboard() {
                   </button>
                 </div>
               </div>
+
+              {/* Session check-in stats */}
+              {s.sessionStats && (
+                <div className="flex items-center gap-6 mt-5 pt-5 border-t border-white/10">
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl font-bold text-white tabular-nums font-mono">{s.sessionStats.checkinCount}</span>
+                    <span className="text-xs text-zinc-400 font-medium leading-tight">checked<br/>in</span>
+                  </div>
+                  <div className="w-px h-8 bg-white/10" />
+                  <div className="flex items-center gap-3">
+                    <span className="inline-flex items-center gap-1.5 text-sm">
+                      <span className="w-2 h-2 rounded-full bg-blue-400" />
+                      <span className="text-white tabular-nums font-mono font-semibold">{s.sessionStats.maleCount}</span>
+                      <span className="text-zinc-500">M</span>
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 text-sm">
+                      <span className="w-2 h-2 rounded-full bg-pink-400" />
+                      <span className="text-white tabular-nums font-mono font-semibold">{s.sessionStats.femaleCount}</span>
+                      <span className="text-zinc-500">F</span>
+                    </span>
+                  </div>
+                  <div className="w-px h-8 bg-white/10" />
+                  <div className="flex items-center gap-3">
+                    <span className="inline-flex items-center gap-1.5 text-sm">
+                      <span className="text-white tabular-nums font-mono font-semibold">{s.sessionStats.creditCount}</span>
+                      <span className="text-zinc-500">credit</span>
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 text-sm">
+                      <span className="text-white tabular-nums font-mono font-semibold">{s.sessionStats.cashCount}</span>
+                      <span className="text-zinc-500">cash</span>
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         ) : (
