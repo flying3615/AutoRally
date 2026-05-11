@@ -68,6 +68,7 @@ const api = {
   webFrameZoomReset: () => ipcRenderer.invoke('webFrame:zoomReset'),
   appQuit: () => ipcRenderer.invoke('app:quit'),
   exportCSV: () => ipcRenderer.invoke('export:csv'),
+  dashboardStats: () => ipcRenderer.invoke('dashboard:stats'),
   playersImportCsv: () => ipcRenderer.invoke('players:importCsv') as Promise<{ imported: number; skipped: number; errors: string[] }>,
 };
 

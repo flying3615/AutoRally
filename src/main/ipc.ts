@@ -19,6 +19,11 @@ export async function registerIpcHandlers() {
     run('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', [key, value]);
   });
 
+  // ── Helpers ──
+  function titleCase(str: string): string {
+    return str.replace(/\b\w/g, c => c.toUpperCase());
+  }
+
   // ── Players ──
   ipcMain.handle('players:list', () => {
     return queryAll('SELECT p.*, COALESCE(b.balance, 0) as balance FROM players p LEFT JOIN balances b ON b.playerId = p.id ORDER BY p.name');
@@ -27,17 +32,20 @@ export async function registerIpcHandlers() {
   ipcMain.handle('players:create', (_e, player: { name: string; gender: string; level: number; phone: string }) => {
     const id = uuid();
     const joinDate = new Date().toISOString();
+    const name = titleCase(player.name.trim());
     run('INSERT INTO players (id, name, gender, level, phone, joinDate) VALUES (?, ?, ?, ?, ?, ?)',
-      [id, player.name, player.gender, player.level, player.phone, joinDate]);
+      [id, name, player.gender, player.level, player.phone, joinDate]);
     run('INSERT INTO balances (id, playerId, balance, lastUpdated) VALUES (?, ?, 0, ?)',
       [uuid(), id, joinDate]);
-    return { id, ...player, joinDate };
+    return { id, name, gender: player.gender, level: player.level, phone: player.phone, joinDate };
   });
 
   ipcMain.handle('players:update', (_e, id: string, data: { name?: string; gender?: string; level?: number; phone?: string }) => {
     const sets: string[] = [];
     const vals: SqlValue[] = [];
-    for (const [k, v] of Object.entries(data)) {
+    const formatted = { ...data };
+    if (formatted.name) formatted.name = titleCase(formatted.name.trim());
+    for (const [k, v] of Object.entries(formatted)) {
       sets.push(`${k} = ?`);
       vals.push(v as SqlValue);
     }
@@ -263,6 +271,44 @@ export async function registerIpcHandlers() {
     BrowserWindow.getFocusedWindow()?.close();
   });
 
+  // ── Dashboard stats ──
+  ipcMain.handle('dashboard:stats', () => {
+    const playerCount = (queryOne<{ c: number }>('SELECT COUNT(*) as c FROM players'))?.c ?? 0;
+    const sessionCount = (queryOne<{ c: number }>('SELECT COUNT(*) as c FROM sessions'))?.c ?? 0;
+    const activeSession = queryOne<{ id: string; date: string; startTime: string; courtCount: number }>(
+      "SELECT id, date, startTime, courtCount FROM sessions WHERE status = 'active' LIMIT 1"
+    );
+
+    // Recent completed sessions with duration
+    const recentSessions = queryAll<{ id: string; date: string; startTime: string; endTime: string; courtCount: number }>(
+      "SELECT id, date, startTime, endTime, courtCount FROM sessions WHERE status = 'completed' ORDER BY date DESC, startTime DESC LIMIT 5"
+    );
+
+    // Average duration in minutes
+    const avgRow = queryOne<{ avg: number }>(
+      "SELECT ROUND(AVG((julianday(endTime) - julianday(startTime)) * 24 * 60)) as avg FROM sessions WHERE status = 'completed' AND startTime IS NOT NULL AND endTime IS NOT NULL"
+    );
+
+    // Total games played across completed sessions
+    const gamesPlayed = (queryOne<{ c: number }>(
+      "SELECT COUNT(*) as c FROM games WHERE status = 'completed'"
+    ))?.c ?? 0;
+
+    return {
+      playerCount,
+      sessionCount,
+      gamesPlayed,
+      avgDurationMin: avgRow?.avg ?? null,
+      activeSession,
+      recentSessions: recentSessions.map(s => {
+        const duration = s.startTime && s.endTime
+          ? Math.round((new Date(s.endTime).getTime() - new Date(s.startTime).getTime()) / 60000)
+          : null;
+        return { ...s, durationMin: duration };
+      }),
+    };
+  });
+
   // ── Export ──
   ipcMain.handle('export:csv', async () => {
     const win = BrowserWindow.getFocusedWindow();
@@ -338,6 +384,7 @@ export async function registerIpcHandlers() {
         } else {
           name = [parts[firstNameIdx], parts[lastNameIdx]].filter(Boolean).join(' ').trim();
         }
+        name = titleCase(name);
         const level = Number(parts[levelIdx]);
         const genderRaw = parts[genderIdx]!.toLowerCase();
         const gender = genderRaw === 'male' || genderRaw === '男' ? 'male' : 'female';
