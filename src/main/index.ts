@@ -16,7 +16,7 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
     },
-    title: 'AutoRally - 羽毛球俱乐部管理',
+    title: 'AutoRally - Badminton Club Manager',
   });
 
   if (process.env.VITE_DEV_SERVER_URL) {
