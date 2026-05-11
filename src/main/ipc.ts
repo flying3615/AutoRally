@@ -320,7 +320,7 @@ export async function registerIpcHandlers() {
     if (!win) return;
 
     const { filePath, canceled } = await dialog.showSaveDialog(win, {
-      title: '导出球员数据',
+      title: 'Export Players',
       defaultPath: 'autorally-players.csv',
       filters: [{ name: 'CSV', extensions: ['csv'] }],
     });
@@ -330,9 +330,9 @@ export async function registerIpcHandlers() {
       'SELECT p.name, p.gender, p.level, p.phone, p.email, COALESCE(b.balance, 0) as balance FROM players p LEFT JOIN balances b ON b.playerId = p.id ORDER BY p.name'
     );
 
-    const lines = ['姓名,性别,水平,电话,邮箱,余额'];
+    const lines = ['Name,Gender,Level,Phone,Email,Balance'];
     for (const p of players) {
-      lines.push(`${p.name},${p.gender === 'male' ? '男' : '女'},${p.level},${p.phone},${p.email ?? ''},${p.balance}`);
+      lines.push(`${p.name},${p.gender === 'male' ? 'Male' : 'Female'},${p.level},${p.phone},${p.email ?? ''},${p.balance}`);
     }
     fs.writeFileSync(filePath, '﻿' + lines.join('\n'), 'utf-8');
   });
