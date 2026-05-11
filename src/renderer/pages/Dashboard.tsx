@@ -211,7 +211,7 @@ export function Dashboard() {
           <div>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-bold text-zinc-700 tracking-tight">Recent Sessions</h3>
-              <Link to="/history" className="text-xs font-medium text-zinc-400 hover:text-zinc-600 transition-colors">View all &rarr;</Link>
+              <Link to="/sessions" className="text-xs font-medium text-zinc-400 hover:text-zinc-600 transition-colors">View all &rarr;</Link>
             </div>
             <div className="bg-white border border-zinc-200/60 rounded-2xl overflow-hidden">
               <table className="w-full text-sm">
