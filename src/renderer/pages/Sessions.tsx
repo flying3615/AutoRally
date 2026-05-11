@@ -148,7 +148,7 @@ export function Sessions() {
                   {confirmEndId === activeSession.id ? (
                     <button
                       onClick={() => handleEnd(activeSession.id)}
-                      className="h-8 px-3.5 text-sm font-medium bg-red-600/90 text-white rounded-lg hover:bg-red-500 active:scale-[0.97] shadow-[0_2px_8px_-2px_rgba(220,38,38,0.3)] transition-all inline-flex items-center justify-center"
+                      className="h-8 px-3.5 text-sm font-medium bg-red-500 text-white rounded-lg hover:bg-red-600 active:scale-[0.97] shadow-[0_2px_8px_-2px_rgba(239,68,68,0.3)] transition-all inline-flex items-center justify-center"
                     >
                       Confirm End
                     </button>

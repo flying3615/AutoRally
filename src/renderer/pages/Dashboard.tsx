@@ -164,6 +164,15 @@ export function Dashboard() {
                   >
                     Enter match
                   </Link>
+                  <button
+                    onClick={async () => {
+                      await window.api.sessionsEnd(s.activeSession!.id);
+                      load();
+                    }}
+                    className="h-9 px-4 text-sm font-medium bg-red-500 text-white rounded-lg hover:bg-red-600 active:scale-[0.97] shadow-[0_2px_8px_-2px_rgba(239,68,68,0.3)] transition-all inline-flex items-center"
+                  >
+                    End Session
+                  </button>
                 </div>
               </div>
             </div>
