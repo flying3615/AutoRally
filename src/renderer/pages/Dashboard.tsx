@@ -187,20 +187,10 @@ export function Dashboard() {
             </div>
           </div>
         ) : (
-          <button
-            onClick={() => setShowCreate(true)}
-            className="w-full rounded-2xl border-2 border-dashed border-zinc-300 bg-white p-8 mb-8 hover:border-zinc-400 hover:bg-zinc-50 transition-all duration-200 text-left"
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-[15px] font-semibold text-zinc-700 tracking-tight">No active session</p>
-                <p className="text-sm text-zinc-400 mt-1">Create a new session to get started</p>
-              </div>
-              <span className="h-9 px-5 text-sm font-medium bg-zinc-800 text-white rounded-lg inline-flex items-center shadow-[0_2px_8px_-2px_rgba(0,0,0,0.15)]">
-                Create session
-              </span>
-            </div>
-          </button>
+          <div className="rounded-2xl border-2 border-dashed border-zinc-300 bg-white p-8 mb-8 text-center">
+            <p className="text-[15px] font-semibold text-zinc-700 tracking-tight">No active session</p>
+            <p className="text-sm text-zinc-400 mt-1">Click <strong className="text-zinc-600">New Session</strong> above to get started</p>
+          </div>
         )}
 
         {/* Stats grid */}
