@@ -32,10 +32,12 @@ function SessionModal({ session, onClose, onSaved }: {
   const [time, setTime] = useState(session?.time ?? '');
   const [note, setNote] = useState(session?.note ?? '');
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSave = async () => {
     if (!date) return;
     setSaving(true);
+    setError(null);
     try {
       if (isEdit && session) {
         await window.api.upcomingSessionsUpdate(session.id, { date, time, note });
@@ -43,6 +45,8 @@ function SessionModal({ session, onClose, onSaved }: {
         await window.api.upcomingSessionsCreate({ date, time, note });
       }
       onSaved();
+    } catch (err: any) {
+      setError(err?.message ?? 'Failed to save');
     } finally {
       setSaving(false);
     }
@@ -55,6 +59,10 @@ function SessionModal({ session, onClose, onSaved }: {
         <h3 className="text-lg font-bold text-zinc-900 tracking-tight mb-4">
           {isEdit ? 'Edit Session' : 'Add Session'}
         </h3>
+
+        {error && (
+          <div className="mb-4 text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</div>
+        )}
 
         <div className="grid grid-cols-2 gap-3 mb-3">
           <div>
@@ -131,8 +139,12 @@ export function Settings() {
   }, []);
 
   const loadUpcoming = async () => {
-    const list = await window.api.upcomingSessionsList();
-    setUpcoming(list);
+    try {
+      const list = await window.api.upcomingSessionsList();
+      setUpcoming(list);
+    } catch {
+      // IPC not available yet — retry on next interaction
+    }
   };
 
   const handleSave = async () => {
