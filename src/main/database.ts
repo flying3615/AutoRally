@@ -80,8 +80,8 @@ function migrate(db: Database) {
   db.run(`
     CREATE TABLE IF NOT EXISTS attendance (
       id TEXT PRIMARY KEY,
-      playerId TEXT NOT NULL REFERENCES players(id),
-      sessionId TEXT NOT NULL REFERENCES sessions(id),
+      playerId TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      sessionId TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
       checkinTime TEXT NOT NULL,
       UNIQUE(playerId, sessionId)
     );
@@ -105,7 +105,7 @@ function migrate(db: Database) {
   db.run(`
     CREATE TABLE IF NOT EXISTS balances (
       id TEXT PRIMARY KEY,
-      playerId TEXT NOT NULL UNIQUE REFERENCES players(id),
+      playerId TEXT NOT NULL UNIQUE REFERENCES players(id) ON DELETE CASCADE,
       balance REAL NOT NULL DEFAULT 0,
       lastUpdated TEXT NOT NULL
     );
