@@ -172,7 +172,7 @@ function SessionModal({ session, onClose, onSaved }: {
 }
 
 export function Settings() {
-  const [settings, setSettings] = useState<SettingsData>({ courtCount: '3', sessionFee: '30', gameDuration: '15' });
+  const [settings, setSettings] = useState<SettingsData>({ courtCount: '3', sessionFee: '10', gameDuration: '15' });
   const [saved, setSaved] = useState(false);
   const { upcomingSessions: upcoming, refreshUpcoming } = useSessionStore();
   const [modalSession, setModalSession] = useState<UpcomingSession | null>(null);
@@ -182,7 +182,7 @@ export function Settings() {
     window.api.settingsGetAll().then((s: Record<string, string>) => {
       setSettings({
         courtCount: s.courtCount ?? '3',
-        sessionFee: s.sessionFee ?? '30',
+        sessionFee: s.sessionFee ?? '10',
         gameDuration: s.gameDuration ?? '15',
       });
     });

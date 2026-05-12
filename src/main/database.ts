@@ -156,12 +156,12 @@ function migrateGameTypeConstraint(db: Database): boolean {
     db.run(`
       CREATE TABLE games_new (
         id TEXT PRIMARY KEY,
-        sessionId TEXT NOT NULL REFERENCES sessions(id),
+        sessionId TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
         courtNumber INTEGER NOT NULL,
-        team1Player1Id TEXT NOT NULL REFERENCES players(id),
-        team1Player2Id TEXT NOT NULL REFERENCES players(id),
-        team2Player1Id TEXT NOT NULL REFERENCES players(id),
-        team2Player2Id TEXT NOT NULL REFERENCES players(id),
+        team1Player1Id TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+        team1Player2Id TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+        team2Player1Id TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+        team2Player2Id TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
         status TEXT NOT NULL CHECK(status IN ('pending', 'playing', 'completed')),
         roundNumber INTEGER NOT NULL,
         gameType TEXT NOT NULL CHECK(gameType IN ('mixed', 'male-double', 'female-double', 'open-double')),
@@ -195,45 +195,116 @@ function migrateGameTypeConstraint(db: Database): boolean {
   return true;
 }
 
-function migrateAttendanceAndBalancesCascade(db: Database): boolean {
-  const stmt = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'attendance'");
+function tableHasCascade(db: Database, tableName: string): boolean {
+  const stmt = db.prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?`);
+  stmt.bind([tableName]);
   const row = stmt.step() ? stmt.getAsObject() as { sql?: string } : undefined;
   stmt.free();
-  if (!row?.sql || row.sql.includes('ON DELETE CASCADE')) return false;
+  return !!row?.sql && row.sql.includes('ON DELETE CASCADE');
+}
+
+function migrateAttendanceAndBalancesCascade(db: Database): boolean {
+  const attendanceNeedsMigration = !tableHasCascade(db, 'attendance');
+  const balancesNeedsMigration = !tableHasCascade(db, 'balances');
+  const paymentsNeedsMigration = !tableHasCascade(db, 'payments');
+  const gamesNeedsMigration = !tableHasCascade(db, 'games');
+
+  if (!attendanceNeedsMigration && !balancesNeedsMigration && !paymentsNeedsMigration && !gamesNeedsMigration) {
+    return false;
+  }
 
   db.run('PRAGMA foreign_keys = OFF');
   db.run('BEGIN TRANSACTION');
   try {
-    db.run(`
-      CREATE TABLE attendance_new (
-        id TEXT PRIMARY KEY,
-        playerId TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
-        sessionId TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-        checkinTime TEXT NOT NULL,
-        UNIQUE(playerId, sessionId)
-      );
-    `);
-    db.run(`
-      INSERT INTO attendance_new (id, playerId, sessionId, checkinTime)
-      SELECT id, playerId, sessionId, checkinTime FROM attendance;
-    `);
-    db.run('DROP TABLE attendance');
-    db.run('ALTER TABLE attendance_new RENAME TO attendance');
+    if (attendanceNeedsMigration) {
+      db.run(`
+        CREATE TABLE attendance_new (
+          id TEXT PRIMARY KEY,
+          playerId TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+          sessionId TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+          checkinTime TEXT NOT NULL,
+          UNIQUE(playerId, sessionId)
+        );
+      `);
+      db.run(`
+        INSERT INTO attendance_new (id, playerId, sessionId, checkinTime)
+        SELECT id, playerId, sessionId, checkinTime FROM attendance;
+      `);
+      db.run('DROP TABLE attendance');
+      db.run('ALTER TABLE attendance_new RENAME TO attendance');
+    }
 
-    db.run(`
-      CREATE TABLE balances_new (
-        id TEXT PRIMARY KEY,
-        playerId TEXT NOT NULL UNIQUE REFERENCES players(id) ON DELETE CASCADE,
-        balance REAL NOT NULL DEFAULT 0,
-        lastUpdated TEXT NOT NULL
-      );
-    `);
-    db.run(`
-      INSERT INTO balances_new (id, playerId, balance, lastUpdated)
-      SELECT id, playerId, balance, lastUpdated FROM balances;
-    `);
-    db.run('DROP TABLE balances');
-    db.run('ALTER TABLE balances_new RENAME TO balances');
+    if (balancesNeedsMigration) {
+      db.run(`
+        CREATE TABLE balances_new (
+          id TEXT PRIMARY KEY,
+          playerId TEXT NOT NULL UNIQUE REFERENCES players(id) ON DELETE CASCADE,
+          balance REAL NOT NULL DEFAULT 0,
+          lastUpdated TEXT NOT NULL
+        );
+      `);
+      db.run(`
+        INSERT INTO balances_new (id, playerId, balance, lastUpdated)
+        SELECT id, playerId, balance, lastUpdated FROM balances;
+      `);
+      db.run('DROP TABLE balances');
+      db.run('ALTER TABLE balances_new RENAME TO balances');
+    }
+
+    if (paymentsNeedsMigration) {
+      db.run(`
+        CREATE TABLE payments_new (
+          id TEXT PRIMARY KEY,
+          playerId TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+          sessionId TEXT REFERENCES sessions(id) ON DELETE CASCADE,
+          amount REAL NOT NULL,
+          status TEXT NOT NULL CHECK(status IN ('paid', 'unpaid')),
+          paidDate TEXT,
+          paymentType TEXT NOT NULL CHECK(paymentType IN ('session', 'topup')),
+          paymentMethod TEXT NOT NULL DEFAULT ''
+        );
+      `);
+      db.run(`
+        INSERT INTO payments_new (id, playerId, sessionId, amount, status, paidDate, paymentType, paymentMethod)
+        SELECT id, playerId, sessionId, amount, status, paidDate, paymentType,
+          COALESCE(paymentMethod, '') FROM payments;
+      `);
+      db.run('DROP TABLE payments');
+      db.run('ALTER TABLE payments_new RENAME TO payments');
+    }
+
+    if (gamesNeedsMigration) {
+      db.run(`
+        CREATE TABLE games_new (
+          id TEXT PRIMARY KEY,
+          sessionId TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+          courtNumber INTEGER NOT NULL,
+          team1Player1Id TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+          team1Player2Id TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+          team2Player1Id TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+          team2Player2Id TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+          status TEXT NOT NULL CHECK(status IN ('pending', 'playing', 'completed')),
+          roundNumber INTEGER NOT NULL,
+          gameType TEXT NOT NULL CHECK(gameType IN ('mixed', 'male-double', 'female-double', 'open-double')),
+          startedAt TEXT,
+          endedAt TEXT
+        );
+      `);
+      db.run(`
+        INSERT INTO games_new (
+          id, sessionId, courtNumber,
+          team1Player1Id, team1Player2Id, team2Player1Id, team2Player2Id,
+          status, roundNumber, gameType, startedAt, endedAt
+        )
+        SELECT
+          id, sessionId, courtNumber,
+          team1Player1Id, team1Player2Id, team2Player1Id, team2Player2Id,
+          status, roundNumber, gameType, startedAt, endedAt
+        FROM games;
+      `);
+      db.run('DROP TABLE games');
+      db.run('ALTER TABLE games_new RENAME TO games');
+    }
 
     db.run('COMMIT');
   } catch (err) {
