@@ -5,7 +5,7 @@ import { initDb, run, queryAll, queryOne } from './database';
 import fs from 'fs';
 
 export async function registerIpcHandlers() {
-  const db = await initDb();
+  await initDb();
 
   // ── Settings ──
   ipcMain.handle('settings:getAll', () => {
@@ -495,6 +495,4 @@ export async function registerIpcHandlers() {
     run('DELETE FROM upcoming_sessions WHERE id = ?', [id]);
   });
 
-  // Ensure db reference is used
-  void db;
 }
