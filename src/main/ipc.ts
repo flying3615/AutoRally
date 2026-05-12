@@ -41,14 +41,17 @@ export async function registerIpcHandlers() {
   });
 
   ipcMain.handle('players:update', (_e, id: string, data: { name?: string; gender?: string; level?: number; phone?: string; email?: string }) => {
+    const ALLOWED = new Set(['name', 'gender', 'level', 'phone', 'email']);
     const sets: string[] = [];
     const vals: SqlValue[] = [];
-    const formatted = { ...data };
-    if (formatted.name) formatted.name = titleCase(formatted.name.trim());
+    const formatted: Record<string, SqlValue> = { ...data };
+    if (formatted.name) formatted.name = titleCase(String(formatted.name).trim());
     for (const [k, v] of Object.entries(formatted)) {
+      if (!ALLOWED.has(k)) continue;
       sets.push(`${k} = ?`);
       vals.push(v as SqlValue);
     }
+    if (sets.length === 0) return;
     vals.push(id);
     run(`UPDATE players SET ${sets.join(', ')} WHERE id = ?`, vals);
   });
