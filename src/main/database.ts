@@ -35,7 +35,9 @@ function save() {
   if (!db) return;
   const data = db.export();
   const buf = Buffer.from(data);
-  fs.writeFileSync(dbPath, buf);
+  const tmpPath = dbPath + '.tmp';
+  fs.writeFileSync(tmpPath, buf);
+  fs.renameSync(tmpPath, dbPath);
 }
 
 export function saveDb() {
@@ -132,19 +134,20 @@ function migrate(db: Database) {
   db.run("INSERT OR IGNORE INTO settings (key, value) VALUES ('gameDuration', '15')");
 
   // Migrations for existing databases
-  try { db.run('ALTER TABLE players ADD COLUMN email TEXT NOT NULL DEFAULT \'\''); } catch (_) { /* already exists */ }
-  try { db.run('ALTER TABLE attendance ADD COLUMN paused INTEGER NOT NULL DEFAULT 0'); } catch (_) { /* already exists */ }
-  try { db.run('ALTER TABLE payments ADD COLUMN paymentMethod TEXT NOT NULL DEFAULT \'\''); } catch (_) { /* already exists */ }
-  migrateGameTypeConstraint(db);
+  let dirty = false;
+  try { db.run('ALTER TABLE players ADD COLUMN email TEXT NOT NULL DEFAULT \'\''); dirty = true; } catch (_) { /* already exists */ }
+  try { db.run('ALTER TABLE attendance ADD COLUMN paused INTEGER NOT NULL DEFAULT 0'); dirty = true; } catch (_) { /* already exists */ }
+  try { db.run('ALTER TABLE payments ADD COLUMN paymentMethod TEXT NOT NULL DEFAULT \'\''); dirty = true; } catch (_) { /* already exists */ }
+  if (migrateGameTypeConstraint(db)) dirty = true;
 
-  save();
+  if (dirty) save();
 }
 
-function migrateGameTypeConstraint(db: Database) {
+function migrateGameTypeConstraint(db: Database): boolean {
   const stmt = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'games'");
   const row = stmt.step() ? stmt.getAsObject() as { sql?: string } : undefined;
   stmt.free();
-  if (!row?.sql || row.sql.includes("'open-double'")) return;
+  if (!row?.sql || row.sql.includes("'open-double'")) return false;
 
   db.run('PRAGMA foreign_keys = OFF');
   db.run('BEGIN TRANSACTION');
@@ -188,6 +191,7 @@ function migrateGameTypeConstraint(db: Database) {
   } finally {
     db.run('PRAGMA foreign_keys = ON');
   }
+  return true;
 }
 
 export function closeDb() {

@@ -299,7 +299,7 @@ export async function registerIpcHandlers() {
   });
 
   ipcMain.handle('app:quit', () => {
-    BrowserWindow.getFocusedWindow()?.close();
+    app.quit();
   });
 
   // ── Dashboard stats ──
