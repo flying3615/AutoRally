@@ -83,7 +83,7 @@ export async function registerIpcHandlers() {
     const startTime = new Date().toISOString();
     run('INSERT INTO sessions (id, date, startTime, endTime, courtCount, status) VALUES (?, ?, ?, ?, ?, ?)',
       [id, date, startTime, null, courtCount, 'active']);
-    return { id, date, startTime, endTime: null, courtCount, status: 'active' as const };
+    return id;
   });
 
   ipcMain.handle('sessions:end', (_e, id: string) => {

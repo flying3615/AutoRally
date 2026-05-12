@@ -58,14 +58,22 @@ export function generateMatches(
   }
   for (const p of pool) gameCount.set(p.id, gameCount.get(p.id) ?? 0);
 
-  // 2. Count past partnerships
+  // 2. Count past partnerships and opponent pairings
   const partnerCount = new Map<string, number>();
-  const partnerKey = (a: string, b: string) => a < b ? `${a}|${b}` : `${b}|${a}`;
+  const opponentCount = new Map<string, number>();
+  const pairKey = (a: string, b: string) => a < b ? `${a}|${b}` : `${b}|${a}`;
+  const partnerKey = pairKey;
   for (const g of countedGames) {
     const k1 = partnerKey(g.team1Player1Id, g.team1Player2Id);
     const k2 = partnerKey(g.team2Player1Id, g.team2Player2Id);
     partnerCount.set(k1, (partnerCount.get(k1) ?? 0) + 1);
     partnerCount.set(k2, (partnerCount.get(k2) ?? 0) + 1);
+    for (const id1 of [g.team1Player1Id, g.team1Player2Id]) {
+      for (const id2 of [g.team2Player1Id, g.team2Player2Id]) {
+        const ko = pairKey(id1, id2);
+        opponentCount.set(ko, (opponentCount.get(ko) ?? 0) + 1);
+      }
+    }
   }
 
   // 3. Greedy fairness sort: lowest game count first
@@ -245,19 +253,20 @@ export function generateMatches(
     }
 
     // 6. Score this candidate
+    const level = (id: string) => pool.find(p => p.id === id)?.level ?? 3;
+
     let levelPenalty = 0;
     for (const m of matches) {
-      const allIds = [...m.team1, ...m.team2];
-      const levels = allIds.map(id => pool.find(p => p.id === id)!.level);
-      const hasL5 = levels.some(l => l === 5);
-      const hasL1 = levels.some(l => l === 1);
-      const hasHigh = levels.some(l => l >= 4);
-      const hasLow = levels.some(l => l <= 3);
-      if (hasL5 && hasL1) levelPenalty += 10;
-      else if (hasHigh && hasLow) levelPenalty += Math.min(
-        levels.filter(l => l >= 4).length,
-        levels.filter(l => l <= 3).length
-      );
+      // Inter-team balance: team averages should be close
+      const t1Avg = (level(m.team1[0]) + level(m.team1[1])) / 2;
+      const t2Avg = (level(m.team2[0]) + level(m.team2[1])) / 2;
+      const interDiff = Math.abs(t1Avg - t2Avg);
+      levelPenalty += interDiff * interDiff;
+
+      // Intra-team compatibility: partners shouldn't be too far apart
+      const t1Gap = Math.abs(level(m.team1[0]) - level(m.team1[1]));
+      const t2Gap = Math.abs(level(m.team2[0]) - level(m.team2[1]));
+      levelPenalty += t1Gap + t2Gap;
     }
 
     let partnerPenalty = 0;
@@ -268,8 +277,17 @@ export function generateMatches(
       partnerPenalty += partnerCount.get(k2) ?? 0;
     }
 
+    let opponentPenalty = 0;
+    for (const m of matches) {
+      for (const id1 of m.team1) {
+        for (const id2 of m.team2) {
+          opponentPenalty += opponentCount.get(pairKey(id1, id2)) ?? 0;
+        }
+      }
+    }
+
     const unfilled = Math.max(0, courtCount - matches.length);
-    const score = levelPenalty * 100 + partnerPenalty * 50 + unfilled * 10;
+    const score = levelPenalty * 100 + partnerPenalty * 50 + opponentPenalty * 20 + unfilled * 10;
 
     if (score < bestScore) {
       bestScore = score;

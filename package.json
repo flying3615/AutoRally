@@ -36,6 +36,7 @@
     "@types/uuid": "^10.0.0",
     "@vitejs/plugin-react": "^6.0.1",
     "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
     "electron": "^42.0.1",
     "electron-builder": "^26.8.1",
     "react-router-dom": "^7.15.0",
@@ -49,6 +50,7 @@
   "build": {
     "appId": "com.autorally.app",
     "productName": "AutoRally",
+    "icon": "build/icon.png",
     "directories": {
       "output": "release"
     },
@@ -57,20 +59,13 @@
       "package.json"
     ],
     "win": {
-      "target": "nsis",
-      "icon": null
+      "target": "portable"
     },
     "linux": {
-      "target": "AppImage",
-      "icon": null
+      "target": "AppImage"
     },
     "mac": {
-      "target": "dmg",
-      "icon": null
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "target": "dmg"
     }
   },
   "dependencies": {

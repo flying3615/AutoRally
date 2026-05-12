@@ -60,12 +60,32 @@ describe('generateMatches', () => {
       const genders = team.map(id => pool.find(p => p.id === id)!.gender).sort();
       expect(genders).toEqual(['female', 'male']);
     }
-    // Levels should be approximately balanced between teams
-    const team1Levels = match.team1.map(id => pool.find(p => p.id === id)!.level);
-    const team2Levels = match.team2.map(id => pool.find(p => p.id === id)!.level);
-    const spread = Math.abs(team1Levels.reduce((a,b)=>a+b,0) - team2Levels.reduce((a,b)=>a+b,0));
-    // With levels 5,3,4,2 the tier system groups them, team balance may vary
-    expect(spread).toBeLessThanOrEqual(4);
+    // Team-balance scoring: [L5+L2] vs [L3+L4] (avg 3.5 vs 3.5) beats [L5+L4] vs [L3+L2] (avg 4.5 vs 2.5)
+    const t1Avg = match.team1.map(id => pool.find(p => p.id === id)!.level).reduce((a,b)=>a+b,0) / 2;
+    const t2Avg = match.team2.map(id => pool.find(p => p.id === id)!.level).reduce((a,b)=>a+b,0) / 2;
+    expect(Math.abs(t1Avg - t2Avg)).toBeLessThanOrEqual(0.5);
+    // Intra-team: partners should not be extreme opposites (L5+L1 gap=4 avoided when better exists)
+    for (const team of [match.team1, match.team2]) {
+      const levels = team.map(id => pool.find(p => p.id === id)!.level);
+      expect(Math.abs(levels[0]! - levels[1]!)).toBeLessThanOrEqual(3);
+    }
+  });
+
+  it('avoids pairing L5 with L1 when a better partner exists', () => {
+    // L5 player has L2, L3, L4 options — should pick L3 or L4 as partner, not L1
+    const pool = [
+      makePlayer('m1', 'High', 'male', 5),
+      makePlayer('m2', 'Mid',  'male', 3),
+      makePlayer('f1', 'Low',  'female', 1),
+      makePlayer('f2', 'Mid2', 'female', 3),
+    ];
+    const result = generateMatches(pool, 1, 1, []);
+    expect(result).toHaveLength(1);
+    const match = result[0]!;
+    // m1(L5) should be paired with f2(L3), not f1(L1)
+    const m1Team = match.team1.includes('m1') ? match.team1 : match.team2;
+    expect(m1Team).toContain('f2');
+    expect(m1Team).not.toContain('f1');
   });
 
   it('respects court count limit', () => {
@@ -165,6 +185,38 @@ describe('generateMatches', () => {
     const allIds = result.flatMap(m => [...m.team1, ...m.team2]);
 
     expect(new Set(allIds)).toEqual(new Set(['p1', 'p2', 'p3', 'p4']));
+  });
+
+  it('avoids repeating opponent pairings when alternatives exist', () => {
+    // 8 players, 2 courts. After 3 rounds where m1 always faced m2,
+    // the algo should prefer to put them on different courts.
+    const pool = [
+      makePlayer('m1', 'M1', 'male', 3),
+      makePlayer('m2', 'M2', 'male', 3),
+      makePlayer('m3', 'M3', 'male', 3),
+      makePlayer('m4', 'M4', 'male', 3),
+      makePlayer('f1', 'F1', 'female', 3),
+      makePlayer('f2', 'F2', 'female', 3),
+      makePlayer('f3', 'F3', 'female', 3),
+      makePlayer('f4', 'F4', 'female', 3),
+    ];
+    // m1+f1 vs m2+f2 repeated 3 times — high opponent penalty for m1↔m2, m1↔f2, f1↔m2, f1↔f2
+    const pastGames: Game[] = Array.from({ length: 3 }, (_, i) => ({
+      id: `g${i}`, sessionId: 's', courtNumber: 1,
+      team1Player1Id: 'm1', team1Player2Id: 'f1',
+      team2Player1Id: 'm2', team2Player2Id: 'f2',
+      status: 'completed' as const, roundNumber: i + 1, gameType: 'mixed',
+      startedAt: null, endedAt: null,
+    }));
+
+    const result = generateMatches(pool, 2, 4, pastGames);
+    expect(result).toHaveLength(2);
+    // m1 and m2 should not be on opposing teams in the same court
+    const sameCourtAsOpponents = result.some(m =>
+      (m.team1.includes('m1') && m.team2.includes('m2')) ||
+      (m.team1.includes('m2') && m.team2.includes('m1'))
+    );
+    expect(sameCourtAsOpponents).toBe(false);
   });
 
   it('produces valid game types with consistent teams', () => {
