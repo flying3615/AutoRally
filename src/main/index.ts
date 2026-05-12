@@ -25,6 +25,17 @@ function createWindow() {
     mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
   }
 
+  mainWindow.webContents.on('before-input-event', (_event, input) => {
+    if (!input.control && !input.meta) return;
+    if (input.type !== 'keyDown') return;
+    const key = input.key.toLowerCase();
+    if (key === 'w') {
+      mainWindow?.webContents.send('shortcut:end-session');
+    } else if (key === 'f' && !input.shift) {
+      mainWindow?.webContents.send('shortcut:search-player');
+    }
+  });
+
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
@@ -36,11 +47,6 @@ function registerShortcuts() {
     mainWindow?.webContents.send('shortcut:new-session');
   });
 
-  // ⌘W — end session
-  globalShortcut.register('CommandOrControl+W', () => {
-    mainWindow?.webContents.send('shortcut:end-session');
-  });
-
   // ⌘E — export
   globalShortcut.register('CommandOrControl+E', () => {
     mainWindow?.webContents.send('shortcut:export');
@@ -49,11 +55,6 @@ function registerShortcuts() {
   // ⌘Shift+N — add player
   globalShortcut.register('CommandOrControl+Shift+N', () => {
     mainWindow?.webContents.send('shortcut:add-player');
-  });
-
-  // ⌘F — search player
-  globalShortcut.register('CommandOrControl+F', () => {
-    mainWindow?.webContents.send('shortcut:search-player');
   });
 
   // ⌘Ctrl+F — fullscreen

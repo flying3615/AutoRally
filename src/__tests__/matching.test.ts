@@ -303,11 +303,13 @@ function runSim(
   rows.push(`Spread,${spread}`);
 
   const csv = rows.join('\n');
-  const outPath = path.join(__dirname, '..', '..', 'test-results', fileName);
-  fs.mkdirSync(path.dirname(outPath), { recursive: true });
-  fs.writeFileSync(outPath, csv);
-  console.log(`\n[${label}] CSV → ${outPath} | spread=${spread} | types=[${[...allCourtTypes].join(',')}]`);
-  console.log(csv);
+  if (process.env.WRITE_SIM_CSV) {
+    const outPath = path.join(__dirname, '..', '..', 'test-results', fileName);
+    fs.mkdirSync(path.dirname(outPath), { recursive: true });
+    fs.writeFileSync(outPath, csv);
+    console.log(`\n[${label}] CSV → ${outPath} | spread=${spread} | types=[${[...allCourtTypes].join(',')}]`);
+    console.log(csv);
+  }
 
   expect(spread).toBeLessThanOrEqual(1);
   return { spread, courtTypes: allCourtTypes };

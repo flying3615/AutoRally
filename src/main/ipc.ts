@@ -1,11 +1,11 @@
-import { ipcMain, BrowserWindow, dialog } from 'electron';
+import { ipcMain, BrowserWindow, dialog, app } from 'electron';
 import { v4 as uuid } from 'uuid';
 import { SqlValue } from 'sql.js';
-import { initDb, run, queryAll, queryOne } from './database';
+import { initDb, run, queryAll, queryOne, transaction } from './database';
 import fs from 'fs';
 
 export async function registerIpcHandlers() {
-  const db = await initDb();
+  await initDb();
 
   // ── Settings ──
   ipcMain.handle('settings:getAll', () => {
@@ -41,14 +41,17 @@ export async function registerIpcHandlers() {
   });
 
   ipcMain.handle('players:update', (_e, id: string, data: { name?: string; gender?: string; level?: number; phone?: string; email?: string }) => {
+    const ALLOWED = new Set(['name', 'gender', 'level', 'phone', 'email']);
     const sets: string[] = [];
     const vals: SqlValue[] = [];
-    const formatted = { ...data };
-    if (formatted.name) formatted.name = titleCase(formatted.name.trim());
+    const formatted: Record<string, SqlValue> = { ...data };
+    if (formatted.name) formatted.name = titleCase(String(formatted.name).trim());
     for (const [k, v] of Object.entries(formatted)) {
+      if (!ALLOWED.has(k)) continue;
       sets.push(`${k} = ?`);
       vals.push(v as SqlValue);
     }
+    if (sets.length === 0) return;
     vals.push(id);
     run(`UPDATE players SET ${sets.join(', ')} WHERE id = ?`, vals);
   });
@@ -92,33 +95,33 @@ export async function registerIpcHandlers() {
   ipcMain.handle('attendance:checkin', (_e, playerId: string, sessionId: string, paymentMethod: 'credit' | 'cash') => {
     const id = uuid();
     const checkinTime = new Date().toISOString();
-    try {
-      run('INSERT INTO attendance (id, playerId, sessionId, checkinTime) VALUES (?, ?, ?, ?)',
-        [id, playerId, sessionId, checkinTime]);
-    } catch (err: unknown) {
-      if (err instanceof Error && err.message.includes('UNIQUE')) return null;
-      throw err;
-    }
     const fee = queryOne<{ value: string }>("SELECT value FROM settings WHERE key = 'sessionFee'");
-    const sessionFee = Number(fee?.value ?? 30);
+    const sessionFee = Number(fee?.value ?? 10);
 
-    if (paymentMethod === 'credit') {
-      const balance = queryOne<{ balance: number }>('SELECT balance FROM balances WHERE playerId = ?', [playerId]);
-      if (!balance || balance.balance < sessionFee) {
-        // Rollback attendance
-        run('DELETE FROM attendance WHERE id = ?', [id]);
-        throw new Error('Insufficient balance');
+    return transaction(() => {
+      try {
+        run('INSERT INTO attendance (id, playerId, sessionId, checkinTime) VALUES (?, ?, ?, ?)',
+          [id, playerId, sessionId, checkinTime]);
+      } catch (err: unknown) {
+        if (err instanceof Error && err.message.includes('UNIQUE')) return null;
+        throw err;
       }
-      run('UPDATE balances SET balance = balance - ?, lastUpdated = ? WHERE playerId = ?',
-        [sessionFee, checkinTime, playerId]);
-      run('INSERT INTO payments (id, playerId, sessionId, amount, status, paidDate, paymentType, paymentMethod) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-        [uuid(), playerId, sessionId, sessionFee, 'paid', checkinTime, 'session', 'credit']);
-    } else {
-      // Cash: no balance change, record as paid
-      run('INSERT INTO payments (id, playerId, sessionId, amount, status, paidDate, paymentType, paymentMethod) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-        [uuid(), playerId, sessionId, sessionFee, 'paid', checkinTime, 'session', 'cash']);
-    }
-    return { id, playerId, sessionId, checkinTime };
+
+      if (paymentMethod === 'credit') {
+        const balance = queryOne<{ balance: number }>('SELECT balance FROM balances WHERE playerId = ?', [playerId]);
+        if (!balance || balance.balance < sessionFee) {
+          throw new Error('Insufficient balance');
+        }
+        run('UPDATE balances SET balance = balance - ?, lastUpdated = ? WHERE playerId = ?',
+          [sessionFee, checkinTime, playerId]);
+        run('INSERT INTO payments (id, playerId, sessionId, amount, status, paidDate, paymentType, paymentMethod) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+          [uuid(), playerId, sessionId, sessionFee, 'paid', checkinTime, 'session', 'credit']);
+      } else {
+        run('INSERT INTO payments (id, playerId, sessionId, amount, status, paidDate, paymentType, paymentMethod) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+          [uuid(), playerId, sessionId, sessionFee, 'paid', checkinTime, 'session', 'cash']);
+      }
+      return { id, playerId, sessionId, checkinTime };
+    });
   });
 
   ipcMain.handle('attendance:listBySession', (_e, sessionId: string) => {
@@ -133,20 +136,23 @@ export async function registerIpcHandlers() {
   });
 
   ipcMain.handle('attendance:remove', (_e, id: string) => {
-    const att = queryOne<{ playerId: string; sessionId: string }>('SELECT playerId, sessionId FROM attendance WHERE id = ?', [id]);
-    if (att) {
-      const payment = queryOne<{ id: string; paymentMethod: string; amount: number }>(
-        "SELECT id, paymentMethod, amount FROM payments WHERE playerId = ? AND sessionId = ? AND paymentType = 'session'", [att.playerId, att.sessionId]
-      );
-      if (payment) {
-        if (payment.paymentMethod === 'credit') {
-          run('UPDATE balances SET balance = balance + ?, lastUpdated = ? WHERE playerId = ?',
-            [payment.amount, new Date().toISOString(), att.playerId]);
+    transaction(() => {
+      const att = queryOne<{ playerId: string; sessionId: string }>('SELECT playerId, sessionId FROM attendance WHERE id = ?', [id]);
+      if (att) {
+        const payment = queryOne<{ id: string; paymentMethod: string; amount: number }>(
+          "SELECT id, paymentMethod, amount FROM payments WHERE playerId = ? AND sessionId = ? AND paymentType = 'session'",
+          [att.playerId, att.sessionId]
+        );
+        if (payment) {
+          if (payment.paymentMethod === 'credit') {
+            run('UPDATE balances SET balance = balance + ?, lastUpdated = ? WHERE playerId = ?',
+              [payment.amount, new Date().toISOString(), att.playerId]);
+          }
+          run('DELETE FROM payments WHERE id = ?', [payment.id]);
         }
-        run('DELETE FROM payments WHERE id = ?', [payment.id]);
       }
-    }
-    run('DELETE FROM attendance WHERE id = ?', [id]);
+      run('DELETE FROM attendance WHERE id = ?', [id]);
+    });
   });
 
   // ── Games ──
@@ -293,7 +299,7 @@ export async function registerIpcHandlers() {
   });
 
   ipcMain.handle('app:quit', () => {
-    BrowserWindow.getFocusedWindow()?.close();
+    app.quit();
   });
 
   // ── Dashboard stats ──
@@ -360,6 +366,39 @@ export async function registerIpcHandlers() {
     };
   });
 
+  // ── CSV Helpers ──
+  function csvField(value: string | number): string {
+    const s = String(value);
+    if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+      return '"' + s.replace(/"/g, '""') + '"';
+    }
+    return s;
+  }
+
+  function parseCsvRow(line: string): string[] {
+    const fields: string[] = [];
+    let i = 0;
+    while (i < line.length) {
+      if (line[i] === '"') {
+        let field = '';
+        i++; // skip opening quote
+        while (i < line.length) {
+          if (line[i] === '"' && line[i + 1] === '"') { field += '"'; i += 2; }
+          else if (line[i] === '"') { i++; break; }
+          else { field += line[i++]; }
+        }
+        if (line[i] === ',') i++;
+        fields.push(field);
+      } else {
+        const end = line.indexOf(',', i);
+        if (end === -1) { fields.push(line.slice(i)); break; }
+        fields.push(line.slice(i, end));
+        i = end + 1;
+      }
+    }
+    return fields;
+  }
+
   // ── Export ──
   ipcMain.handle('export:csv', async () => {
     const win = BrowserWindow.getFocusedWindow();
@@ -378,7 +417,14 @@ export async function registerIpcHandlers() {
 
     const lines = ['Name,Gender,Level,Phone,Email,Balance'];
     for (const p of players) {
-      lines.push(`${p.name},${p.gender === 'male' ? 'Male' : 'Female'},${p.level},${p.phone},${p.email ?? ''},${p.balance}`);
+      lines.push([
+        csvField(p.name),
+        csvField(p.gender === 'male' ? 'Male' : 'Female'),
+        csvField(p.level),
+        csvField(p.phone),
+        csvField(p.email ?? ''),
+        csvField(p.balance),
+      ].join(','));
     }
     fs.writeFileSync(filePath, '﻿' + lines.join('\n'), 'utf-8');
   });
@@ -402,7 +448,7 @@ export async function registerIpcHandlers() {
 
     // Detect header: look for columns by name
     const header = lines[0]!.toLowerCase();
-    const cols = header.split(',').map(c => c.trim());
+    const cols = parseCsvRow(header).map(c => c.trim());
     const firstNameIdx = cols.findIndex(c => c.includes('first') && c.includes('name'));
     const lastNameIdx = cols.findIndex(c => c.includes('last') && c.includes('name'));
     const nameIdx = cols.findIndex(c => c === 'name' || c === '姓名');
@@ -428,7 +474,7 @@ export async function registerIpcHandlers() {
     const errors: string[] = [];
 
     for (let i = 1; i < lines.length; i++) {
-      const parts = lines[i]!.split(',').map(c => c.trim());
+      const parts = parseCsvRow(lines[i]!).map(c => c.trim());
       try {
         let name: string;
         if (nameIdx !== -1) {
@@ -495,6 +541,4 @@ export async function registerIpcHandlers() {
     run('DELETE FROM upcoming_sessions WHERE id = ?', [id]);
   });
 
-  // Ensure db reference is used
-  void db;
 }

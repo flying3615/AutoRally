@@ -86,11 +86,17 @@ contextBridge.exposeInMainWorld('api', api);
 
 // Expose shortcut listeners
 contextBridge.exposeInMainWorld('shortcuts', {
-  onNewSession: (cb: () => void) => ipcRenderer.on('shortcut:new-session', cb),
-  onEndSession: (cb: () => void) => ipcRenderer.on('shortcut:end-session', cb),
-  onExport: (cb: () => void) => ipcRenderer.on('shortcut:export', cb),
-  onAddPlayer: (cb: () => void) => ipcRenderer.on('shortcut:add-player', cb),
-  onSearchPlayer: (cb: () => void) => ipcRenderer.on('shortcut:search-player', cb),
-  onSettings: (cb: () => void) => ipcRenderer.on('shortcut:settings', cb),
-  removeAllListeners: (channel: string) => ipcRenderer.removeAllListeners(channel),
+  onNewSession: (cb: () => void) => ipcRenderer.on('shortcut:new-session', (_e) => cb()),
+  onEndSession: (cb: () => void) => ipcRenderer.on('shortcut:end-session', (_e) => cb()),
+  onExport: (cb: () => void) => ipcRenderer.on('shortcut:export', (_e) => cb()),
+  onAddPlayer: (cb: () => void) => ipcRenderer.on('shortcut:add-player', (_e) => cb()),
+  onSearchPlayer: (cb: () => void) => ipcRenderer.on('shortcut:search-player', (_e) => cb()),
+  onSettings: (cb: () => void) => ipcRenderer.on('shortcut:settings', (_e) => cb()),
+  removeAllListeners: (channel: string) => {
+    const ALLOWED = new Set([
+      'shortcut:new-session', 'shortcut:end-session', 'shortcut:export',
+      'shortcut:add-player', 'shortcut:search-player', 'shortcut:settings',
+    ]);
+    if (ALLOWED.has(channel)) ipcRenderer.removeAllListeners(channel);
+  },
 });

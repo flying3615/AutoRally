@@ -91,6 +91,9 @@ function SessionDetail({ session, onBack }: { session: SessionInfo; onBack: () =
       setGames(gms);
       setPayments(pays);
       setLoading(false);
+    }).catch((err: unknown) => {
+      console.error('Failed to load session detail:', err);
+      setLoading(false);
     });
   }, [session.id]);
 
@@ -310,6 +313,12 @@ export function Sessions() {
   };
 
   useEffect(() => { load(); }, []);
+
+  useEffect(() => {
+    return () => {
+      if (confirmTimer.current) clearTimeout(confirmTimer.current);
+    };
+  }, []);
 
   const handleCreate = async () => {
     if (activeSession) return;
