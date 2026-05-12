@@ -89,12 +89,12 @@ function migrate(db: Database) {
   db.run(`
     CREATE TABLE IF NOT EXISTS games (
       id TEXT PRIMARY KEY,
-      sessionId TEXT NOT NULL REFERENCES sessions(id),
+      sessionId TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
       courtNumber INTEGER NOT NULL,
-      team1Player1Id TEXT NOT NULL REFERENCES players(id),
-      team1Player2Id TEXT NOT NULL REFERENCES players(id),
-      team2Player1Id TEXT NOT NULL REFERENCES players(id),
-      team2Player2Id TEXT NOT NULL REFERENCES players(id),
+      team1Player1Id TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      team1Player2Id TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      team2Player1Id TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      team2Player2Id TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
       status TEXT NOT NULL CHECK(status IN ('pending', 'playing', 'completed')),
       roundNumber INTEGER NOT NULL,
       gameType TEXT NOT NULL CHECK(gameType IN ('mixed', 'male-double', 'female-double', 'open-double')),
@@ -113,8 +113,8 @@ function migrate(db: Database) {
   db.run(`
     CREATE TABLE IF NOT EXISTS payments (
       id TEXT PRIMARY KEY,
-      playerId TEXT NOT NULL REFERENCES players(id),
-      sessionId TEXT REFERENCES sessions(id),
+      playerId TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      sessionId TEXT REFERENCES sessions(id) ON DELETE CASCADE,
       amount REAL NOT NULL,
       status TEXT NOT NULL CHECK(status IN ('paid', 'unpaid')),
       paidDate TEXT,
@@ -139,6 +139,7 @@ function migrate(db: Database) {
   try { db.run('ALTER TABLE attendance ADD COLUMN paused INTEGER NOT NULL DEFAULT 0'); dirty = true; } catch (_) { /* already exists */ }
   try { db.run('ALTER TABLE payments ADD COLUMN paymentMethod TEXT NOT NULL DEFAULT \'\''); dirty = true; } catch (_) { /* already exists */ }
   if (migrateGameTypeConstraint(db)) dirty = true;
+  if (migrateAttendanceAndBalancesCascade(db)) dirty = true;
 
   if (dirty) save();
 }
@@ -184,6 +185,56 @@ function migrateGameTypeConstraint(db: Database): boolean {
     `);
     db.run('DROP TABLE games');
     db.run('ALTER TABLE games_new RENAME TO games');
+    db.run('COMMIT');
+  } catch (err) {
+    db.run('ROLLBACK');
+    throw err;
+  } finally {
+    db.run('PRAGMA foreign_keys = ON');
+  }
+  return true;
+}
+
+function migrateAttendanceAndBalancesCascade(db: Database): boolean {
+  const stmt = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'attendance'");
+  const row = stmt.step() ? stmt.getAsObject() as { sql?: string } : undefined;
+  stmt.free();
+  if (!row?.sql || row.sql.includes('ON DELETE CASCADE')) return false;
+
+  db.run('PRAGMA foreign_keys = OFF');
+  db.run('BEGIN TRANSACTION');
+  try {
+    db.run(`
+      CREATE TABLE attendance_new (
+        id TEXT PRIMARY KEY,
+        playerId TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+        sessionId TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        checkinTime TEXT NOT NULL,
+        UNIQUE(playerId, sessionId)
+      );
+    `);
+    db.run(`
+      INSERT INTO attendance_new (id, playerId, sessionId, checkinTime)
+      SELECT id, playerId, sessionId, checkinTime FROM attendance;
+    `);
+    db.run('DROP TABLE attendance');
+    db.run('ALTER TABLE attendance_new RENAME TO attendance');
+
+    db.run(`
+      CREATE TABLE balances_new (
+        id TEXT PRIMARY KEY,
+        playerId TEXT NOT NULL UNIQUE REFERENCES players(id) ON DELETE CASCADE,
+        balance REAL NOT NULL DEFAULT 0,
+        lastUpdated TEXT NOT NULL
+      );
+    `);
+    db.run(`
+      INSERT INTO balances_new (id, playerId, balance, lastUpdated)
+      SELECT id, playerId, balance, lastUpdated FROM balances;
+    `);
+    db.run('DROP TABLE balances');
+    db.run('ALTER TABLE balances_new RENAME TO balances');
+
     db.run('COMMIT');
   } catch (err) {
     db.run('ROLLBACK');
