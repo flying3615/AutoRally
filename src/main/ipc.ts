@@ -1,7 +1,7 @@
-import { ipcMain, BrowserWindow, dialog } from 'electron';
+import { ipcMain, BrowserWindow, dialog, app } from 'electron';
 import { v4 as uuid } from 'uuid';
 import { SqlValue } from 'sql.js';
-import { initDb, run, queryAll, queryOne } from './database';
+import { initDb, run, queryAll, queryOne, transaction } from './database';
 import fs from 'fs';
 
 export async function registerIpcHandlers() {
@@ -95,33 +95,33 @@ export async function registerIpcHandlers() {
   ipcMain.handle('attendance:checkin', (_e, playerId: string, sessionId: string, paymentMethod: 'credit' | 'cash') => {
     const id = uuid();
     const checkinTime = new Date().toISOString();
-    try {
-      run('INSERT INTO attendance (id, playerId, sessionId, checkinTime) VALUES (?, ?, ?, ?)',
-        [id, playerId, sessionId, checkinTime]);
-    } catch (err: unknown) {
-      if (err instanceof Error && err.message.includes('UNIQUE')) return null;
-      throw err;
-    }
     const fee = queryOne<{ value: string }>("SELECT value FROM settings WHERE key = 'sessionFee'");
-    const sessionFee = Number(fee?.value ?? 30);
+    const sessionFee = Number(fee?.value ?? 10);
 
-    if (paymentMethod === 'credit') {
-      const balance = queryOne<{ balance: number }>('SELECT balance FROM balances WHERE playerId = ?', [playerId]);
-      if (!balance || balance.balance < sessionFee) {
-        // Rollback attendance
-        run('DELETE FROM attendance WHERE id = ?', [id]);
-        throw new Error('Insufficient balance');
+    return transaction(() => {
+      try {
+        run('INSERT INTO attendance (id, playerId, sessionId, checkinTime) VALUES (?, ?, ?, ?)',
+          [id, playerId, sessionId, checkinTime]);
+      } catch (err: unknown) {
+        if (err instanceof Error && err.message.includes('UNIQUE')) return null;
+        throw err;
       }
-      run('UPDATE balances SET balance = balance - ?, lastUpdated = ? WHERE playerId = ?',
-        [sessionFee, checkinTime, playerId]);
-      run('INSERT INTO payments (id, playerId, sessionId, amount, status, paidDate, paymentType, paymentMethod) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-        [uuid(), playerId, sessionId, sessionFee, 'paid', checkinTime, 'session', 'credit']);
-    } else {
-      // Cash: no balance change, record as paid
-      run('INSERT INTO payments (id, playerId, sessionId, amount, status, paidDate, paymentType, paymentMethod) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-        [uuid(), playerId, sessionId, sessionFee, 'paid', checkinTime, 'session', 'cash']);
-    }
-    return { id, playerId, sessionId, checkinTime };
+
+      if (paymentMethod === 'credit') {
+        const balance = queryOne<{ balance: number }>('SELECT balance FROM balances WHERE playerId = ?', [playerId]);
+        if (!balance || balance.balance < sessionFee) {
+          throw new Error('Insufficient balance');
+        }
+        run('UPDATE balances SET balance = balance - ?, lastUpdated = ? WHERE playerId = ?',
+          [sessionFee, checkinTime, playerId]);
+        run('INSERT INTO payments (id, playerId, sessionId, amount, status, paidDate, paymentType, paymentMethod) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+          [uuid(), playerId, sessionId, sessionFee, 'paid', checkinTime, 'session', 'credit']);
+      } else {
+        run('INSERT INTO payments (id, playerId, sessionId, amount, status, paidDate, paymentType, paymentMethod) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+          [uuid(), playerId, sessionId, sessionFee, 'paid', checkinTime, 'session', 'cash']);
+      }
+      return { id, playerId, sessionId, checkinTime };
+    });
   });
 
   ipcMain.handle('attendance:listBySession', (_e, sessionId: string) => {
@@ -136,20 +136,23 @@ export async function registerIpcHandlers() {
   });
 
   ipcMain.handle('attendance:remove', (_e, id: string) => {
-    const att = queryOne<{ playerId: string; sessionId: string }>('SELECT playerId, sessionId FROM attendance WHERE id = ?', [id]);
-    if (att) {
-      const payment = queryOne<{ id: string; paymentMethod: string; amount: number }>(
-        "SELECT id, paymentMethod, amount FROM payments WHERE playerId = ? AND sessionId = ? AND paymentType = 'session'", [att.playerId, att.sessionId]
-      );
-      if (payment) {
-        if (payment.paymentMethod === 'credit') {
-          run('UPDATE balances SET balance = balance + ?, lastUpdated = ? WHERE playerId = ?',
-            [payment.amount, new Date().toISOString(), att.playerId]);
+    transaction(() => {
+      const att = queryOne<{ playerId: string; sessionId: string }>('SELECT playerId, sessionId FROM attendance WHERE id = ?', [id]);
+      if (att) {
+        const payment = queryOne<{ id: string; paymentMethod: string; amount: number }>(
+          "SELECT id, paymentMethod, amount FROM payments WHERE playerId = ? AND sessionId = ? AND paymentType = 'session'",
+          [att.playerId, att.sessionId]
+        );
+        if (payment) {
+          if (payment.paymentMethod === 'credit') {
+            run('UPDATE balances SET balance = balance + ?, lastUpdated = ? WHERE playerId = ?',
+              [payment.amount, new Date().toISOString(), att.playerId]);
+          }
+          run('DELETE FROM payments WHERE id = ?', [payment.id]);
         }
-        run('DELETE FROM payments WHERE id = ?', [payment.id]);
       }
-    }
-    run('DELETE FROM attendance WHERE id = ?', [id]);
+      run('DELETE FROM attendance WHERE id = ?', [id]);
+    });
   });
 
   // ── Games ──

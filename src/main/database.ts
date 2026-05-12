@@ -205,6 +205,19 @@ export function run(sql: string, params?: SqlValue[]) {
   debounceSave();
 }
 
+export function transaction<T>(fn: () => T): T {
+  const d = getDb();
+  d.run('BEGIN');
+  try {
+    const result = fn();
+    d.run('COMMIT');
+    return result;
+  } catch (err) {
+    d.run('ROLLBACK');
+    throw err;
+  }
+}
+
 export function queryOne<T>(sql: string, params?: SqlValue[]): T | undefined {
   const d = getDb();
   const stmt = d.prepare(sql);
