@@ -20,6 +20,7 @@ interface SessionState {
   playingCount: number;
   upcomingSessions: UpcomingSession[];
   lastRefresh: number;
+  pollingId: ReturnType<typeof setInterval> | null;
   refresh: () => Promise<void>;
   refreshUpcoming: () => Promise<void>;
   startPolling: () => () => void;
@@ -31,6 +32,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   playingCount: 0,
   upcomingSessions: [],
   lastRefresh: 0,
+  pollingId: null,
 
   refresh: async () => {
     try {
@@ -67,12 +69,19 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   startPolling: () => {
+    const existing = get().pollingId;
+    if (existing) clearInterval(existing);
+
     get().refresh();
     get().refreshUpcoming();
     const id = setInterval(() => {
       get().refresh();
       get().refreshUpcoming();
     }, 3000);
-    return () => clearInterval(id);
+    set({ pollingId: id });
+    return () => {
+      clearInterval(id);
+      set({ pollingId: null });
+    };
   },
 }));

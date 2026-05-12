@@ -15,21 +15,24 @@ const GameContext = createContext<GameContextValue | null>(null);
 
 export function GameProvider({ children }: { children: ReactNode }) {
   const [timers, setTimers] = useState<Map<number, TimerState>>(new Map());
-  const timerRef = useRef<GameTimer | null>(null);
+  const timerRef = useRef<GameTimer>(new GameTimer()); // eagerly initialized — never null
   const onEndedRef = useRef<Map<number, () => void>>(new Map());
 
   useEffect(() => {
-    timerRef.current = new GameTimer();
-    return () => { timerRef.current?.stopAll(); };
+    return () => { timerRef.current.stopAll(); };
   }, []);
 
   const startGame = useCallback((courtNumber: number, durationMinutes: number, onEnded: () => void) => {
     onEndedRef.current.set(courtNumber, onEnded);
 
-    timerRef.current?.start(courtNumber, durationMinutes, (remaining, phase) => {
+    timerRef.current.start(courtNumber, durationMinutes, (remaining, phase) => {
       setTimers(prev => {
         const next = new Map(prev);
-        next.set(courtNumber, { remaining, phase });
+        if (phase === 'ended') {
+          next.delete(courtNumber); // clean up on natural end
+        } else {
+          next.set(courtNumber, { remaining, phase });
+        }
         return next;
       });
 
@@ -41,17 +44,16 @@ export function GameProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const pauseGame = useCallback((courtNumber: number) => {
-    timerRef.current?.pause(courtNumber);
+    timerRef.current.pause(courtNumber);
   }, []);
 
   const resumeGame = useCallback((courtNumber: number) => {
-    timerRef.current?.resume(courtNumber);
+    timerRef.current.resume(courtNumber);
   }, []);
 
   const earlyFinishGame = useCallback((courtNumber: number) => {
-    // Trigger the ended callback immediately
     const cb = onEndedRef.current.get(courtNumber);
-    timerRef.current?.stop(courtNumber);
+    timerRef.current.stop(courtNumber);
     onEndedRef.current.delete(courtNumber);
     setTimers(prev => {
       const next = new Map(prev);

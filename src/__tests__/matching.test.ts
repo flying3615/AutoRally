@@ -307,9 +307,9 @@ function runSim(
     const outPath = path.join(__dirname, '..', '..', 'test-results', fileName);
     fs.mkdirSync(path.dirname(outPath), { recursive: true });
     fs.writeFileSync(outPath, csv);
+    console.log(`\n[${label}] CSV → ${outPath} | spread=${spread} | types=[${[...allCourtTypes].join(',')}]`);
+    console.log(csv);
   }
-  console.log(`\n[${label}] CSV → test-results/${fileName} | spread=${spread} | types=[${[...allCourtTypes].join(',')}]`);
-  console.log(csv);
 
   expect(spread).toBeLessThanOrEqual(1);
   return { spread, courtTypes: allCourtTypes };
