@@ -16,6 +16,7 @@ interface PaymentInfo {
 export function Payments() {
   const [unpaid, setUnpaid] = useState<PaymentInfo[]>([]);
   const [tab, setTab] = useState<'unpaid' | 'all'>('unpaid');
+  const [isMarking, setIsMarking] = useState(false);
 
   const load = async () => {
     const unpaidList = await window.api.paymentsListUnpaid();
@@ -30,10 +31,18 @@ export function Payments() {
   };
 
   const handleMarkAllPaid = async () => {
-    for (const p of unpaid) {
-      await window.api.paymentsMarkPaid(p.id);
+    if (isMarking) return;
+    setIsMarking(true);
+    try {
+      for (const p of unpaid) {
+        await window.api.paymentsMarkPaid(p.id);
+      }
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Failed to mark payments as paid');
+    } finally {
+      setIsMarking(false);
+      load();
     }
-    load();
   };
 
   return (
@@ -50,8 +59,11 @@ export function Payments() {
             {unpaid.length > 0 && (
               <button
                 onClick={handleMarkAllPaid}
+                disabled={isMarking}
                 className="h-8 px-3.5 text-sm font-medium bg-emerald-600 text-white rounded-lg
-                  hover:bg-emerald-500 active:scale-[0.97] shadow-[0_2px_8px_-2px_rgba(5,150,105,0.3)] transition-all inline-flex items-center justify-center gap-1.5"
+                  hover:bg-emerald-500 active:scale-[0.97] shadow-[0_2px_8px_-2px_rgba(5,150,105,0.3)]
+                  transition-all inline-flex items-center justify-center gap-1.5
+                  disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />

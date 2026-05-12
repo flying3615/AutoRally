@@ -106,9 +106,14 @@ function EditPlayerModal({
 
   const handleSave = async () => {
     setSaving(true);
-    await window.api.playersUpdate(player.id, { name, gender, level, phone });
-    setSaving(false);
-    onSaved();
+    try {
+      await window.api.playersUpdate(player.id, { name, gender, level, phone });
+      onSaved();
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Failed to save player');
+    } finally {
+      setSaving(false);
+    }
   };
 
   useEffect(() => {
@@ -223,6 +228,7 @@ function EditPlayerModal({
 
 export function Checkin() {
   const { sessionId } = useParams<{ sessionId: string }>();
+  const removingRef = useRef(new Set<string>());
   const [players, setPlayers] = useState<PlayerInfo[]>([]);
   const [attendance, setAttendance] = useState<AttendanceInfo[]>([]);
   const [games, setGames] = useState<GameInfo[]>([]);
@@ -272,17 +278,23 @@ export function Checkin() {
   };
 
   const handleUncheck = async (playerId: string, playerName: string) => {
+    if (removingRef.current.has(playerId)) return;
     const att = attendance.find(a => a.playerId === playerId);
     if (!att) return;
-    await window.api.attendanceRemove(att.id);
-    setCheckedInSet(prev => {
-      const next = new Set(prev);
-      next.delete(playerId);
-      return next;
-    });
-    setLastCheckin(`${playerName} removed`);
-    setTimeout(() => setLastCheckin(null), 2000);
-    load();
+    removingRef.current.add(playerId);
+    try {
+      await window.api.attendanceRemove(att.id);
+      setCheckedInSet(prev => {
+        const next = new Set(prev);
+        next.delete(playerId);
+        return next;
+      });
+      setLastCheckin(`${playerName} removed`);
+      setTimeout(() => setLastCheckin(null), 2000);
+      load();
+    } finally {
+      removingRef.current.delete(playerId);
+    }
   };
 
   // Context menu & edit state

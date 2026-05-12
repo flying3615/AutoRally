@@ -640,8 +640,14 @@ export function MatchPanel() {
           if (targetPlayerId === draggedPlayerId) return;
           // Put dragged player into target slot
           await window.api.gamesReplacePlayer(targetGameId, targetSlot, draggedPlayerId);
-          // Put target player into source slot
-          await window.api.gamesReplacePlayer(srcGameId, srcSlot, targetPlayerId);
+          try {
+            // Put displaced player into source slot
+            await window.api.gamesReplacePlayer(srcGameId, srcSlot, targetPlayerId);
+          } catch (swapErr) {
+            // Rollback: restore target slot to original player
+            await window.api.gamesReplacePlayer(targetGameId, targetSlot, targetPlayerId);
+            throw swapErr;
+          }
         }
       } else {
         // From waiting pool — just replace
@@ -649,6 +655,7 @@ export function MatchPanel() {
       }
     } catch (err) {
       console.error('Replace player failed:', err);
+      alert('Failed to move player. Please try again.');
     }
     await load();
   };
