@@ -62,6 +62,7 @@ export class GameTimer {
     clearInterval(timer.interval);
     timer.paused = true;
     timer.remainingAtPause = Math.max(0, Math.ceil((timer.endTime - Date.now()) / 1000));
+    this.warned.delete(courtNumber); // allow warning to re-fire after resume
 
     const cb = this.callbacks.get(courtNumber);
     if (cb) cb(timer.remainingAtPause, 'paused');
