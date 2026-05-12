@@ -12,7 +12,7 @@
     "electron:dev": "npm run build:main && concurrently \"vite --port 5173 --strictPort\" \"wait-on http://localhost:5173 && VITE_DEV_SERVER_URL=http://localhost:5173 electron .\"",
     "electron:build": "npm run build && electron-builder",
     "dist:mac": "npm run build && electron-builder --mac",
-    "dist:win": "cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win",
+    "dist:win": "npm run build && electron-builder --win",
     "dist:linux": "npm run build && electron-builder --linux",
     "dist:all": "npm run build && electron-builder --mac --win --linux",
     "test": "vitest run",
@@ -50,6 +50,7 @@
   "build": {
     "appId": "com.autorally.app",
     "productName": "AutoRally",
+    "icon": "build/icon.png",
     "directories": {
       "output": "release"
     },
@@ -58,20 +59,13 @@
       "package.json"
     ],
     "win": {
-      "target": "portable",
-      "icon": null
+      "target": "portable"
     },
     "linux": {
-      "target": "AppImage",
-      "icon": null
+      "target": "AppImage"
     },
     "mac": {
-      "target": "dmg",
-      "icon": null
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "target": "dmg"
     }
   },
   "dependencies": {
