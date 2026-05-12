@@ -366,6 +366,39 @@ export async function registerIpcHandlers() {
     };
   });
 
+  // ── CSV Helpers ──
+  function csvField(value: string | number): string {
+    const s = String(value);
+    if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+      return '"' + s.replace(/"/g, '""') + '"';
+    }
+    return s;
+  }
+
+  function parseCsvRow(line: string): string[] {
+    const fields: string[] = [];
+    let i = 0;
+    while (i < line.length) {
+      if (line[i] === '"') {
+        let field = '';
+        i++; // skip opening quote
+        while (i < line.length) {
+          if (line[i] === '"' && line[i + 1] === '"') { field += '"'; i += 2; }
+          else if (line[i] === '"') { i++; break; }
+          else { field += line[i++]; }
+        }
+        if (line[i] === ',') i++;
+        fields.push(field);
+      } else {
+        const end = line.indexOf(',', i);
+        if (end === -1) { fields.push(line.slice(i)); break; }
+        fields.push(line.slice(i, end));
+        i = end + 1;
+      }
+    }
+    return fields;
+  }
+
   // ── Export ──
   ipcMain.handle('export:csv', async () => {
     const win = BrowserWindow.getFocusedWindow();
@@ -384,7 +417,14 @@ export async function registerIpcHandlers() {
 
     const lines = ['Name,Gender,Level,Phone,Email,Balance'];
     for (const p of players) {
-      lines.push(`${p.name},${p.gender === 'male' ? 'Male' : 'Female'},${p.level},${p.phone},${p.email ?? ''},${p.balance}`);
+      lines.push([
+        csvField(p.name),
+        csvField(p.gender === 'male' ? 'Male' : 'Female'),
+        csvField(p.level),
+        csvField(p.phone),
+        csvField(p.email ?? ''),
+        csvField(p.balance),
+      ].join(','));
     }
     fs.writeFileSync(filePath, '﻿' + lines.join('\n'), 'utf-8');
   });
@@ -408,7 +448,7 @@ export async function registerIpcHandlers() {
 
     // Detect header: look for columns by name
     const header = lines[0]!.toLowerCase();
-    const cols = header.split(',').map(c => c.trim());
+    const cols = parseCsvRow(header).map(c => c.trim());
     const firstNameIdx = cols.findIndex(c => c.includes('first') && c.includes('name'));
     const lastNameIdx = cols.findIndex(c => c.includes('last') && c.includes('name'));
     const nameIdx = cols.findIndex(c => c === 'name' || c === '姓名');
@@ -434,7 +474,7 @@ export async function registerIpcHandlers() {
     const errors: string[] = [];
 
     for (let i = 1; i < lines.length; i++) {
-      const parts = lines[i]!.split(',').map(c => c.trim());
+      const parts = parseCsvRow(lines[i]!).map(c => c.trim());
       try {
         let name: string;
         if (nameIdx !== -1) {
