@@ -599,7 +599,16 @@ export function MatchPanel() {
 
   const handleRestoreCheckin = async (target: ContextMenuTarget) => {
     if (!sessionId) return;
-    await window.api.attendanceCheckin(target.playerId, sessionId, 'cash');
+    const useCash = window.confirm(
+      `Re-check in ${target.name}?\n\nOK = Credit   Cancel = Cash`
+    );
+    const method = useCash ? 'credit' : 'cash';
+    try {
+      await window.api.attendanceCheckin(target.playerId, sessionId, method as 'credit' | 'cash');
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Check-in failed');
+      return;
+    }
     setCtxMenu(null);
     load();
   };
@@ -682,7 +691,7 @@ export function MatchPanel() {
     document.addEventListener('mouseup', handleUp);
   };
 
-  const handleGenerate = async () => {
+  const handleGenerate = useCallback(async () => {
     if (!sessionId) return;
 
     try {
@@ -748,7 +757,7 @@ export function MatchPanel() {
     } catch (err: unknown) {
       alert('Failed to generate matches: ' + (err instanceof Error ? err.message : String(err)));
     }
-  };
+  }, [sessionId, settings, attendance, playingIds, activeGames, load]);
 
   // Auto-generate next round when timer hits warning (last 60s)
   useEffect(() => {
@@ -759,7 +768,7 @@ export function MatchPanel() {
       handleGenerate();
       nextRoundGeneratedRef.current = true;
     }
-  }, [timers, activeGames]);
+  }, [timers, activeGames, handleGenerate]);
 
   // Reset the generation flag when no more active games
   useEffect(() => {
