@@ -458,7 +458,7 @@ function PlayerCard({
         )}
       </div>
 
-      <span className="flex-1 text-sm font-medium text-zinc-800 truncate">{p.name}</span>
+      <span className="flex-1 text-sm font-bold text-zinc-800 truncate">{p.name}</span>
 
       {isPaused ? (
         <span className="text-[10px] font-semibold px-1.5 py-px rounded bg-amber-100 text-amber-700 shrink-0">Paused</span>
@@ -877,8 +877,6 @@ export function MatchPanel() {
           {/* Compact Header */}
           <div className="flex items-center justify-between mb-3 shrink-0">
             <div className="flex items-center gap-3">
-              <h2 className="text-lg font-bold text-zinc-900 tracking-tight">Match Panel</h2>
-              <span className="w-px h-4 bg-zinc-200" />
               <span className="text-xs text-zinc-500">
                 Checked in <strong className="text-zinc-700">{attendance.length}</strong>
               </span>
@@ -1231,7 +1229,7 @@ export function MatchPanel() {
                     >
                       {p.name[0]}
                     </span>
-                    <span className="flex-1 font-medium truncate">{p.name}</span>
+                    <span className="flex-1 font-bold truncate">{p.name}</span>
                     <span className="text-[10px] text-zinc-400 font-medium shrink-0">Lv{p.level}</span>
                   </button>
                 ))}

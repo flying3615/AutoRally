@@ -355,7 +355,7 @@ export function Sessions() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="max-w-6xl mx-auto px-8 py-10" style={{ animation: 'fadeIn 0.3s ease' }}>
+      <div className="w-[90%] mx-auto px-8 py-10" style={{ animation: 'fadeIn 0.3s ease' }}>
 
         {/* Session detail drill-down */}
         {selectedSessionId && selectedSession ? (
@@ -363,11 +363,8 @@ export function Sessions() {
         ) : (
           <>
             {/* Header */}
-            <div className="flex items-end justify-between mb-8">
-              <div>
-                <h2 className="text-xl font-bold text-zinc-900 tracking-tight">Sessions</h2>
-                <p className="text-sm text-zinc-400 mt-0.5">{sessions.length} sessions recorded</p>
-              </div>
+            <div className="flex items-end justify-between mb-6">
+              <p className="text-sm text-zinc-400">{sessions.length} sessions recorded</p>
               <button
                 onClick={handleCreate}
                 disabled={!!activeSession}

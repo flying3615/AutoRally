@@ -66,3 +66,54 @@ export const DEFAULT_SETTINGS: Settings = {
   sessionFee: 10,
   gameDuration: 15,
 };
+
+// ── Tournament ──
+
+export interface Tournament {
+  id: string;
+  name: string;
+  description: string;
+  date: string;
+  format: 'knockout' | 'round_robin' | 'mixed';
+  status: 'upcoming' | 'active' | 'completed';
+  courtCount: number;
+  createdAt: string;
+}
+
+export interface TournamentRegistration {
+  id: string;
+  tournamentId: string;
+  player1Id: string;
+  player2Id: string | null;
+  registeredAt: string;
+}
+
+export interface TournamentMatch {
+  id: string;
+  tournamentId: string;
+  round: string;
+  matchNumber: number;
+  courtNumber: number | null;
+  status: 'pending' | 'in_progress' | 'completed';
+  team1Player1Id: string;
+  team1Player2Id: string | null;
+  team2Player1Id: string;
+  team2Player2Id: string | null;
+  team1Score: number | null;
+  team2Score: number | null;
+  winner: 'team1' | 'team2' | null;
+  scheduledTime: string | null;
+  completedAt: string | null;
+}
+
+export interface TournamentStanding {
+  id: string;
+  tournamentId: string;
+  player1Id: string;
+  player2Id: string | null;
+  matchesPlayed: number;
+  wins: number;
+  losses: number;
+  pointsFor: number;
+  pointsAgainst: number;
+}

@@ -78,6 +78,22 @@ const api = {
   exportCSV: () => ipcRenderer.invoke('export:csv'),
   dashboardStats: () => ipcRenderer.invoke('dashboard:stats'),
   playersImportCsv: () => ipcRenderer.invoke('players:importCsv') as Promise<{ imported: number; skipped: number; errors: string[] }>,
+  reportSessionStats: (sessionId: string) => ipcRenderer.invoke('report:sessionStats', sessionId) as Promise<{
+    maxRound: number;
+    players: { playerId: string; name: string; gender: string; level: number; played: number; satOut: number; doubles: number; mixed: number; totalRounds: number }[];
+  }>,
+  tournamentsList: () => ipcRenderer.invoke('tournaments:list'),
+  tournamentsGet: (id: string) => ipcRenderer.invoke('tournaments:get', id),
+  tournamentsCreate: (data: { name: string; description?: string; date: string; format: string; courtCount?: number }) => ipcRenderer.invoke('tournaments:create', data),
+  tournamentsUpdate: (id: string, data: { name?: string; description?: string; date?: string; format?: string; courtCount?: number }) => ipcRenderer.invoke('tournaments:update', id, data),
+  tournamentsDelete: (id: string) => ipcRenderer.invoke('tournaments:delete', id),
+  tournamentsRegister: (tournamentId: string, player1Id: string, player2Id?: string) => ipcRenderer.invoke('tournaments:register', tournamentId, player1Id, player2Id),
+  tournamentsUnregister: (id: string) => ipcRenderer.invoke('tournaments:unregister', id),
+  tournamentsRegistrations: (tournamentId: string) => ipcRenderer.invoke('tournaments:registrations', tournamentId),
+  tournamentsGenerateBracket: (tournamentId: string) => ipcRenderer.invoke('tournaments:generateBracket', tournamentId),
+  tournamentsSetScore: (matchId: string, team1Score: number, team2Score: number) => ipcRenderer.invoke('tournaments:setScore', matchId, team1Score, team2Score),
+  tournamentsAdvanceWinners: (tournamentId: string, currentRound: string) => ipcRenderer.invoke('tournaments:advanceWinners', tournamentId, currentRound),
+  tournamentsStandings: (tournamentId: string) => ipcRenderer.invoke('tournaments:standings', tournamentId),
 };
 
 export type ElectronAPI = typeof api;

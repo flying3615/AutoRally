@@ -236,7 +236,6 @@ export function Checkin() {
   const [lastCheckin, setLastCheckin] = useState<string | null>(null);
   const [groupBy, setGroupBy] = useState<'gender' | 'level'>('gender');
   const [checkedInSet, setCheckedInSet] = useState<Set<string>>(new Set());
-  const [pendingCheckin, setPendingCheckin] = useState<{ player: PlayerInfo; sessionFee: number; error?: string } | null>(null);
   const [sessionFee, setSessionFee] = useState('10');
 
   const load = async () => {
@@ -255,27 +254,6 @@ export function Checkin() {
   };
 
   useEffect(() => { load(); }, [sessionId]);
-
-  const handleCheckin = (player: PlayerInfo) => {
-    if (!sessionId) return;
-    const fee = Number(sessionFee) || 10;
-    setPendingCheckin({ player, sessionFee: fee });
-  };
-
-  const confirmCheckin = async (method: 'credit' | 'cash') => {
-    if (!sessionId || !pendingCheckin) return;
-    try {
-      await window.api.attendanceCheckin(pendingCheckin.player.id, sessionId, method);
-      setCheckedInSet(prev => new Set(prev).add(pendingCheckin.player.id));
-      setLastCheckin(pendingCheckin.player.name);
-      setTimeout(() => setLastCheckin(null), 2000);
-      setPendingCheckin(null);
-      load();
-    } catch (err: any) {
-      // Show error in modal
-      setPendingCheckin({ ...pendingCheckin, error: err?.message ?? 'Check-in failed' });
-    }
-  };
 
   const handleUncheck = async (playerId: string, playerName: string) => {
     if (removingRef.current.has(playerId)) return;
@@ -327,49 +305,55 @@ export function Checkin() {
   const maleWaiting = waitingPlayers.filter(p => p.gender === 'male');
   const femaleWaiting = waitingPlayers.filter(p => p.gender === 'female');
 
+  const fee = Number(sessionFee) || 10;
+
+  const doCheckin = async (playerId: string, playerName: string, method: 'credit' | 'cash') => {
+    if (!sessionId) return;
+    try {
+      await window.api.attendanceCheckin(playerId, sessionId, method);
+      setCheckedInSet(prev => new Set(prev).add(playerId));
+      setLastCheckin(playerName);
+      setTimeout(() => setLastCheckin(null), 2000);
+      load();
+    } catch (err: any) {
+      alert(err?.message ?? 'Check-in failed');
+    }
+  };
+
   const renderCard = (p: PlayerInfo) => {
     const checked = checkedInSet.has(p.id);
     const isMale = p.gender === 'male';
-    return (
-      <button
-        key={p.id}
-        onClick={() => { checked ? handleUncheck(p.id, p.name) : handleCheckin(p); }}
-        onContextMenu={(e) => handleContextMenu(e, p)}
-        className="relative flex items-center rounded-md text-left transition-all active:scale-[0.98] group/check"
-        style={{
-          padding: '3px 6px',
-          backgroundColor: checked ? '#ecfdf5' : isMale ? '#eef4ff' : '#fdf2f8',
-          borderColor: checked ? '#a7f3d0' : isMale ? '#bfdbfe' : '#f0c5dd',
-          borderWidth: 1,
-          borderStyle: 'solid',
-          boxShadow: checked ? '0 1px 3px -2px rgba(16,185,129,0.12)' : undefined,
-          cursor: 'pointer',
-        }}
-        onMouseEnter={(e) => {
-          if (checked) {
+    const canCredit = p.balance >= fee;
+
+    if (checked) {
+      return (
+        <button
+          key={p.id}
+          onClick={() => handleUncheck(p.id, p.name)}
+          onContextMenu={(e) => handleContextMenu(e, p)}
+          className="relative flex items-center rounded-md text-left transition-all active:scale-[0.98] group/check"
+          style={{
+            padding: '3px 6px',
+            backgroundColor: '#ecfdf5',
+            borderColor: '#a7f3d0',
+            borderWidth: 1,
+            borderStyle: 'solid',
+            boxShadow: '0 1px 3px -2px rgba(16,185,129,0.12)',
+            cursor: 'pointer',
+          }}
+          onMouseEnter={(e) => {
             e.currentTarget.style.backgroundColor = '#fee2e2';
             e.currentTarget.style.borderColor = '#fecaca';
-          } else {
-            e.currentTarget.style.borderColor = isMale ? genderColors.male.border : genderColors.female.border;
-          }
-        }}
-        onMouseLeave={(e) => {
-          if (checked) {
+          }}
+          onMouseLeave={(e) => {
             e.currentTarget.style.backgroundColor = '#ecfdf5';
             e.currentTarget.style.borderColor = '#a7f3d0';
-          } else {
-            e.currentTarget.style.borderColor = isMale ? '#bfdbfe' : '#f0c5dd';
-          }
-        }}
-      >
-        <span
-          className="text-sm font-medium truncate flex-1"
-          style={{ color: checked ? '#047857' : levelColors[p.level] ?? '#6b7280' }}
+          }}
         >
-          {p.name}
-          <span className="text-[11px] text-zinc-400 ml-0.5">{p.level}</span>
-        </span>
-        {checked ? (
+          <span className="text-sm font-bold truncate flex-1" style={{ color: '#047857' }}>
+            {p.name}
+            <span className="text-[11px] text-zinc-400 ml-0.5">{p.level}</span>
+          </span>
           <span className="shrink-0 ml-0.5">
             <svg className="w-3 h-3 text-emerald-500 block group-hover/check:hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
@@ -378,8 +362,43 @@ export function Checkin() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </span>
-        ) : null}
-      </button>
+        </button>
+      );
+    }
+
+    return (
+      <div
+        key={p.id}
+        onContextMenu={(e) => handleContextMenu(e, p)}
+        className="flex items-center rounded-md transition-all"
+        style={{
+          padding: '2px 4px',
+          backgroundColor: isMale ? '#eef4ff' : '#fdf2f8',
+          borderColor: isMale ? '#bfdbfe' : '#f0c5dd',
+          borderWidth: 1,
+          borderStyle: 'solid',
+        }}
+      >
+        <span className="text-sm font-bold truncate flex-1" style={{ color: levelColors[p.level] ?? '#6b7280' }}>
+          {p.name}
+          <span className="text-[11px] text-zinc-400 ml-0.5">{p.level}</span>
+        </span>
+        <div className="flex items-center gap-0.5 shrink-0 ml-1">
+          <button
+            onClick={() => doCheckin(p.id, p.name, 'credit')}
+            disabled={!canCredit}
+            className="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-zinc-800 text-white hover:bg-zinc-700 active:scale-95 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            Cr
+          </button>
+          <button
+            onClick={() => doCheckin(p.id, p.name, 'cash')}
+            className="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-emerald-600 text-white hover:bg-emerald-500 active:scale-95 transition-all"
+          >
+            $
+          </button>
+        </div>
+      </div>
     );
   };
 
@@ -421,7 +440,6 @@ export function Checkin() {
         <div className="px-4 py-3">
           {/* Top bar */}
           <div className="flex items-center gap-3 mb-3">
-            <h2 className="text-lg font-bold text-zinc-900 tracking-tight shrink-0">Check-in</h2>
             <span className="text-sm text-zinc-500 shrink-0">
               Checked in <strong className="text-emerald-600">{checkedInSet.size}</strong> / <strong className="text-zinc-700">{players.length}</strong>
             </span>
@@ -633,54 +651,6 @@ export function Checkin() {
           <span>{inGameIds.size} playing</span>
         </div>
       </aside>
-
-      {/* Payment Method Modal */}
-      {pendingCheckin && (
-        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => setPendingCheckin(null)}>
-          <div className="bg-white rounded-2xl p-6 w-[340px] max-w-[90vw]" onClick={e => e.stopPropagation()}
-            style={{ boxShadow: '0 24px 48px -12px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.04)', animation: 'ctxFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)' }}>
-            <h3 className="text-lg font-bold text-zinc-900 tracking-tight mb-1">Check In</h3>
-            <p className="text-sm text-zinc-500 mb-4">{pendingCheckin.player.name}</p>
-
-            <div className="flex items-center justify-between py-2 px-3 bg-zinc-50 rounded-xl mb-4 text-sm">
-              <span className="text-zinc-500">Balance</span>
-              <span className={`font-semibold tabular-nums font-mono ${pendingCheckin.player.balance < pendingCheckin.sessionFee ? 'text-red-500' : 'text-zinc-900'}`}>
-                ${pendingCheckin.player.balance.toFixed(0)}
-              </span>
-            </div>
-            <div className="flex items-center justify-between py-2 px-3 bg-zinc-50 rounded-xl mb-4 text-sm">
-              <span className="text-zinc-500">Session Fee</span>
-              <span className="font-semibold tabular-nums font-mono text-zinc-900">${pendingCheckin.sessionFee}</span>
-            </div>
-
-            {pendingCheckin.error && (
-              <div className="mb-4 text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{pendingCheckin.error}</div>
-            )}
-
-            <div className="flex gap-2">
-              <button
-                onClick={() => confirmCheckin('credit')}
-                disabled={pendingCheckin.player.balance < pendingCheckin.sessionFee}
-                className="flex-1 h-10 text-sm font-semibold bg-zinc-900 text-white rounded-xl hover:bg-zinc-800 active:scale-[0.97] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                Credit
-              </button>
-              <button
-                onClick={() => confirmCheckin('cash')}
-                className="flex-1 h-10 text-sm font-semibold bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 active:scale-[0.97] transition-all"
-              >
-                Cash
-              </button>
-            </div>
-            <button
-              onClick={() => setPendingCheckin(null)}
-              className="w-full h-9 mt-2 text-sm font-medium text-zinc-500 hover:text-zinc-700 hover:bg-zinc-100 rounded-xl transition-all"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

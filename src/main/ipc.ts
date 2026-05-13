@@ -541,4 +541,349 @@ export async function registerIpcHandlers() {
     run('DELETE FROM upcoming_sessions WHERE id = ?', [id]);
   });
 
+  // ── Report ──
+  ipcMain.handle('report:sessionStats', (_e, sessionId: string) => {
+    // Players checked in this session
+    // All games this session
+    const games = queryAll<{
+      id: string; status: string; gameType: string; roundNumber: number;
+      team1Player1Id: string; team1Player2Id: string;
+      team2Player1Id: string; team2Player2Id: string;
+    }>('SELECT * FROM games WHERE sessionId = ?', [sessionId]);
+
+    const maxRound = games.reduce((max, g) => Math.max(max, g.roundNumber), 0);
+
+    // Count per player
+    const playerStats = new Map<string, {
+      playerId: string; name: string; gender: string; level: number;
+      played: number; satOut: number; doubles: number; mixed: number;
+      totalRounds: number;
+    }>();
+
+    // Initialize from checked-in players
+    const players = queryAll<{ id: string; name: string; gender: string; level: number }>(
+      `SELECT p.id, p.name, p.gender, p.level FROM players p
+       JOIN attendance a ON a.playerId = p.id WHERE a.sessionId = ?`, [sessionId]
+    );
+    const genderMap = new Map(players.map(p => [p.id, p.gender]));
+    for (const p of players) {
+      playerStats.set(p.id, {
+        playerId: p.id, name: p.name, gender: p.gender, level: p.level,
+        played: 0, satOut: 0, doubles: 0, mixed: 0,
+        totalRounds: maxRound,
+      });
+    }
+
+    // Count games: mixed = teammate opposite gender, doubles = same gender
+    for (const p of players) {
+      let played = 0;
+      let doubles = 0;
+      let mixed = 0;
+      for (const g of games) {
+        const ids = [g.team1Player1Id, g.team1Player2Id, g.team2Player1Id, g.team2Player2Id];
+        if (!ids.includes(p.id)) continue;
+        played++;
+        // Find teammate: the other player on the same team
+        const inTeam1 = g.team1Player1Id === p.id || g.team1Player2Id === p.id;
+        const teammateId = inTeam1
+          ? (g.team1Player1Id === p.id ? g.team1Player2Id : g.team1Player1Id)
+          : (g.team2Player1Id === p.id ? g.team2Player2Id : g.team2Player1Id);
+        if (genderMap.get(teammateId) === p.gender) doubles++;
+        else mixed++;
+      }
+      const stat = playerStats.get(p.id)!;
+      stat.played = played;
+      stat.satOut = Math.max(0, maxRound - played);
+      stat.doubles = doubles;
+      stat.mixed = mixed;
+    }
+
+    return {
+      maxRound,
+      players: [...playerStats.values()],
+    };
+  });
+
+  // ── Tournaments ──
+
+  ipcMain.handle('tournaments:list', () => {
+    return queryAll('SELECT t.*, (SELECT COUNT(*) FROM tournament_registrations tr WHERE tr.tournamentId = t.id) as registrationCount FROM tournaments t ORDER BY t.date DESC');
+  });
+
+  ipcMain.handle('tournaments:get', (_e, id: string) => {
+    const t = queryOne<any>('SELECT *, (SELECT COUNT(*) FROM tournament_registrations WHERE tournamentId = id) as registrationCount FROM tournaments WHERE id = ?', [id]);
+    if (!t) return null;
+    const rounds = queryAll<{ round: string }>('SELECT DISTINCT round FROM tournament_matches WHERE tournamentId = ? ORDER BY round', [id]);
+    const matches = queryAll<any>(
+      `SELECT m.*,
+        p1.name as t1p1Name, p1.gender as t1p1Gender, p1.level as t1p1Level,
+        p1b.name as t1p2Name, p1b.gender as t1p2Gender, p1b.level as t1p2Level,
+        p2.name as t2p1Name, p2.gender as t2p1Gender, p2.level as t2p1Level,
+        p2b.name as t2p2Name, p2b.gender as t2p2Gender, p2b.level as t2p2Level
+       FROM tournament_matches m
+       LEFT JOIN players p1 ON m.team1Player1Id = p1.id
+       LEFT JOIN players p1b ON m.team1Player2Id = p1b.id
+       LEFT JOIN players p2 ON m.team2Player1Id = p2.id
+       LEFT JOIN players p2b ON m.team2Player2Id = p2b.id
+       WHERE m.tournamentId = ? ORDER BY m.round, m.matchNumber`, [id]
+    );
+    return { ...t, rounds: rounds.map(r => r.round), matches };
+  });
+
+  ipcMain.handle('tournaments:create', (_e, data: { name: string; description?: string; date: string; format: string; courtCount?: number }) => {
+    const id = uuid();
+    const now = new Date().toISOString();
+    run('INSERT INTO tournaments (id, name, description, date, format, status, courtCount, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, data.name, data.description ?? '', data.date, data.format, 'upcoming', data.courtCount ?? 4, now]);
+    return { id, ...data, description: data.description ?? '', status: 'upcoming' as const, courtCount: data.courtCount ?? 4, createdAt: now };
+  });
+
+  ipcMain.handle('tournaments:update', (_e, id: string, data: { name?: string; description?: string; date?: string; format?: string; courtCount?: number }) => {
+    const sets: string[] = [];
+    const vals: SqlValue[] = [];
+    for (const [k, v] of Object.entries(data)) {
+      if (v !== undefined) { sets.push(`${k} = ?`); vals.push(v as SqlValue); }
+    }
+    if (sets.length > 0) { vals.push(id); run(`UPDATE tournaments SET ${sets.join(', ')} WHERE id = ?`, vals); }
+  });
+
+  ipcMain.handle('tournaments:delete', (_e, id: string) => {
+    run('DELETE FROM tournament_standings WHERE tournamentId = ?', [id]);
+    run('DELETE FROM tournament_matches WHERE tournamentId = ?', [id]);
+    run('DELETE FROM tournament_registrations WHERE tournamentId = ?', [id]);
+    run('DELETE FROM tournaments WHERE id = ?', [id]);
+  });
+
+  ipcMain.handle('tournaments:registrations', (_e, tournamentId: string) => {
+    return queryAll(
+      `SELECT tr.*, p1.name as player1Name, p1.gender as player1Gender, p1.level as player1Level,
+         p2.name as player2Name, p2.gender as player2Gender, p2.level as player2Level
+       FROM tournament_registrations tr
+       JOIN players p1 ON tr.player1Id = p1.id
+       LEFT JOIN players p2 ON tr.player2Id = p2.id
+       WHERE tr.tournamentId = ? ORDER BY tr.registeredAt`, [tournamentId]
+    );
+  });
+
+  ipcMain.handle('tournaments:register', (_e, tournamentId: string, player1Id: string, player2Id?: string) => {
+    const id = uuid();
+    run('INSERT INTO tournament_registrations (id, tournamentId, player1Id, player2Id, registeredAt) VALUES (?, ?, ?, ?, ?)',
+      [id, tournamentId, player1Id, player2Id ?? null, new Date().toISOString()]);
+    return { id, tournamentId, player1Id, player2Id: player2Id ?? null };
+  });
+
+  ipcMain.handle('tournaments:unregister', (_e, id: string) => {
+    run('DELETE FROM tournament_registrations WHERE id = ?', [id]);
+  });
+
+  ipcMain.handle('tournaments:generateBracket', (_e, tournamentId: string) => {
+    // Delete existing matches for this tournament
+    run('DELETE FROM tournament_matches WHERE tournamentId = ?', [tournamentId]);
+    run('DELETE FROM tournament_standings WHERE tournamentId = ?', [tournamentId]);
+
+    const t = queryOne<{ format: string; courtCount: number }>('SELECT format, courtCount FROM tournaments WHERE id = ?', [tournamentId]);
+    if (!t) return [];
+
+    const regs = queryAll<{ id: string; player1Id: string; player1Name: string; player1Gender: string; player1Level: number; player2Id: string | null; player2Name: string | null; player2Gender: string | null; player2Level: number | null }>(
+      `SELECT tr.*, p1.name as player1Name, p1.gender as player1Gender, p1.level as player1Level,
+         p2.name as player2Name, p2.gender as player2Gender, p2.level as player2Level
+       FROM tournament_registrations tr
+       JOIN players p1 ON tr.player1Id = p1.id
+       LEFT JOIN players p2 ON tr.player2Id = p2.id
+       WHERE tr.tournamentId = ?`, [tournamentId]
+    );
+
+    if (regs.length < 2) return [];
+
+    if (t.format === 'knockout') {
+      return generateKnockoutBracket(tournamentId, regs);
+    }
+    if (t.format === 'round_robin') {
+      return generateRoundRobinBracket(tournamentId, regs, t.courtCount);
+    }
+    // mixed: TODO — for now, fall through to round_robin
+    return generateRoundRobinBracket(tournamentId, regs, t.courtCount);
+  });
+
+  ipcMain.handle('tournaments:setScore', (_e, matchId: string, team1Score: number, team2Score: number) => {
+    const winner = team1Score > team2Score ? 'team1' : 'team2';
+    run('UPDATE tournament_matches SET team1Score = ?, team2Score = ?, winner = ?, status = \'completed\', completedAt = ? WHERE id = ?',
+      [team1Score, team2Score, winner, new Date().toISOString(), matchId]);
+    return { winner };
+  });
+
+  ipcMain.handle('tournaments:advanceWinners', (_e, tournamentId: string, currentRound: string) => {
+    // Get completed matches for current round
+    const completed = queryAll<{ id: string; winner: string; matchNumber: number }>(
+      'SELECT id, winner, matchNumber FROM tournament_matches WHERE tournamentId = ? AND round = ? AND status = \'completed\'',
+      [tournamentId, currentRound]
+    );
+    if (completed.length === 0) return [];
+
+    // Sort by match number and pair adjacent winners
+    completed.sort((a, b) => a.matchNumber - b.matchNumber);
+
+    const roundOrder = ['R1', 'R2', 'QF', 'SF', 'F'];
+    const nextRoundIdx = roundOrder.indexOf(currentRound) + 1;
+    if (nextRoundIdx >= roundOrder.length) return []; // no next round (final won)
+
+    const nextRound = roundOrder[nextRoundIdx]!;
+    const newMatches: any[] = [];
+
+    for (let i = 0; i < completed.length; i += 2) {
+      const m1 = completed[i]!;
+      const m2 = completed[i + 1];
+      const matchNum = Math.floor(i / 2) + 1;
+
+      const prevMatch1 = queryOne<{ winner: string; team1Player1Id: string; team1Player2Id: string | null; team2Player1Id: string; team2Player2Id: string | null }>(
+        'SELECT winner, team1Player1Id, team1Player2Id, team2Player1Id, team2Player2Id FROM tournament_matches WHERE id = ?', [m1.id]
+      );
+      if (!prevMatch1) continue;
+
+      const team1P1 = m1.winner === 'team1' ? prevMatch1.team1Player1Id : prevMatch1.team2Player1Id;
+      const team1P2 = m1.winner === 'team1' ? prevMatch1.team1Player2Id : prevMatch1.team2Player2Id;
+
+      let team2P1: string | null = null;
+      let team2P2: string | null = null;
+      if (m2) {
+        const prevMatch2 = queryOne<{ winner: string; team1Player1Id: string; team1Player2Id: string | null; team2Player1Id: string; team2Player2Id: string | null }>(
+          'SELECT winner, team1Player1Id, team1Player2Id, team2Player1Id, team2Player2Id FROM tournament_matches WHERE id = ?', [m2.id]
+        );
+        if (prevMatch2) {
+          team2P1 = m2.winner === 'team1' ? prevMatch2.team1Player1Id : prevMatch2.team2Player1Id;
+          team2P2 = m2.winner === 'team1' ? prevMatch2.team1Player2Id : prevMatch2.team2Player2Id;
+        }
+      }
+
+      const mid = uuid();
+      run('INSERT INTO tournament_matches (id, tournamentId, round, matchNumber, status, team1Player1Id, team1Player2Id, team2Player1Id, team2Player2Id) VALUES (?, ?, ?, ?, \'pending\', ?, ?, ?, ?)',
+        [mid, tournamentId, nextRound, matchNum, team1P1, team1P2 ?? null, team2P1 ?? team1P1, team2P2 ?? null]);
+      newMatches.push({ id: mid, tournamentId, round: nextRound, matchNumber: matchNum });
+    }
+    return newMatches;
+  });
+
+  ipcMain.handle('tournaments:standings', (_e, tournamentId: string) => {
+    // Compute standings from match results
+    const matches = queryAll<{
+      team1Player1Id: string; team1Player2Id: string | null; team2Player1Id: string; team2Player2Id: string | null;
+      team1Score: number | null; team2Score: number | null; winner: string | null;
+    }>('SELECT team1Player1Id, team1Player2Id, team2Player1Id, team2Player2Id, team1Score, team2Score, winner FROM tournament_matches WHERE tournamentId = ? AND status = \'completed\'', [tournamentId]);
+
+    const standings = new Map<string, { player1Id: string; player2Id: string | null; played: number; wins: number; losses: number; pf: number; pa: number }>();
+    const key = (p1: string, p2: string | null) => `${p1}|${p2 ?? ''}`;
+
+    for (const m of matches) {
+      const t1k = key(m.team1Player1Id, m.team1Player2Id);
+      const t2k = key(m.team2Player1Id, m.team2Player2Id);
+      if (!standings.has(t1k)) standings.set(t1k, { player1Id: m.team1Player1Id, player2Id: m.team1Player2Id, played: 0, wins: 0, losses: 0, pf: 0, pa: 0 });
+      if (!standings.has(t2k)) standings.set(t2k, { player1Id: m.team2Player1Id, player2Id: m.team2Player2Id, played: 0, wins: 0, losses: 0, pf: 0, pa: 0 });
+      const s1 = standings.get(t1k)!;
+      const s2 = standings.get(t2k)!;
+      const sc1 = m.team1Score ?? 0;
+      const sc2 = m.team2Score ?? 0;
+      s1.played++; s2.played++;
+      s1.pf += sc1; s1.pa += sc2;
+      s2.pf += sc2; s2.pa += sc1;
+      if (m.winner === 'team1') { s1.wins++; s2.losses++; }
+      else if (m.winner === 'team2') { s2.wins++; s1.losses++; }
+    }
+
+    const result = [...standings.values()].sort((a, b) => b.wins - a.wins || (b.pf - b.pa) - (a.pf - a.pa));
+    // Add names
+    return result.map(s => {
+      const p1 = queryOne<{ name: string }>('SELECT name FROM players WHERE id = ?', [s.player1Id]);
+      const p2 = s.player2Id ? queryOne<{ name: string }>('SELECT name FROM players WHERE id = ?', [s.player2Id]) : null;
+      return {
+        ...s,
+        player1Name: p1?.name ?? '?',
+        player2Name: p2?.name ?? null,
+        diff: s.pf - s.pa,
+      };
+    });
+  });
+
+  // ── Tournament helpers ──
+
+  function generateKnockoutBracket(tournamentId: string, regs: any[]): any[] {
+    // Seed by average level (lower = stronger for knockout seeding)
+    const seeded = [...regs].map(r => ({
+      ...r,
+      avgLevel: r.player2Id ? (r.player1Level + (r.player2Level ?? r.player1Level)) / 2 : r.player1Level,
+    }));
+    seeded.sort((a, b) => a.avgLevel - b.avgLevel);
+
+    // Pad to power of 2
+    const targetSize = Math.pow(2, Math.ceil(Math.log2(seeded.length)));
+    const matches: any[] = [];
+    let matchNum = 1;
+
+    // Generate first-round pairings (1 vs N, 2 vs N-1, etc.)
+    const pairs: [any, any | null][] = [];
+    for (let i = 0; i < targetSize / 2; i++) {
+      const a = seeded[i] ?? null;
+      const b = seeded[targetSize - 1 - i] ?? null;
+      pairs.push([a, b]);
+    }
+
+    for (const [_a, _b] of pairs) {
+      const a = _a ?? null;
+      const b = _b ?? null;
+      const isBye = !b;
+
+      if (isBye) {
+        // Auto-advance the single team to the next round
+        const mid = uuid();
+        run('INSERT INTO tournament_matches (id, tournamentId, round, matchNumber, status, team1Player1Id, team1Player2Id, team2Player1Id, team2Player2Id, team1Score, team2Score, winner, completedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          [mid, tournamentId, 'R1', matchNum, 'completed', a.player1Id, a.player2Id ?? null, a.player1Id, a.player2Id ?? null, 1, 0, 'team1', new Date().toISOString()]);
+        matches.push({ id: mid, tournamentId, round: 'R1', matchNumber: matchNum });
+      } else {
+        const mid = uuid();
+        run('INSERT INTO tournament_matches (id, tournamentId, round, matchNumber, status, team1Player1Id, team1Player2Id, team2Player1Id, team2Player2Id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          [mid, tournamentId, 'R1', matchNum, 'pending', a.player1Id, a.player2Id ?? null, b.player1Id, b.player2Id ?? null]);
+        matches.push({ id: mid, tournamentId, round: 'R1', matchNumber: matchNum });
+      }
+      matchNum++;
+    }
+    return matches;
+  }
+
+  function generateRoundRobinBracket(tournamentId: string, regs: any[], courtCount: number): any[] {
+    const teams = [...regs];
+    const n = teams.length;
+    const matches: any[] = [];
+    let matchNum = 1;
+
+    // Round-robin schedule using circle method
+    const schedule: [number, number][] = [];
+    const participants = teams.map((_, i) => i);
+    const numParticipants = n % 2 === 0 ? n : n + 1; // add a dummy if odd
+
+    for (let round = 0; round < numParticipants - 1; round++) {
+      for (let i = 0; i < numParticipants / 2; i++) {
+        const a = participants[i];
+        const b = participants[numParticipants - 1 - i];
+        if (a !== undefined && b !== undefined && a < n && b < n) {
+          schedule.push([a, b]);
+        }
+      }
+      // Rotate (keep first fixed)
+      participants.splice(1, 0, participants.pop()!);
+    }
+
+    for (let i = 0; i < schedule.length; i++) {
+      const [a, b] = schedule[i]!;
+      const teamA = teams[a]!;
+      const teamB = teams[b]!;
+      const actualRound = Math.floor(i / courtCount) + 1;
+
+      const mid = uuid();
+      run('INSERT INTO tournament_matches (id, tournamentId, round, matchNumber, status, team1Player1Id, team1Player2Id, team2Player1Id, team2Player2Id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [mid, tournamentId, `R${actualRound}`, matchNum, 'pending', teamA.player1Id, teamA.player2Id ?? null, teamB.player1Id, teamB.player2Id ?? null]);
+      matches.push({ id: mid, tournamentId, round: `R${actualRound}`, matchNumber: matchNum });
+      matchNum++;
+    }
+    return matches;
+  }
+
 }

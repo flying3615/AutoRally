@@ -9,6 +9,9 @@ import { MatchPanel } from './pages/MatchPanel';
 import { Checkin } from './pages/Checkin';
 import { Payments } from './pages/Payments';
 import { Settings } from './pages/Settings';
+import { Report } from './pages/Report';
+import { Tournaments } from './pages/Tournaments';
+import { TournamentDetail } from './pages/TournamentDetail';
 import './index.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
@@ -23,6 +26,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           <Route path="match/:sessionId" element={<MatchPanel />} />
           <Route path="payments" element={<Payments />} />
           <Route path="settings" element={<Settings />} />
+          <Route path="report/:sessionId" element={<Report />} />
+          <Route path="tournaments" element={<Tournaments />} />
+          <Route path="tournament/:id" element={<TournamentDetail />} />
         </Route>
       </Routes>
     </HashRouter>
