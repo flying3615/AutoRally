@@ -20,7 +20,7 @@ function formatLabel(fmt: string) {
   return 'Mixed';
 }
 
-function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [date, setDate] = useState('');
@@ -34,14 +34,14 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
     setSaving(true);
     setError(null);
     try {
-      await window.api.tournamentsCreate({
+      const created = await window.api.tournamentsCreate({
         name: name.trim(),
         description,
         date,
         format,
         courtCount: Number(courtCount) || 4,
-      });
-      onCreated();
+      }) as { id: string };
+      onCreated(created.id);
     } catch (err: any) {
       setError(err?.message ?? 'Failed');
     } finally {
@@ -137,7 +137,25 @@ export function Tournaments() {
       },
     },
     { headerName: 'Players', field: 'registrationCount', width: 90 },
-  ], []);
+    {
+      headerName: '',
+      field: 'id',
+      width: 110,
+      sortable: false,
+      resizable: false,
+      cellRenderer: (p: any) => (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            navigate(`/tournaments/${p.value}`);
+          }}
+          className="h-7 px-3 text-xs font-semibold text-zinc-700 border border-zinc-200 rounded-lg hover:bg-zinc-50 active:scale-[0.97] transition-all"
+        >
+          Manage
+        </button>
+      ),
+    },
+  ], [navigate]);
 
   if (loading) {
     return (
@@ -167,12 +185,12 @@ export function Tournaments() {
             domLayout="autoHeight"
             rowHeight={52}
             headerHeight={38}
-            onRowDoubleClicked={(e) => { if (e.data) navigate(`/tournament/${e.data.id}`); }}
+            onRowDoubleClicked={(e) => { if (e.data) navigate(`/tournaments/${e.data.id}`); }}
           />
         </div>
       </div>
 
-      {showCreate && <CreateModal onClose={() => setShowCreate(false)} onCreated={() => { setShowCreate(false); load(); }} />}
+      {showCreate && <CreateModal onClose={() => setShowCreate(false)} onCreated={(id) => { setShowCreate(false); navigate(`/tournaments/${id}`); }} />}
     </div>
   );
 }

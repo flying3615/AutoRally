@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { HashRouter, Routes, Route } from 'react-router-dom';
+import { HashRouter, Navigate, Routes, Route, useParams } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { Dashboard } from './pages/Dashboard';
 import { Players } from './pages/Players';
@@ -13,6 +13,11 @@ import { Report } from './pages/Report';
 import { Tournaments } from './pages/Tournaments';
 import { TournamentDetail } from './pages/TournamentDetail';
 import './index.css';
+
+function LegacyTournamentRoute() {
+  const { id } = useParams<{ id: string }>();
+  return <Navigate to={`/tournaments/${id ?? ''}`} replace />;
+}
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
@@ -28,7 +33,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           <Route path="settings" element={<Settings />} />
           <Route path="report/:sessionId" element={<Report />} />
           <Route path="tournaments" element={<Tournaments />} />
-          <Route path="tournament/:id" element={<TournamentDetail />} />
+          <Route path="tournaments/:id" element={<TournamentDetail />} />
+          <Route path="tournament/:id" element={<LegacyTournamentRoute />} />
         </Route>
       </Routes>
     </HashRouter>
