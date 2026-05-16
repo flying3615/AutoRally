@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Mock the audio imports that timer.ts pulls in at the top level
-vi.mock('../renderer/alarm/classic-alarm-995.wav', () => ({ default: '' }), { virtual: true });
-vi.mock('../renderer/alarm/mixkit-security-facility-breach-alarm-994.wav', () => ({ default: '' }), { virtual: true });
+vi.mock('../renderer/alarm/classic-alarm-995.wav', () => ({ default: '' }));
+vi.mock('../renderer/alarm/mixkit-security-facility-breach-alarm-994.wav', () => ({ default: '' }));
 
 // Mock the Audio constructor so new Audio() doesn't blow up in Node
 const mockPlay = vi.fn().mockResolvedValue(undefined);

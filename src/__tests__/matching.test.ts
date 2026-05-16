@@ -146,6 +146,58 @@ describe('generateMatches', () => {
     expect(new Set(allIds).size).toBe(16);
   });
 
+  it('finds a full-court global arrangement when greedy level seeding would under-fill', () => {
+    const specs = [
+      ['p0', 'male', 4], ['p1', 'male', 3], ['p2', 'male', 3], ['p3', 'female', 5],
+      ['p4', 'male', 1], ['p5', 'female', 1], ['p6', 'female', 1], ['p7', 'female', 2],
+      ['p8', 'female', 4], ['p9', 'male', 4], ['p10', 'female', 3], ['p11', 'female', 5],
+      ['p12', 'male', 3], ['p13', 'female', 1], ['p14', 'male', 2], ['p15', 'female', 3],
+    ] as const;
+    const pool = specs.map(([id, gender, level], i) =>
+      makePlayer(id, id, gender, level, i)
+    );
+
+    const result = generateMatches(pool, 4, 1, []);
+    const allIds = result.flatMap(m => [...m.team1, ...m.team2]);
+
+    expect(result).toHaveLength(4);
+    expect(new Set(allIds).size).toBe(16);
+    for (const match of result) {
+      const levels = [...match.team1, ...match.team2].map(id => pool.find(p => p.id === id)!.level);
+      expect(Math.max(...levels) - Math.min(...levels)).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('does not keep a rare level group on court when same-level lower-count players can fill courts', () => {
+    const pool = [
+      ...Array.from({ length: 4 }, (_, i) => makePlayer(`l5_${i}`, `L5 ${i}`, i % 2 === 0 ? 'male' : 'female', 5, i)),
+      ...Array.from({ length: 16 }, (_, i) => makePlayer(`l3_${i}`, `L3 ${i}`, i % 2 === 0 ? 'male' : 'female', 3, i + 4)),
+    ];
+    const pastGames: Game[] = [];
+    for (let round = 1; round <= 3; round++) {
+      pastGames.push({
+        id: `past_${round}`,
+        sessionId: 's',
+        courtNumber: 1,
+        team1Player1Id: 'l5_0',
+        team1Player2Id: 'l5_1',
+        team2Player1Id: 'l5_2',
+        team2Player2Id: 'l5_3',
+        status: 'completed',
+        roundNumber: round,
+        gameType: 'mixed',
+        startedAt: null,
+        endedAt: null,
+      });
+    }
+
+    const result = generateMatches(pool, 4, 4, pastGames);
+    const allIds = result.flatMap(m => [...m.team1, ...m.team2]);
+
+    expect(result).toHaveLength(4);
+    expect(allIds.some(id => id.startsWith('l5_'))).toBe(false);
+  });
+
   it('fills courts from a single-gender waiting pool', () => {
     const pool = Array.from({ length: 16 }, (_, i) =>
       makePlayer(`m${i + 1}`, `M${i + 1}`, 'male', 3, i)
