@@ -1,18 +1,19 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import ReactDOM from 'react-dom/client';
 import { HashRouter, Navigate, Routes, Route, useParams } from 'react-router-dom';
 import { Layout } from './components/Layout';
-import { Dashboard } from './pages/Dashboard';
-import { Players } from './pages/Players';
-import { Sessions } from './pages/Sessions';
-import { MatchPanel } from './pages/MatchPanel';
-import { Checkin } from './pages/Checkin';
-import { Payments } from './pages/Payments';
-import { Settings } from './pages/Settings';
-import { Report } from './pages/Report';
-import { Tournaments } from './pages/Tournaments';
-import { TournamentDetail } from './pages/TournamentDetail';
 import './index.css';
+
+const Dashboard = lazy(() => import('./pages/Dashboard').then(module => ({ default: module.Dashboard })));
+const Players = lazy(() => import('./pages/Players').then(module => ({ default: module.Players })));
+const Sessions = lazy(() => import('./pages/Sessions').then(module => ({ default: module.Sessions })));
+const MatchPanel = lazy(() => import('./pages/MatchPanel').then(module => ({ default: module.MatchPanel })));
+const Checkin = lazy(() => import('./pages/Checkin').then(module => ({ default: module.Checkin })));
+const Payments = lazy(() => import('./pages/Payments').then(module => ({ default: module.Payments })));
+const Settings = lazy(() => import('./pages/Settings').then(module => ({ default: module.Settings })));
+const Report = lazy(() => import('./pages/Report').then(module => ({ default: module.Report })));
+const Tournaments = lazy(() => import('./pages/Tournaments').then(module => ({ default: module.Tournaments })));
+const TournamentDetail = lazy(() => import('./pages/TournamentDetail').then(module => ({ default: module.TournamentDetail })));
 
 function LegacyTournamentRoute() {
   const { id } = useParams<{ id: string }>();
@@ -22,21 +23,23 @@ function LegacyTournamentRoute() {
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <HashRouter>
-      <Routes>
-        <Route path="/" element={<Layout />}>
-          <Route index element={<Dashboard />} />
-          <Route path="players" element={<Players />} />
-          <Route path="sessions" element={<Sessions />} />
-          <Route path="checkin/:sessionId" element={<Checkin />} />
-          <Route path="match/:sessionId" element={<MatchPanel />} />
-          <Route path="payments" element={<Payments />} />
-          <Route path="settings" element={<Settings />} />
-          <Route path="report/:sessionId" element={<Report />} />
-          <Route path="tournaments" element={<Tournaments />} />
-          <Route path="tournaments/:id" element={<TournamentDetail />} />
-          <Route path="tournament/:id" element={<LegacyTournamentRoute />} />
-        </Route>
-      </Routes>
+      <Suspense fallback={<div className="p-6 text-sm text-zinc-400">Loading...</div>}>
+        <Routes>
+          <Route path="/" element={<Layout />}>
+            <Route index element={<Dashboard />} />
+            <Route path="players" element={<Players />} />
+            <Route path="sessions" element={<Sessions />} />
+            <Route path="checkin/:sessionId" element={<Checkin />} />
+            <Route path="match/:sessionId" element={<MatchPanel />} />
+            <Route path="payments" element={<Payments />} />
+            <Route path="settings" element={<Settings />} />
+            <Route path="report/:sessionId" element={<Report />} />
+            <Route path="tournaments" element={<Tournaments />} />
+            <Route path="tournaments/:id" element={<TournamentDetail />} />
+            <Route path="tournament/:id" element={<LegacyTournamentRoute />} />
+          </Route>
+        </Routes>
+      </Suspense>
     </HashRouter>
   </React.StrictMode>,
 );

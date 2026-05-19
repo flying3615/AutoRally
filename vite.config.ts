@@ -16,5 +16,16 @@ export default defineConfig({
   base: './',
   build: {
     outDir: 'dist/renderer',
+    chunkSizeWarningLimit: 1200,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined;
+          if (id.includes('ag-grid-community') || id.includes('ag-grid-react')) return 'vendor-ag-grid';
+          if (id.includes('react') || id.includes('react-dom') || id.includes('react-router-dom')) return 'vendor-react';
+          return 'vendor';
+        },
+      },
+    },
   },
 });
