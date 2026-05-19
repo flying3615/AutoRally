@@ -11,6 +11,7 @@ import {
   type TournamentMatchRecord,
   type TournamentRegistration,
 } from './tournament';
+import { averageSessionDurationMinutes, safeSessionEndTime, sessionDurationMinutes } from './sessionDuration';
 import fs from 'fs';
 
 export async function registerIpcHandlers() {
@@ -83,8 +84,14 @@ export async function registerIpcHandlers() {
 
   ipcMain.handle('sessions:create', (_e, courtCount: number) => {
     // End any currently active session first — only one active at a time
-    run("UPDATE sessions SET endTime = ?, status = 'completed' WHERE status = 'active'",
-      [new Date().toISOString()]);
+    const activeSessions = queryAll<{ id: string; startTime: string | null }>(
+      "SELECT id, startTime FROM sessions WHERE status = 'active'"
+    );
+    const now = new Date().toISOString();
+    for (const session of activeSessions) {
+      run("UPDATE sessions SET endTime = ?, status = 'completed' WHERE id = ?",
+        [safeSessionEndTime(session.startTime, now), session.id]);
+    }
 
     const id = uuid();
     const d = new Date();
@@ -96,8 +103,9 @@ export async function registerIpcHandlers() {
   });
 
   ipcMain.handle('sessions:end', (_e, id: string) => {
+    const session = queryOne<{ startTime: string | null }>('SELECT startTime FROM sessions WHERE id = ?', [id]);
     run("UPDATE sessions SET endTime = ?, status = 'completed' WHERE id = ?",
-      [new Date().toISOString(), id]);
+      [safeSessionEndTime(session?.startTime ?? null, new Date().toISOString()), id]);
   });
 
   // ── Attendance ──
@@ -324,9 +332,8 @@ export async function registerIpcHandlers() {
       "SELECT id, date, startTime, endTime, courtCount FROM sessions WHERE status = 'completed' ORDER BY date DESC, startTime DESC LIMIT 5"
     );
 
-    // Average duration in minutes
-    const avgRow = queryOne<{ avg: number }>(
-      "SELECT ROUND(AVG((julianday(endTime) - julianday(startTime)) * 24 * 60)) as avg FROM sessions WHERE status = 'completed' AND startTime IS NOT NULL AND endTime IS NOT NULL"
+    const completedSessionTimes = queryAll<{ startTime: string | null; endTime: string | null }>(
+      "SELECT startTime, endTime FROM sessions WHERE status = 'completed' AND startTime IS NOT NULL AND endTime IS NOT NULL"
     );
 
     // Total games played across completed sessions
@@ -363,14 +370,11 @@ export async function registerIpcHandlers() {
       playerCount,
       sessionCount,
       gamesPlayed,
-      avgDurationMin: avgRow?.avg ?? null,
+      avgDurationMin: averageSessionDurationMinutes(completedSessionTimes),
       activeSession,
       sessionStats,
       recentSessions: recentSessions.map(s => {
-        const duration = s.startTime && s.endTime
-          ? Math.round((new Date(s.endTime).getTime() - new Date(s.startTime).getTime()) / 60000)
-          : null;
-        return { ...s, durationMin: duration };
+        return { ...s, durationMin: sessionDurationMinutes(s.startTime, s.endTime) };
       }),
     };
   });
