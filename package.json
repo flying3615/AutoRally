@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "npm run seed && npm run electron:dev",
     "dev:web": "vite",
-    "clean": "npx rimraf dist",
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
     "build:main": "tsc -p tsconfig.node.json",
     "build": "npm run build:main && vite build",
     "electron:dev": "npm run build:main && concurrently \"vite --port 5173 --strictPort\" \"wait-on http://localhost:5173 && cross-env VITE_DEV_SERVER_URL=http://localhost:5173 electron .\"",
