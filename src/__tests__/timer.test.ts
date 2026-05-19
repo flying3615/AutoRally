@@ -8,8 +8,25 @@ vi.mock('../renderer/alarm/mixkit-security-facility-breach-alarm-994.wav', () =>
 const mockPlay = vi.fn().mockResolvedValue(undefined);
 class MockAudio {
   src: string;
+  volume = 0.4;
+  private listeners = new Map<string, Set<() => void>>();
+
   constructor(src: string) { this.src = src; }
   play = mockPlay;
+
+  addEventListener(type: string, listener: () => void) {
+    const listeners = this.listeners.get(type) ?? new Set();
+    listeners.add(listener);
+    this.listeners.set(type, listeners);
+  }
+
+  removeEventListener(type: string, listener: () => void) {
+    this.listeners.get(type)?.delete(listener);
+  }
+
+  dispatch(type: string) {
+    for (const listener of this.listeners.get(type) ?? []) listener();
+  }
 }
 vi.stubGlobal('Audio', MockAudio);
 
@@ -18,6 +35,7 @@ import { GameTimer } from '../renderer/services/timer';
 describe('GameTimer', () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    vi.stubGlobal('Audio', MockAudio);
     mockPlay.mockClear();
   });
 
@@ -56,6 +74,23 @@ describe('GameTimer', () => {
 
     expect(playSpy).toHaveBeenCalledTimes(1); // bell fires again after resume
 
+    timer.stop(1);
+  });
+
+  it('plays alarms at max volume and restores the previous volume when the sound ends', () => {
+    const timer = new GameTimer();
+    const warningBell = (timer as unknown as { warningBell: MockAudio }).warningBell;
+    warningBell.volume = 0.25;
+
+    timer.start(1, 2, () => {});
+    vi.advanceTimersByTime(61 * 1000);
+
+    expect(mockPlay).toHaveBeenCalledTimes(1);
+    expect(warningBell.volume).toBe(1);
+
+    warningBell.dispatch('ended');
+
+    expect(warningBell.volume).toBe(0.25);
     timer.stop(1);
   });
 });

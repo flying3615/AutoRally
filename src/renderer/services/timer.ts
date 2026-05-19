@@ -11,6 +11,26 @@ type TimerEntry = {
   remainingAtPause: number;
 };
 
+const activeAlarmRestores = new WeakMap<HTMLAudioElement, () => void>();
+
+function playAlarmAtMaxVolume(audio: HTMLAudioElement) {
+  activeAlarmRestores.get(audio)?.();
+
+  const previousVolume = audio.volume;
+  const restoreVolume = () => {
+    audio.volume = previousVolume;
+    audio.removeEventListener('ended', restoreVolume);
+    if (activeAlarmRestores.get(audio) === restoreVolume) {
+      activeAlarmRestores.delete(audio);
+    }
+  };
+
+  activeAlarmRestores.set(audio, restoreVolume);
+  audio.volume = 1;
+  audio.addEventListener('ended', restoreVolume);
+  audio.play().catch(() => restoreVolume());
+}
+
 export class GameTimer {
   private timers: Map<number, TimerEntry> = new Map();
   private callbacks: Map<number, TimerCallback> = new Map();
@@ -37,12 +57,12 @@ export class GameTimer {
 
       if (current >= warningTime && current < endTime) {
         if (!this.warned.has(courtNumber)) {
-          this.warningBell.play().catch(() => {});
+          playAlarmAtMaxVolume(this.warningBell);
           this.warned.add(courtNumber);
         }
         callback(remaining, 'warning');
       } else if (current >= endTime) {
-        this.endBell.play().catch(() => {});
+        playAlarmAtMaxVolume(this.endBell);
         callback(0, 'ended');
         this.stop(courtNumber);
       } else {
@@ -86,12 +106,12 @@ export class GameTimer {
 
       if (current >= timer.warningTime && current < timer.endTime) {
         if (!this.warned.has(courtNumber)) {
-          this.warningBell.play().catch(() => {});
+          playAlarmAtMaxVolume(this.warningBell);
           this.warned.add(courtNumber);
         }
         cb(remaining, 'warning');
       } else if (current >= timer.endTime) {
-        this.endBell.play().catch(() => {});
+        playAlarmAtMaxVolume(this.endBell);
         cb(0, 'ended');
         this.stop(courtNumber);
       } else {
