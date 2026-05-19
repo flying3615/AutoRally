@@ -47,14 +47,11 @@ export function Payments() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="max-w-6xl mx-auto px-8 py-10" style={{ animation: 'fadeIn 0.3s ease' }}>
+      <div className="w-[90%] mx-auto px-8 py-10" style={{ animation: 'fadeIn 0.3s ease' }}>
 
         {/* Header */}
-        <div className="flex items-end justify-between mb-8">
-          <div>
-            <h2 className="text-xl font-bold text-zinc-900 tracking-tight">Fee management</h2>
-            <p className="text-sm text-zinc-400 mt-0.5">Track unpaid records and balance changes</p>
-          </div>
+        <div className="flex items-end justify-between mb-6">
+          <p className="text-sm text-zinc-400">Track unpaid records and balance changes</p>
           <div className="flex items-center gap-2">
             {unpaid.length > 0 && (
               <button

@@ -14,28 +14,71 @@ export interface MatchResult {
   gameType: 'mixed' | 'male-double' | 'female-double' | 'open-double';
 }
 
+type GameType = MatchResult['gameType'];
+
 const CANDIDATES = 30;
+const MAX_PLAYERS_PER_LEVEL_WINDOW = 36;
+const MAX_COURT_CANDIDATES = 1200;
+const MAX_EXACT_CANDIDATES = 900;
+const BEAM_WIDTH = 160;
 
-// ── Seeded random ──
-
-function seededShuffle<T>(arr: T[], seed: number): T[] {
-  const out = [...arr];
-  for (let i = out.length - 1; i > 0; i--) {
-    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
-    const j = seed % (i + 1);
-    [out[i], out[j]] = [out[j]!, out[i]!];
-  }
-  return out;
+interface CourtCandidate extends MatchResult {
+  ids: string[];
+  mask: bigint;
+  levelPenalty: number;
+  fairnessPenalty: number;
+  typePenalty: number;
+  teamBalancePenalty: number;
+  partnerPenalty: number;
+  waitPenalty: number;
+  tieBreak: number;
 }
 
-function chooseFlexibleCourtCounts(remM: number, remF: number): { takeM: number; takeF: number } | null {
-  if (remM + remF < 4) return null;
-  if (remM >= 2 && remF >= 2) return { takeM: 2, takeF: 2 };
-  if (remM >= 3 && remF >= 1) return { takeM: 3, takeF: 1 };
-  if (remM >= 1 && remF >= 3) return { takeM: 1, takeF: 3 };
-  if (remM >= 4) return { takeM: 4, takeF: 0 };
-  if (remF >= 4) return { takeM: 0, takeF: 4 };
-  return null;
+interface SearchState {
+  matches: MatchResult[];
+  mask: bigint;
+  count: number;
+  levelPenalty: number;
+  fairnessPenalty: number;
+  typePenalty: number;
+  teamBalancePenalty: number;
+  partnerPenalty: number;
+  waitPenalty: number;
+  tieBreak: number;
+}
+
+function hashString(value: string, seed: number): number {
+  let h = seed || 2166136261;
+  for (let i = 0; i < value.length; i++) {
+    h ^= value.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+function compareCandidate(a: CourtCandidate, b: CourtCandidate): number {
+  return (
+    a.levelPenalty - b.levelPenalty ||
+    a.fairnessPenalty - b.fairnessPenalty ||
+    a.typePenalty - b.typePenalty ||
+    a.teamBalancePenalty - b.teamBalancePenalty ||
+    a.partnerPenalty - b.partnerPenalty ||
+    a.waitPenalty - b.waitPenalty ||
+    a.tieBreak - b.tieBreak
+  );
+}
+
+function compareState(a: SearchState, b: SearchState): number {
+  return (
+    b.count - a.count ||
+    a.levelPenalty - b.levelPenalty ||
+    a.fairnessPenalty - b.fairnessPenalty ||
+    a.typePenalty - b.typePenalty ||
+    a.teamBalancePenalty - b.teamBalancePenalty ||
+    a.partnerPenalty - b.partnerPenalty ||
+    a.waitPenalty - b.waitPenalty ||
+    a.tieBreak - b.tieBreak
+  );
 }
 
 // ── Main entry point ──
@@ -49,7 +92,7 @@ export function generateMatches(
   if (pool.length < 4) return [];
   const countedGames = pastGames.filter(g => g.status !== 'pending');
 
-  // 1. Count games per player
+  // 1. Count games per player (fairness)
   const gameCount = new Map<string, number>();
   for (const g of countedGames) {
     for (const id of [g.team1Player1Id, g.team1Player2Id, g.team2Player1Id, g.team2Player2Id]) {
@@ -57,6 +100,8 @@ export function generateMatches(
     }
   }
   for (const p of pool) gameCount.set(p.id, gameCount.get(p.id) ?? 0);
+
+  const playerIndex = new Map(pool.map((p, i) => [p.id, i]));
 
   // 2. Count past partnerships and opponent pairings
   const partnerCount = new Map<string, number>();
@@ -76,224 +121,191 @@ export function generateMatches(
     }
   }
 
-  // 3. Greedy fairness sort: lowest game count first
-  const byCount = [...pool].sort((a, b) => {
+  // 3. Global fairness sort: fewest games first, then earlier checkin
+  const sorted = [...pool].sort((a, b) => {
     const dc = (gameCount.get(a.id) ?? 0) - (gameCount.get(b.id) ?? 0);
     if (dc !== 0) return dc;
-    // Tiebreaker: earlier checkin first
     return new Date(a.checkinTime).getTime() - new Date(b.checkinTime).getTime();
   });
 
-  const allMales = byCount.filter(p => p.gender === 'male');
-  const allFemales = byCount.filter(p => p.gender === 'female');
+  const waitRank = new Map(sorted.map((p, i) => [p.id, i]));
+  const poolMin = Math.min(...[...gameCount.values()]);
+  const candidateByKey = new Map<string, CourtCandidate>();
+  const seed = currentRound * CANDIDATES;
 
-  // 4. Fair court type allocation: equalize playing percentage across genders.
-  //    When genders are imbalanced, reduce mixed courts so the minority gender
-  //    isn't forced to play every round. Round parity acts as a tiebreaker only
-  //    when multiple allocations are equally fair (balanced gender scenario).
-  //    Falls back to "best-effort" courts when standard types can't fill available players.
-  const maxMixedPossible = Math.min(Math.floor(allMales.length / 2), Math.floor(allFemales.length / 2), courtCount);
-  const preferMixed = currentRound % 2 === 1;
+  const windows: [number, number][] = [];
+  for (let l = 1; l <= 5; l++) windows.push([l, l]);
+  for (let l = 1; l < 5; l++) windows.push([l, l + 1]);
 
-  let mixedCourts = 0;
-  let maleCourts = 0;
-  let femaleCourts = 0;
-  let bestFairScore = Infinity;
+  const playerRank = (p: PlayerInPool) =>
+    (gameCount.get(p.id) ?? 0) * 10000 +
+    (waitRank.get(p.id) ?? 0) * 10 +
+    (hashString(p.id, seed) % 10);
 
-  for (let mix = 0; mix <= maxMixedPossible; mix++) {
-    const availM = allMales.length - mix * 2;
-    const availF = allFemales.length - mix * 2;
-    const maxMaleC = Math.min(Math.floor(availM / 4), courtCount - mix);
+  const addCandidate = (group: PlayerInPool[]) => {
+    const levels = group.map(p => p.level);
+    const levelPenalty = Math.max(...levels) - Math.min(...levels);
+    if (levelPenalty > 1) return;
 
-    for (let maleC = 0; maleC <= maxMaleC; maleC++) {
-      const femaleC = Math.min(Math.floor(availF / 4), courtCount - mix - maleC);
-      if (mix + maleC + femaleC === 0) continue;
+    const males = group.filter(p => p.gender === 'male');
+    const females = group.filter(p => p.gender === 'female');
+    let gameType: GameType | null = null;
+    if (males.length === 2 && females.length === 2) gameType = 'mixed';
+    else if (males.length === 4) gameType = 'male-double';
+    else if (females.length === 4) gameType = 'female-double';
+    else if (males.length === 3 || females.length === 3) gameType = 'open-double';
+    if (!gameType) return;
 
-      const playingM = mix * 2 + maleC * 4;
-      const playingF = mix * 2 + femaleC * 4;
-      const rateM = allMales.length === 0 ? 0 : playingM / allMales.length;
-      const rateF = allFemales.length === 0 ? 0 : playingF / allFemales.length;
-      const rateDiff = Math.abs(rateM - rateF);
-      const unfilled = courtCount - mix - maleC - femaleC;
+    const ids = group.map(p => p.id).sort();
+    const key = ids.join('|');
+    if (candidateByKey.has(key)) return;
 
-      // Primary: fill courts. Tiebreakers: gender play-rate fairness, then round-type preference.
-      const typeScore = preferMixed ? (maxMixedPossible - mix) * 0.0001 : mix * 0.0001;
-      const score = unfilled * 100000 + rateDiff * 10000 + typeScore;
+    const partitions: [[number, number], [number, number]][] = [
+      [[0, 1], [2, 3]],
+      [[0, 2], [1, 3]],
+      [[0, 3], [1, 2]],
+    ];
+    let bestTeams: { team1: [string, string]; team2: [string, string]; balance: number; partners: number; tie: number } | null = null;
 
-      if (score < bestFairScore) {
-        bestFairScore = score;
-        mixedCourts = mix;
-        maleCourts = maleC;
-        femaleCourts = femaleC;
+    for (const [left, right] of partitions) {
+      const t1 = [group[left[0]]!, group[left[1]]!] as const;
+      const t2 = [group[right[0]]!, group[right[1]]!] as const;
+      if (gameType === 'mixed') {
+        const t1Mixed = t1[0].gender !== t1[1].gender;
+        const t2Mixed = t2[0].gender !== t2[1].gender;
+        if (!t1Mixed || !t2Mixed) continue;
+      }
+
+      const t1Level = t1[0].level + t1[1].level;
+      const t2Level = t2[0].level + t2[1].level;
+      const balance = Math.abs(t1Level - t2Level);
+      const partners =
+        (partnerCount.get(partnerKey(t1[0].id, t1[1].id)) ?? 0) +
+        (partnerCount.get(partnerKey(t2[0].id, t2[1].id)) ?? 0);
+      const tie = hashString(`${t1[0].id}|${t1[1].id}|${t2[0].id}|${t2[1].id}`, seed);
+      const current = {
+        team1: [t1[0].id, t1[1].id] as [string, string],
+        team2: [t2[0].id, t2[1].id] as [string, string],
+        balance,
+        partners,
+        tie,
+      };
+
+      if (
+        !bestTeams ||
+        balance - bestTeams.balance ||
+        partners - bestTeams.partners ||
+        tie - bestTeams.tie
+      ) {
+        const better =
+          !bestTeams ||
+          balance < bestTeams.balance ||
+          (balance === bestTeams.balance && partners < bestTeams.partners) ||
+          (balance === bestTeams.balance && partners === bestTeams.partners && tie < bestTeams.tie);
+        if (better) bestTeams = current;
       }
     }
-  }
+    if (!bestTeams) return;
 
-  // Fallback: fill remaining courts with leftover players regardless of gender balance.
-  // This handles skewed leftovers (e.g. 3F+1M → 1 mixed court, or 5F+3M → 1 mixed + 1 leftover).
-  const allocatedCourts = mixedCourts + maleCourts + femaleCourts;
-  const allocatedM = mixedCourts * 2 + maleCourts * 4;
-  const allocatedF = mixedCourts * 2 + femaleCourts * 4;
-  const leftoverM = allMales.length - allocatedM;
-  const leftoverF = allFemales.length - allocatedF;
-  const leftoverCourts = Math.min(
-    courtCount - allocatedCourts,
-    Math.floor((leftoverM + leftoverF) / 4)
-  );
-  if (leftoverCourts > 0) {
-    // Tag as mixed — team formation below handles asymmetric gender splits
-    mixedCourts += leftoverCourts;
-  }
-
-  // 5. Generate candidates with different team shuffles for partner diversity.
-  //    All candidates use the same player selection (strict fairness).
-  //    Variation comes from shuffling within courts before team formation.
-  let bestScore = Infinity;
-  let bestResult: MatchResult[] = [];
-
-  for (let ci = 0; ci < CANDIDATES; ci++) {
-    const seed = currentRound * CANDIDATES + ci;
-
-    // Selected players (deterministic: lowest game count).
-    // Fill ideal gender quotas, then backfill shortages from the other gender.
-    const idealM = mixedCourts * 2 + maleCourts * 4;
-    const idealF = mixedCourts * 2 + femaleCourts * 4;
-    let takeM = Math.min(idealM, allMales.length);
-    let takeF = Math.min(idealF, allFemales.length);
-    // Backfill: if one gender is short, use surplus from the other
-    const totalNeed = (mixedCourts + maleCourts + femaleCourts) * 4;
-    takeM = Math.min(takeM + Math.max(0, totalNeed - takeM - takeF), allMales.length);
-    takeF = Math.min(takeF + Math.max(0, totalNeed - takeM - takeF), allFemales.length);
-
-    const selM = allMales.slice(0, takeM);
-    const selF = allFemales.slice(0, takeF);
-
-    // Shuffle selected players for this candidate (partner diversity)
-    const shufM = seededShuffle(selM, seed);
-    const shufF = seededShuffle(selF, seed + 1);
-
-    const matches: MatchResult[] = [];
-    let mi = 0, fi = 0;
-
-    // Build single-gender courts FIRST so they get their allocated players.
-    // Mixed courts (built last) flexibly use whatever genders remain.
-
-    // Male-double courts
-    for (let c = 0; c < maleCourts; c++) {
-      if (mi + 4 > shufM.length) break;
-      matches.push({
-        team1: [shufM[mi]!.id, shufM[mi + 1]!.id],
-        team2: [shufM[mi + 2]!.id, shufM[mi + 3]!.id],
-        gameType: 'male-double',
-      });
-      mi += 4;
+    let mask = 0n;
+    for (const id of ids) {
+      const idx = playerIndex.get(id);
+      if (idx === undefined) return;
+      mask |= 1n << BigInt(idx);
     }
 
-    // Female-double courts
-    for (let c = 0; c < femaleCourts; c++) {
-      if (fi + 4 > shufF.length) break;
-      matches.push({
-        team1: [shufF[fi]!.id, shufF[fi + 1]!.id],
-        team2: [shufF[fi + 2]!.id, shufF[fi + 3]!.id],
-        gameType: 'female-double',
-      });
-      fi += 4;
+    const fairnessPenalty = group.reduce((sum, p) => sum + (gameCount.get(p.id) ?? 0) - poolMin, 0);
+    const waitPenalty = group.reduce((sum, p) => sum + (waitRank.get(p.id) ?? 0), 0);
+    const typePenalty = gameType === 'mixed' ? 0 : gameType === 'male-double' || gameType === 'female-double' ? 1 : 2;
+    candidateByKey.set(key, {
+      ids,
+      mask,
+      team1: bestTeams.team1,
+      team2: bestTeams.team2,
+      gameType,
+      levelPenalty,
+      fairnessPenalty,
+      typePenalty,
+      teamBalancePenalty: bestTeams.balance,
+      partnerPenalty: bestTeams.partners,
+      waitPenalty,
+      tieBreak: hashString(key, seed),
+    });
+  };
+
+  for (const [minLevel, maxLevel] of windows) {
+    let players = sorted.filter(p => p.level >= minLevel && p.level <= maxLevel);
+    if (minLevel !== maxLevel) {
+      players = players.filter(p => p.level === minLevel || p.level === maxLevel);
+    }
+    players.sort((a, b) => playerRank(a) - playerRank(b));
+    if (players.length > MAX_PLAYERS_PER_LEVEL_WINDOW) {
+      players = players.slice(0, Math.max(MAX_PLAYERS_PER_LEVEL_WINDOW, courtCount * 8));
     }
 
-    // Mixed courts — flexible: each court takes up to 2M + 2F, with fallback
-    for (let c = 0; c < mixedCourts; c++) {
-      const remM = shufM.length - mi;
-      const remF = shufF.length - fi;
-      const counts = chooseFlexibleCourtCounts(remM, remF);
-      if (!counts) break;
-      const takeMCourt = counts.takeM;
-      const takeFCourt = counts.takeF;
-
-      // Build teams: pair a male with a female when both available
-      const mIds = shufM.slice(mi, mi + takeMCourt).map(p => p.id);
-      const fIds = shufF.slice(fi, fi + takeFCourt).map(p => p.id);
-
-      if (takeMCourt === 2 && takeFCourt === 2) {
-        // Standard mixed: 1M+1F per team
-        matches.push({
-          team1: [mIds[0]!, fIds[0]!],
-          team2: [mIds[1]!, fIds[1]!],
-          gameType: 'mixed',
-        });
-      } else if (takeMCourt === 1 && takeFCourt >= 2) {
-        // 1M + 3F: M+F vs F+F
-        matches.push({
-          team1: [mIds[0]!, fIds[0]!],
-          team2: [fIds[1]!, fIds[2]!],
-          gameType: 'open-double',
-        });
-      } else if (takeMCourt >= 2 && takeFCourt === 1) {
-        // 3M + 1F: M+F vs M+M
-        matches.push({
-          team1: [mIds[0]!, fIds[0]!],
-          team2: [mIds[1]!, mIds[2]!],
-          gameType: 'open-double',
-        });
-      } else if (takeFCourt >= 4) {
-        // 0M + 4F → really a female-double court
-        matches.push({
-          team1: [fIds[0]!, fIds[1]!],
-          team2: [fIds[2]!, fIds[3]!],
-          gameType: 'female-double',
-        });
-      } else if (takeMCourt >= 4) {
-        // 4M + 0F → really a male-double court
-        matches.push({
-          team1: [mIds[0]!, mIds[1]!],
-          team2: [mIds[2]!, mIds[3]!],
-          gameType: 'male-double',
-        });
-      }
-      mi += takeMCourt; fi += takeFCourt;
-    }
-
-    // 6. Score this candidate
-    const level = (id: string) => pool.find(p => p.id === id)?.level ?? 3;
-
-    let levelPenalty = 0;
-    for (const m of matches) {
-      // Inter-team balance: team averages should be close
-      const t1Avg = (level(m.team1[0]) + level(m.team1[1])) / 2;
-      const t2Avg = (level(m.team2[0]) + level(m.team2[1])) / 2;
-      const interDiff = Math.abs(t1Avg - t2Avg);
-      levelPenalty += interDiff * interDiff;
-
-      // Intra-team compatibility: partners shouldn't be too far apart
-      const t1Gap = Math.abs(level(m.team1[0]) - level(m.team1[1]));
-      const t2Gap = Math.abs(level(m.team2[0]) - level(m.team2[1]));
-      levelPenalty += t1Gap + t2Gap;
-    }
-
-    let partnerPenalty = 0;
-    for (const m of matches) {
-      const k1 = partnerKey(m.team1[0], m.team1[1]);
-      const k2 = partnerKey(m.team2[0], m.team2[1]);
-      partnerPenalty += partnerCount.get(k1) ?? 0;
-      partnerPenalty += partnerCount.get(k2) ?? 0;
-    }
-
-    let opponentPenalty = 0;
-    for (const m of matches) {
-      for (const id1 of m.team1) {
-        for (const id2 of m.team2) {
-          opponentPenalty += opponentCount.get(pairKey(id1, id2)) ?? 0;
+    for (let a = 0; a < players.length - 3; a++) {
+      for (let b = a + 1; b < players.length - 2; b++) {
+        for (let c = b + 1; c < players.length - 1; c++) {
+          for (let d = c + 1; d < players.length; d++) {
+            addCandidate([players[a]!, players[b]!, players[c]!, players[d]!]);
+          }
         }
       }
     }
-
-    const unfilled = Math.max(0, courtCount - matches.length);
-    const score = levelPenalty * 100 + partnerPenalty * 50 + opponentPenalty * 20 + unfilled * 10;
-
-    if (score < bestScore) {
-      bestScore = score;
-      bestResult = matches;
-    }
   }
 
-  return bestResult.slice(0, courtCount);
+  const allCandidates = [...candidateByKey.values()].sort(compareCandidate);
+  const exactSearch = pool.length <= 16 && allCandidates.length <= MAX_EXACT_CANDIDATES;
+  const keepAllCandidates = pool.length <= 16;
+  const candidates = allCandidates.slice(0, keepAllCandidates ? undefined : MAX_COURT_CANDIDATES);
+  if (candidates.length === 0) return [];
+
+  let states: SearchState[] = [{
+    matches: [],
+    mask: 0n,
+    count: 0,
+    levelPenalty: 0,
+    fairnessPenalty: 0,
+    typePenalty: 0,
+    teamBalancePenalty: 0,
+    partnerPenalty: 0,
+    waitPenalty: 0,
+    tieBreak: 0,
+  }];
+
+  for (const candidate of candidates) {
+    const additions: SearchState[] = [];
+    for (const state of states) {
+      if (state.count >= courtCount || (state.mask & candidate.mask) !== 0n) continue;
+      additions.push({
+        matches: [...state.matches, {
+          team1: candidate.team1,
+          team2: candidate.team2,
+          gameType: candidate.gameType,
+        }],
+        mask: state.mask | candidate.mask,
+        count: state.count + 1,
+        levelPenalty: state.levelPenalty + candidate.levelPenalty,
+        fairnessPenalty: state.fairnessPenalty + candidate.fairnessPenalty,
+        typePenalty: state.typePenalty + candidate.typePenalty,
+        teamBalancePenalty: state.teamBalancePenalty + candidate.teamBalancePenalty,
+        partnerPenalty: state.partnerPenalty + candidate.partnerPenalty,
+        waitPenalty: state.waitPenalty + candidate.waitPenalty,
+        tieBreak: state.tieBreak + candidate.tieBreak,
+      });
+    }
+    if (additions.length === 0) continue;
+
+    const deduped = new Map<string, SearchState>();
+    const beamWidth = exactSearch ? Number.MAX_SAFE_INTEGER : BEAM_WIDTH;
+    for (const state of [...states, ...additions].sort(compareState)) {
+      const key = state.mask.toString();
+      if (!deduped.has(key)) deduped.set(key, state);
+      if (deduped.size >= beamWidth) break;
+    }
+    states = [...deduped.values()];
+  }
+
+  states.sort(compareState);
+  return (states[0]?.matches ?? []).slice(0, courtCount);
 }

@@ -150,14 +150,10 @@ export function Dashboard() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="max-w-6xl mx-auto px-8 py-10" style={{ animation: 'fadeIn 0.3s ease' }}>
+      <div className="w-[90%] mx-auto px-8 py-10" style={{ animation: 'fadeIn 0.3s ease' }}>
 
         {/* Header */}
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h2 className="text-2xl font-bold text-zinc-900 tracking-tight">Dashboard</h2>
-            <p className="text-base text-zinc-400 mt-0.5 font-medium">{s.playerCount} players registered</p>
-          </div>
+        <div className="flex items-center justify-end mb-6">
           <button
             onClick={() => setShowCreate(true)}
             disabled={!!s.activeSession}

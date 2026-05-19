@@ -31,7 +31,7 @@ function NameCell({ value, data }: ICellRendererParams<PlayerWithBalance>) {
       >
         {value?.[0] ?? ''}
       </div>
-      <span className="font-medium text-zinc-900 truncate">{value}</span>
+      <span className="font-bold text-zinc-900 truncate">{value}</span>
     </div>
   );
 }
@@ -302,14 +302,11 @@ export function Players() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="max-w-6xl mx-auto px-8 py-10" style={{ animation: 'fadeIn 0.3s ease' }}>
+      <div className="w-[90%] mx-auto px-8 py-10" style={{ animation: 'fadeIn 0.3s ease' }}>
 
         {/* Header */}
-        <div className="flex items-end justify-between mb-8">
-          <div>
-            <h2 className="text-xl font-bold text-zinc-900 tracking-tight">Players</h2>
-            <p className="text-sm text-zinc-400 mt-0.5 font-medium">{players.length} registered</p>
-          </div>
+        <div className="flex items-end justify-between mb-6">
+          <p className="text-sm text-zinc-400 font-medium">{players.length} registered</p>
           <div className="flex items-center gap-2">
             <div className="relative">
               <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

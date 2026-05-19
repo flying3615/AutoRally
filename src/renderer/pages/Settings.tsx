@@ -212,7 +212,7 @@ export function Settings() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="max-w-3xl mx-auto px-8 py-10" style={{ animation: 'fadeIn 0.3s ease' }}>
+      <div className="w-[90%] mx-auto px-8 py-10" style={{ animation: 'fadeIn 0.3s ease' }}>
 
         {/* Header */}
         <div className="flex items-center justify-between mb-8">

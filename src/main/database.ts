@@ -2,6 +2,7 @@ import initSqlJs, { Database, SqlValue } from 'sql.js';
 import path from 'path';
 import fs from 'fs';
 import { app } from 'electron';
+import { v4 as uuid } from 'uuid';
 
 const dbPath = path.join(app.getPath('userData'), 'autorally.db');
 let db: Database | null = null;
@@ -129,6 +130,62 @@ function migrate(db: Database) {
       note TEXT NOT NULL DEFAULT ''
     );
   `);
+  // Tournaments
+  db.run(`
+    CREATE TABLE IF NOT EXISTS tournaments (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      date TEXT NOT NULL,
+      format TEXT NOT NULL CHECK(format IN ('knockout', 'round_robin', 'mixed')),
+      status TEXT NOT NULL CHECK(status IN ('upcoming', 'active', 'completed')) DEFAULT 'upcoming',
+      courtCount INTEGER NOT NULL DEFAULT 4,
+      createdAt TEXT NOT NULL
+    );
+  `);
+  db.run(`
+    CREATE TABLE IF NOT EXISTS tournament_registrations (
+      id TEXT PRIMARY KEY,
+      tournamentId TEXT NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+      player1Id TEXT NOT NULL REFERENCES players(id),
+      player2Id TEXT REFERENCES players(id),
+      registeredAt TEXT NOT NULL
+    );
+  `);
+  db.run(`
+    CREATE TABLE IF NOT EXISTS tournament_matches (
+      id TEXT PRIMARY KEY,
+      tournamentId TEXT NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+      round TEXT NOT NULL,
+      matchNumber INTEGER NOT NULL DEFAULT 1,
+      courtNumber INTEGER DEFAULT NULL,
+      status TEXT NOT NULL CHECK(status IN ('pending', 'in_progress', 'completed')) DEFAULT 'pending',
+      team1Player1Id TEXT NOT NULL REFERENCES players(id),
+      team1Player2Id TEXT REFERENCES players(id),
+      team2Player1Id TEXT NOT NULL REFERENCES players(id),
+      team2Player2Id TEXT REFERENCES players(id),
+      team1Score INTEGER DEFAULT NULL,
+      team2Score INTEGER DEFAULT NULL,
+      winner TEXT CHECK(winner IN ('team1', 'team2')) DEFAULT NULL,
+      scheduledTime TEXT,
+      completedAt TEXT
+    );
+  `);
+  db.run(`
+    CREATE TABLE IF NOT EXISTS tournament_standings (
+      id TEXT PRIMARY KEY,
+      tournamentId TEXT NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+      player1Id TEXT NOT NULL REFERENCES players(id),
+      player2Id TEXT REFERENCES players(id),
+      matchesPlayed INTEGER NOT NULL DEFAULT 0,
+      wins INTEGER NOT NULL DEFAULT 0,
+      losses INTEGER NOT NULL DEFAULT 0,
+      pointsFor INTEGER NOT NULL DEFAULT 0,
+      pointsAgainst INTEGER NOT NULL DEFAULT 0,
+      UNIQUE(tournamentId, player1Id, player2Id)
+    );
+  `);
+
   db.run("INSERT OR IGNORE INTO settings (key, value) VALUES ('courtCount', '4')");
   db.run("INSERT OR IGNORE INTO settings (key, value) VALUES ('sessionFee', '10')");
   db.run("INSERT OR IGNORE INTO settings (key, value) VALUES ('gameDuration', '15')");
@@ -141,7 +198,48 @@ function migrate(db: Database) {
   if (migrateGameTypeConstraint(db)) dirty = true;
   if (migrateAttendanceAndBalancesCascade(db)) dirty = true;
 
+  seedPlayersIfEmpty(db);
+
   if (dirty) save();
+}
+
+function seedPlayersIfEmpty(db: Database) {
+  const existing = (db.exec("SELECT COUNT(*) as c FROM players")[0]?.values?.[0]?.[0] as number) ?? 0;
+  if (existing > 0) return;
+
+  const seedPath = path.join(app.getAppPath(), 'kapiti_players.csv');
+  if (!fs.existsSync(seedPath)) return;
+
+  const content = fs.readFileSync(seedPath, 'utf-8');
+  const lines = content.trim().split('\n').map(l => l.trim()).filter(Boolean);
+  if (lines.length < 2) return;
+
+  const header = lines[0]!.toLowerCase();
+  const cols = header.split(',').map(c => c.trim());
+  const firstNameIdx = cols.findIndex(c => c.includes('first') && c.includes('name'));
+  const lastNameIdx = cols.findIndex(c => c.includes('last') && c.includes('name'));
+  const levelIdx = cols.findIndex(c => c === 'level');
+  const genderIdx = cols.findIndex(c => c === 'gender');
+
+  if (levelIdx === -1 || genderIdx === -1 || firstNameIdx === -1 || lastNameIdx === -1) return;
+
+  const titleCase = (s: string) => s.replace(/\b\w/g, c => c.toUpperCase());
+
+  for (let i = 1; i < lines.length; i++) {
+    const parts = lines[i]!.split(',').map(c => c.trim());
+    const first = titleCase(parts[firstNameIdx] || '');
+    const last = titleCase(parts[lastNameIdx] || '');
+    const name = `${first} ${last}`.trim();
+    const gender = parts[genderIdx]?.toLowerCase() === 'female' ? 'female' : 'male';
+    const level = Math.max(1, Math.min(5, Number(parts[levelIdx]) || 3));
+    const pid = uuid();
+    const now = new Date().toISOString();
+    db.run('INSERT INTO players (id, name, gender, level, phone, email, joinDate) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [pid, name, gender, level, '', '', now]);
+    db.run('INSERT INTO balances (id, playerId, balance, lastUpdated) VALUES (?, ?, 0, ?)',
+      [uuid(), pid, now]);
+  }
+  console.log(`Seeded ${lines.length - 1} players from kapiti_players.csv`);
 }
 
 function migrateGameTypeConstraint(db: Database): boolean {

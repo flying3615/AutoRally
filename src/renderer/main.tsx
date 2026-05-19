@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { HashRouter, Routes, Route } from 'react-router-dom';
+import { HashRouter, Navigate, Routes, Route, useParams } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { Dashboard } from './pages/Dashboard';
 import { Players } from './pages/Players';
@@ -9,7 +9,15 @@ import { MatchPanel } from './pages/MatchPanel';
 import { Checkin } from './pages/Checkin';
 import { Payments } from './pages/Payments';
 import { Settings } from './pages/Settings';
+import { Report } from './pages/Report';
+import { Tournaments } from './pages/Tournaments';
+import { TournamentDetail } from './pages/TournamentDetail';
 import './index.css';
+
+function LegacyTournamentRoute() {
+  const { id } = useParams<{ id: string }>();
+  return <Navigate to={`/tournaments/${id ?? ''}`} replace />;
+}
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
@@ -23,6 +31,10 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           <Route path="match/:sessionId" element={<MatchPanel />} />
           <Route path="payments" element={<Payments />} />
           <Route path="settings" element={<Settings />} />
+          <Route path="report/:sessionId" element={<Report />} />
+          <Route path="tournaments" element={<Tournaments />} />
+          <Route path="tournaments/:id" element={<TournamentDetail />} />
+          <Route path="tournament/:id" element={<LegacyTournamentRoute />} />
         </Route>
       </Routes>
     </HashRouter>
