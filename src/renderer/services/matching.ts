@@ -21,6 +21,7 @@ const MAX_PLAYERS_PER_LEVEL_WINDOW = 36;
 const MAX_COURT_CANDIDATES = 1200;
 const MAX_EXACT_CANDIDATES = 900;
 const BEAM_WIDTH = 160;
+const RELAXED_LEVEL_PENALTY_OFFSET = 100;
 
 interface CourtCandidate extends MatchResult {
   ids: string[];
@@ -79,6 +80,67 @@ function compareState(a: SearchState, b: SearchState): number {
     a.waitPenalty - b.waitPenalty ||
     a.tieBreak - b.tieBreak
   );
+}
+
+function selectBestMatches(
+  allCandidates: CourtCandidate[],
+  poolSize: number,
+  courtCount: number,
+  candidateLimit = MAX_COURT_CANDIDATES,
+): MatchResult[] {
+  const exactSearch = poolSize <= 16 && allCandidates.length <= MAX_EXACT_CANDIDATES;
+  const keepAllCandidates = poolSize <= 16;
+  const candidates = allCandidates.slice(0, keepAllCandidates ? undefined : candidateLimit);
+  if (candidates.length === 0) return [];
+
+  let states: SearchState[] = [{
+    matches: [],
+    mask: 0n,
+    count: 0,
+    levelPenalty: 0,
+    fairnessPenalty: 0,
+    typePenalty: 0,
+    teamBalancePenalty: 0,
+    partnerPenalty: 0,
+    waitPenalty: 0,
+    tieBreak: 0,
+  }];
+
+  for (const candidate of candidates) {
+    const additions: SearchState[] = [];
+    for (const state of states) {
+      if (state.count >= courtCount || (state.mask & candidate.mask) !== 0n) continue;
+      additions.push({
+        matches: [...state.matches, {
+          team1: candidate.team1,
+          team2: candidate.team2,
+          gameType: candidate.gameType,
+        }],
+        mask: state.mask | candidate.mask,
+        count: state.count + 1,
+        levelPenalty: state.levelPenalty + candidate.levelPenalty,
+        fairnessPenalty: state.fairnessPenalty + candidate.fairnessPenalty,
+        typePenalty: state.typePenalty + candidate.typePenalty,
+        teamBalancePenalty: state.teamBalancePenalty + candidate.teamBalancePenalty,
+        partnerPenalty: state.partnerPenalty + candidate.partnerPenalty,
+        waitPenalty: state.waitPenalty + candidate.waitPenalty,
+        tieBreak: state.tieBreak + candidate.tieBreak,
+      });
+    }
+    if (additions.length === 0) continue;
+
+    const deduped = new Map<string, SearchState>();
+    const beamWidth = exactSearch ? Number.MAX_SAFE_INTEGER : BEAM_WIDTH;
+    for (const state of [...states, ...additions].sort(compareState)) {
+      const key = state.mask.toString();
+      if (!deduped.has(key)) deduped.set(key, state);
+      if (deduped.size >= beamWidth) break;
+    }
+    states = [...deduped.values()];
+  }
+
+  states.sort(compareState);
+  return (states[0]?.matches ?? []).slice(0, courtCount);
 }
 
 // ── Main entry point ──
@@ -142,10 +204,13 @@ export function generateMatches(
     (waitRank.get(p.id) ?? 0) * 10 +
     (hashString(p.id, seed) % 10);
 
-  const addCandidate = (group: PlayerInPool[]) => {
+  const addCandidate = (group: PlayerInPool[], allowWideLevelGap = false) => {
     const levels = group.map(p => p.level);
-    const levelPenalty = Math.max(...levels) - Math.min(...levels);
-    if (levelPenalty > 1) return;
+    const levelSpread = Math.max(...levels) - Math.min(...levels);
+    if (!allowWideLevelGap && levelSpread > 1) return;
+    const levelPenalty = levelSpread <= 1
+      ? levelSpread
+      : RELAXED_LEVEL_PENALTY_OFFSET + levelSpread;
 
     const males = group.filter(p => p.gender === 'male');
     const females = group.filter(p => p.gender === 'female');
@@ -254,58 +319,26 @@ export function generateMatches(
     }
   }
 
-  const allCandidates = [...candidateByKey.values()].sort(compareCandidate);
-  const exactSearch = pool.length <= 16 && allCandidates.length <= MAX_EXACT_CANDIDATES;
-  const keepAllCandidates = pool.length <= 16;
-  const candidates = allCandidates.slice(0, keepAllCandidates ? undefined : MAX_COURT_CANDIDATES);
-  if (candidates.length === 0) return [];
+  const selectCurrentCandidates = (candidateLimit = MAX_COURT_CANDIDATES) =>
+    selectBestMatches([...candidateByKey.values()].sort(compareCandidate), pool.length, courtCount, candidateLimit);
 
-  let states: SearchState[] = [{
-    matches: [],
-    mask: 0n,
-    count: 0,
-    levelPenalty: 0,
-    fairnessPenalty: 0,
-    typePenalty: 0,
-    teamBalancePenalty: 0,
-    partnerPenalty: 0,
-    waitPenalty: 0,
-    tieBreak: 0,
-  }];
+  const targetCourtCount = Math.min(courtCount, Math.floor(pool.length / 4));
+  const strictMatches = selectCurrentCandidates();
+  if (strictMatches.length >= targetCourtCount) return strictMatches;
 
-  for (const candidate of candidates) {
-    const additions: SearchState[] = [];
-    for (const state of states) {
-      if (state.count >= courtCount || (state.mask & candidate.mask) !== 0n) continue;
-      additions.push({
-        matches: [...state.matches, {
-          team1: candidate.team1,
-          team2: candidate.team2,
-          gameType: candidate.gameType,
-        }],
-        mask: state.mask | candidate.mask,
-        count: state.count + 1,
-        levelPenalty: state.levelPenalty + candidate.levelPenalty,
-        fairnessPenalty: state.fairnessPenalty + candidate.fairnessPenalty,
-        typePenalty: state.typePenalty + candidate.typePenalty,
-        teamBalancePenalty: state.teamBalancePenalty + candidate.teamBalancePenalty,
-        partnerPenalty: state.partnerPenalty + candidate.partnerPenalty,
-        waitPenalty: state.waitPenalty + candidate.waitPenalty,
-        tieBreak: state.tieBreak + candidate.tieBreak,
-      });
+  let relaxedPlayers = [...sorted].sort((a, b) => playerRank(a) - playerRank(b));
+  const relaxedLimit = Math.max(MAX_PLAYERS_PER_LEVEL_WINDOW, courtCount * 8);
+  if (relaxedPlayers.length > relaxedLimit) relaxedPlayers = relaxedPlayers.slice(0, relaxedLimit);
+
+  for (let a = 0; a < relaxedPlayers.length - 3; a++) {
+    for (let b = a + 1; b < relaxedPlayers.length - 2; b++) {
+      for (let c = b + 1; c < relaxedPlayers.length - 1; c++) {
+        for (let d = c + 1; d < relaxedPlayers.length; d++) {
+          addCandidate([relaxedPlayers[a]!, relaxedPlayers[b]!, relaxedPlayers[c]!, relaxedPlayers[d]!], true);
+        }
+      }
     }
-    if (additions.length === 0) continue;
-
-    const deduped = new Map<string, SearchState>();
-    const beamWidth = exactSearch ? Number.MAX_SAFE_INTEGER : BEAM_WIDTH;
-    for (const state of [...states, ...additions].sort(compareState)) {
-      const key = state.mask.toString();
-      if (!deduped.has(key)) deduped.set(key, state);
-      if (deduped.size >= beamWidth) break;
-    }
-    states = [...deduped.values()];
   }
 
-  states.sort(compareState);
-  return (states[0]?.matches ?? []).slice(0, courtCount);
+  return selectCurrentCandidates(Number.MAX_SAFE_INTEGER);
 }

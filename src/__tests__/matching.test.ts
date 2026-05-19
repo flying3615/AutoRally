@@ -45,17 +45,19 @@ describe('generateMatches', () => {
     expect(team2Genders).toEqual(['female', 'male']);
   });
 
-  it('prefers level-matching: no game spans more than 1 level', () => {
-    // Levels 5,4,3,2 cannot all share one court — max 1-level gap rejected.
+  it('uses a wide-level match only as the fallback for an otherwise idle court', () => {
     const pool = [
       makePlayer('m1', 'M1', 'male', 5),
       makePlayer('m2', 'M2', 'male', 4),
       makePlayer('f1', 'F1', 'female', 3),
       makePlayer('f2', 'F2', 'female', 2),
     ];
-    // With this spread, no level-range can fit 4 players with max-1 gap
     const result = generateMatches(pool, 3, 1, []);
-    expect(result).toHaveLength(0);
+    const allIds = result.flatMap(m => [...m.team1, ...m.team2]);
+    const levels = allIds.map(id => pool.find(p => p.id === id)!.level);
+
+    expect(result).toHaveLength(1);
+    expect(Math.max(...levels) - Math.min(...levels)).toBeGreaterThan(1);
   });
 
   it('forms male-double when only same-level males available', () => {
@@ -196,6 +198,40 @@ describe('generateMatches', () => {
 
     expect(result).toHaveLength(4);
     expect(allIds.some(id => id.startsWith('l5_'))).toBe(false);
+  });
+
+  it('uses a relaxed level fallback to fill an otherwise idle court', () => {
+    const restingPlayers = [
+      makePlayer('w1', 'W1', 'male', 1, 60),
+      makePlayer('w2', 'W2', 'male', 1, 59),
+      makePlayer('w3', 'W3', 'male', 1, 58),
+      makePlayer('w4', 'W4', 'male', 4, 57),
+    ];
+    const activePlayers = Array.from({ length: 12 }, (_, i) =>
+      makePlayer(`a${i + 1}`, `A${i + 1}`, 'male', 5, i)
+    );
+    const pastGames: Game[] = Array.from({ length: 3 }, (_, courtIndex) => ({
+      id: `active_${courtIndex + 1}`,
+      sessionId: 's',
+      courtNumber: courtIndex + 1,
+      team1Player1Id: `a${courtIndex * 4 + 1}`,
+      team1Player2Id: `a${courtIndex * 4 + 2}`,
+      team2Player1Id: `a${courtIndex * 4 + 3}`,
+      team2Player2Id: `a${courtIndex * 4 + 4}`,
+      status: 'playing',
+      roundNumber: 1,
+      gameType: 'male-double',
+      startedAt: null,
+      endedAt: null,
+    }));
+    const pool = [...restingPlayers, ...activePlayers];
+
+    const result = generateMatches(pool, 4, 2, pastGames);
+    const allIds = result.flatMap(m => [...m.team1, ...m.team2]);
+
+    expect(result).toHaveLength(4);
+    expect(new Set(allIds).size).toBe(16);
+    for (const player of restingPlayers) expect(allIds).toContain(player.id);
   });
 
   it('fills courts from a single-gender waiting pool', () => {

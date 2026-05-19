@@ -2,62 +2,11 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { generateMatches } from '../services/matching';
 import { useGameContext } from '../contexts/GameContext';
-import { levelColors, genderColors } from '../theme';
-import type { Game } from '../../shared/types';
-
-interface GameInfo {
-  id: string;
-  sessionId: string;
-  courtNumber: number;
-  team1Player1Id: string;
-  team1Player2Id: string;
-  team2Player1Id: string;
-  team2Player2Id: string;
-  status: 'pending' | 'playing' | 'completed';
-  roundNumber: number;
-  gameType: Game['gameType'];
-  startedAt: string | null;
-  endedAt: string | null;
-  t1p1Name: string; t1p1Gender: string; t1p1Level: number;
-  t1p2Name: string; t1p2Gender: string; t1p2Level: number;
-  t2p1Name: string; t2p1Gender: string; t2p1Level: number;
-  t2p2Name: string; t2p2Gender: string; t2p2Level: number;
-}
-
-interface AttendanceInfo {
-  id: string;
-  playerId: string;
-  sessionId: string;
-  checkinTime: string;
-  name: string;
-  gender: string;
-  level: number;
-  paused: number;
-}
-
-interface PlayerInfo {
-  id: string;
-  name: string;
-  gender: string;
-  level: number;
-  phone: string;
-}
-
-interface Settings {
-  gameDuration: string;
-  courtCount: string;
-}
-
-interface ContextMenuTarget {
-  attendanceId: string;
-  playerId: string;
-  name: string;
-  gender: string;
-  level: number;
-  phone: string;
-  paused: boolean;
-  checkedOut: boolean;
-}
+import { genderColors } from '../theme';
+import { GameCourtCard, PlayerCard } from './matchPanel/GameCourtCard';
+import { formatSecondsAsClock, getPlayingTimerRecovery, pendingCountdownLabel } from './matchPanel/time';
+import { usePendingRoundCountdown } from './matchPanel/usePendingRoundCountdown';
+import type { AttendanceInfo, ContextMenuTarget, GameInfo, PlayerInfo, Settings } from './matchPanel/types';
 
 // ── Context Menu ──
 function ContextMenu({
@@ -299,178 +248,6 @@ function EditPlayerModal({
   );
 }
 
-// ── Player Tag (game card) ──
-// ── Drop Slot wrapper for pending game cards ──
-function DropSlot({
-  gameId, slot, playerId, onDropPlayer, children,
-}: {
-  gameId: string;
-  slot: string;
-  playerId: string;
-  onDropPlayer: (gameId: string, slot: string, newPlayerId: string, sourceData?: string) => void;
-  children: React.ReactNode;
-}) {
-  const [over, setOver] = useState(false);
-
-  return (
-    <div
-      draggable
-      className="rounded-lg cursor-grab w-full h-full flex items-center justify-center"
-      style={{
-        backgroundColor: over ? 'rgba(59,130,246,0.06)' : 'transparent',
-      }}
-      onDragStart={(e) => {
-        e.dataTransfer.setData('application/x-player-id', playerId);
-        e.dataTransfer.setData('application/x-source', `${gameId}:${slot}`);
-        e.dataTransfer.setData('text/plain', playerId);
-        e.dataTransfer.effectAllowed = 'move';
-        e.currentTarget.style.opacity = '0.4';
-      }}
-      onDragEnd={(e) => { e.currentTarget.style.opacity = ''; }}
-      onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
-      onDragEnter={(e) => { e.preventDefault(); setOver(true); }}
-      onDragLeave={() => setOver(false)}
-      onDrop={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setOver(false);
-        const draggedId = e.dataTransfer.getData('application/x-player-id') || e.dataTransfer.getData('text/plain');
-        const source = e.dataTransfer.getData('application/x-source');
-        if (draggedId) onDropPlayer(gameId, slot, draggedId, source || undefined);
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
-function PlayerTag({
-  name, gender, level, playerId, onContextMenu,
-  paused = false,
-  checkedOut = false,
-}: {
-  name: string; gender: string; level: number; playerId: string;
-  onContextMenu: (e: React.MouseEvent, id: string) => void;
-  paused?: boolean;
-  checkedOut?: boolean;
-}) {
-  const isMale = gender === 'male';
-  const gc = isMale ? genderColors.male : genderColors.female;
-  const textClr = levelColors[level] ?? levelColors[3]!;
-
-  return (
-    <div
-      className="inline-flex items-center justify-center w-full h-full px-2 py-5 rounded-xl select-none relative min-w-0 overflow-hidden"
-      style={{
-        backgroundColor: paused ? '#f5f5f4' : checkedOut ? '#fef2f2' : gc.bg,
-        borderWidth: 1,
-        borderStyle: 'solid',
-        borderColor: paused ? '#d6d3d1' : checkedOut ? '#fecaca' : gc.border,
-        transition: 'transform 0.15s ease, box-shadow 0.15s ease',
-        cursor: 'context-menu',
-      }}
-      onContextMenu={(e) => { e.preventDefault(); onContextMenu(e, playerId); }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.transform = 'scale(1.04)';
-        e.currentTarget.style.boxShadow = `0 3px 10px -3px ${gc.border}60`;
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.transform = 'scale(1)';
-        e.currentTarget.style.boxShadow = 'none';
-      }}
-    >
-      <span
-        className="text-3xl font-bold tracking-tight truncate"
-        style={{ color: paused ? '#a8a29e' : checkedOut ? '#ef4444' : textClr }}
-      >
-        {name}
-        <span className="text-lg font-semibold opacity-60 ml-0.5">({level})</span>
-      </span>
-      {(paused || checkedOut) && (
-        <span
-          className="text-[10px] font-semibold px-1.5 py-px rounded-full ml-2 shrink-0"
-          style={{
-            backgroundColor: checkedOut ? '#fef2f2' : '#fef9c3',
-            color: checkedOut ? '#dc2626' : '#a16207',
-            borderWidth: 1,
-            borderStyle: 'solid',
-            borderColor: checkedOut ? '#fecaca' : '#fde68a',
-          }}
-        >
-          {checkedOut ? 'Left' : 'Paused'}
-        </span>
-      )}
-    </div>
-  );
-}
-
-// ── Player Card (waiting pool) ──
-function PlayerCard({
-  p, index, onContextMenu,
-}: {
-  p: AttendanceInfo; index: number;
-  onContextMenu: (e: React.MouseEvent, id: string) => void;
-}) {
-  const isMale = p.gender === 'male';
-  const isPaused = p.paused === 1;
-
-  return (
-    <div
-      draggable={!isPaused}
-      onDragStart={(e) => {
-        e.dataTransfer.setData('application/x-player-id', p.playerId);
-        e.dataTransfer.setData('text/plain', p.playerId);
-        e.dataTransfer.effectAllowed = 'move';
-        e.currentTarget.style.opacity = '0.4';
-      }}
-      onDragEnd={(e) => {
-        e.currentTarget.style.opacity = '';
-      }}
-      className="group flex items-center gap-2 px-2.5 py-1.5 rounded-lg select-none"
-      style={{
-        backgroundColor: isPaused ? '#f5f5f4' : isMale ? genderColors.male.bg : genderColors.female.bg,
-        animation: `fadeSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) ${index * 40}ms forwards`,
-        transition: 'background-color 0.15s ease, opacity 0.15s ease',
-        cursor: isPaused ? 'context-menu' : 'grab',
-        opacity: 0,
-      }}
-      onContextMenu={(e) => { e.preventDefault(); onContextMenu(e, p.playerId); }}
-      onMouseEnter={(e) => {
-        if (isPaused) return;
-        e.currentTarget.style.backgroundColor = isMale ? genderColors.male.border : genderColors.female.border;
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.backgroundColor = isPaused ? '#f5f5f4' : isMale ? genderColors.male.bg : genderColors.female.bg;
-      }}
-    >
-      <div
-        className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 text-white"
-        style={{
-          backgroundColor: isPaused ? '#a8a29e' : isMale ? genderColors.male.accent : genderColors.female.accent,
-        }}
-      >
-        {isPaused ? (
-          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25v13.5m-7.5-13.5v13.5" />
-          </svg>
-        ) : (
-          p.name[0]
-        )}
-      </div>
-
-      <span className="flex-1 text-sm font-bold text-zinc-800 truncate">{p.name}</span>
-
-      {isPaused ? (
-        <span className="text-[10px] font-semibold px-1.5 py-px rounded bg-amber-100 text-amber-700 shrink-0">Paused</span>
-      ) : (
-        <span className="text-[10px] font-semibold shrink-0" style={{ color: isMale ? genderColors.male.accent : genderColors.female.accent }}>
-          {isMale ? '♂' : '♀'}{p.level}
-        </span>
-      )}
-    </div>
-  );
-}
-
 // ═══════════════════════════════════════════
 // Main MatchPanel Component
 // ═══════════════════════════════════════════
@@ -486,6 +263,7 @@ export function MatchPanel() {
   const [checkinFeedback, setCheckinFeedback] = useState<string | null>(null);
   const { timers, startGame, pauseGame, resumeGame, earlyFinishGame } = useGameContext();
   const nextRoundGeneratedRef = useRef(false);
+  const recoveringGameIdsRef = useRef<Set<string>>(new Set());
 
   // Context menu state
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; target: ContextMenuTarget } | null>(null);
@@ -515,6 +293,7 @@ export function MatchPanel() {
 
   const activeGames = games.filter(g => g.status === 'playing');
   const pendingGames = games.filter(g => g.status === 'pending');
+  const pendingRoundKey = pendingGames.map(g => g.id).sort().join('|');
   const currentRound = games.length > 0 ? Math.max(...games.map(g => g.roundNumber)) : 0;
 
   const playingIds = new Set(
@@ -770,12 +549,13 @@ export function MatchPanel() {
   useEffect(() => {
     if (nextRoundGeneratedRef.current) return;
     if (activeGames.length === 0) return;
+    if (pendingGames.length > 0) return;
     const hasWarning = activeGames.some(g => timers.get(g.courtNumber)?.phase === 'warning');
     if (hasWarning) {
       handleGenerate();
       nextRoundGeneratedRef.current = true;
     }
-  }, [timers, activeGames, handleGenerate]);
+  }, [timers, activeGames, pendingGames.length, handleGenerate]);
 
   // Reset the generation flag when no more active games
   useEffect(() => {
@@ -784,7 +564,32 @@ export function MatchPanel() {
     }
   }, [activeGames.length]);
 
-  const handleStartRound = async () => {
+  useEffect(() => {
+    const durationSeconds = (Number(settings.gameDuration) || 0) * 60;
+    if (activeGames.length === 0 || durationSeconds <= 0) return;
+
+    for (const game of activeGames) {
+      if (timers.has(game.courtNumber) || recoveringGameIdsRef.current.has(game.id)) continue;
+
+      const recovery = getPlayingTimerRecovery(game.startedAt, durationSeconds);
+      if (!recovery) continue;
+
+      recoveringGameIdsRef.current.add(game.id);
+      if (recovery.action === 'complete') {
+        window.api.gamesComplete(game.id)
+          .then(() => load())
+          .finally(() => recoveringGameIdsRef.current.delete(game.id));
+      } else {
+        startGame(game.courtNumber, recovery.remainingSeconds / 60, () => {
+          window.api.gamesComplete(game.id).then(() => load());
+        });
+        window.setTimeout(() => recoveringGameIdsRef.current.delete(game.id), 0);
+      }
+    }
+  }, [activeGames, timers, settings.gameDuration, startGame, load]);
+
+  const handleStartRound = useCallback(async () => {
+    if (pendingGames.length === 0) return;
     nextRoundGeneratedRef.current = false;
     const duration = Number(settings.gameDuration);
     for (const game of pendingGames) {
@@ -794,7 +599,13 @@ export function MatchPanel() {
       });
     }
     load();
-  };
+  }, [pendingGames, settings.gameDuration, startGame, load]);
+
+  const pendingCountdown = usePendingRoundCountdown({
+    enabled: activeGames.length === 0 && pendingGames.length > 0,
+    pendingKey: pendingRoundKey,
+    onElapsed: handleStartRound,
+  });
 
   const handlePauseAll = () => {
     for (const g of activeGames) {
@@ -820,14 +631,8 @@ export function MatchPanel() {
   const anyPaused = activeGames.some(g => timers.get(g.courtNumber)?.phase === 'paused');
 
   // Central timer — use first active game's timer since all courts share same duration
-  const masterTimer = activeGames.length > 0 ? timers.get(activeGames[0]!.courtNumber) : undefined;
-  const isWarning = masterTimer?.phase === 'warning';
-
-  const formatTime = (seconds: number) => {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m}:${s.toString().padStart(2, '0')}`;
-  };
+  const masterTimer = activeGames.map(g => timers.get(g.courtNumber)).find(timer => timer !== undefined);
+  const isWarning = activeGames.some(g => timers.get(g.courtNumber)?.phase === 'warning');
 
   // Exclude paused players from waiting pool (they're displayed separately)
   const waitingPlayers = attendance.filter(a => !inGameIds.has(a.playerId) && a.paused !== 1);
@@ -903,14 +708,36 @@ export function MatchPanel() {
                 </button>
               )}
               {pendingGames.length > 0 && activeGames.length === 0 && !isWarning && (
-                <button
-                  onClick={handleStartRound}
-                  className="px-5 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg
-                    hover:bg-blue-700 active:scale-[0.97] transition-transform"
-                  style={{ boxShadow: '0 4px 12px -4px rgba(37,99,235,0.4)' }}
-                >
-                  Start Round ({pendingGames.length} courts)
-                </button>
+                <div className="flex items-center gap-2">
+                  <span className="px-3 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-100 rounded-lg tabular-nums">
+                    {pendingCountdownLabel(pendingCountdown.remaining, pendingCountdown.paused)}
+                  </span>
+                  {pendingCountdown.paused ? (
+                    <button
+                      onClick={pendingCountdown.resume}
+                      className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-semibold rounded-lg
+                        hover:bg-emerald-700 active:scale-[0.97] transition-transform"
+                    >
+                      Resume
+                    </button>
+                  ) : (
+                    <button
+                      onClick={pendingCountdown.pause}
+                      className="px-3 py-1.5 bg-amber-500 text-white text-xs font-semibold rounded-lg
+                        hover:bg-amber-600 active:scale-[0.97] transition-transform"
+                    >
+                      Pause
+                    </button>
+                  )}
+                  <button
+                    onClick={pendingCountdown.skip}
+                    className="px-4 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg
+                      hover:bg-blue-700 active:scale-[0.97] transition-transform"
+                    style={{ boxShadow: '0 4px 12px -4px rgba(37,99,235,0.4)' }}
+                  >
+                    Skip Wait
+                  </button>
+                </div>
               )}
             </div>
           </div>
@@ -954,7 +781,7 @@ export function MatchPanel() {
                     color: masterTimer?.phase === 'warning' ? '#d97706' : masterTimer?.phase === 'paused' ? '#a16207' : '#16a34a',
                   }}
                 >
-                  {masterTimer ? formatTime(masterTimer.remaining) : `--:--`}
+                  {masterTimer ? formatSecondsAsClock(masterTimer.remaining) : `--:--`}
                 </span>
                 <div className="flex flex-col gap-0.5">
                   <span className="text-xs font-semibold uppercase tracking-wider"
@@ -1002,61 +829,17 @@ export function MatchPanel() {
             <div className="flex-1 min-h-0 mb-4 flex flex-col">
               <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2 shrink-0">In Progress</h3>
               <div className="grid grid-cols-2 gap-3 flex-1 min-h-0" style={{ gridTemplateRows: '1fr 1fr' }}>
-                {activeGames.map(g => {
-                  const timer = timers.get(g.courtNumber);
-                  const isWarning = timer?.phase === 'warning';
-                  const isEnded = timer?.phase === 'ended';
-                  const isPaused = timer?.phase === 'paused';
-
-                  return (
-                    <div
-                      key={g.id}
-                      className="rounded-2xl border p-6 relative h-full flex items-center"
-                      style={{
-                        backgroundColor: isPaused ? '#f5f5f4' : isEnded ? '#fef2f2' : isWarning ? '#fffbeb' : '#f0fdf4',
-                        borderColor: isPaused ? '#d6d3d1' : isEnded ? '#fecaca' : isWarning ? '#fde68a' : '#bbf7d0',
-                        boxShadow: isPaused
-                          ? '0 4px 20px -8px rgba(120,113,108,0.1)'
-                          : isEnded
-                            ? '0 4px 20px -8px rgba(239,68,68,0.15)'
-                            : isWarning
-                              ? '0 4px 20px -8px rgba(234,179,8,0.2)'
-                              : '0 4px 20px -8px rgba(34,197,94,0.12)',
-                      }}
-                    >
-                      {isPaused && (
-                        <div className="absolute top-2 right-2 text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full z-10">
-                          Paused
-                        </div>
-                      )}
-
-                      <div className="grid gap-1 w-full h-full" style={{ gridTemplateColumns: '1fr auto 1fr', gridTemplateRows: '1fr 1fr' }}>
-                        <div className="flex items-center justify-center min-w-0 h-full">
-                          <PlayerTag name={g.t1p1Name} gender={g.t1p1Gender} level={g.t1p1Level} playerId={g.team1Player1Id} onContextMenu={handlePlayerContextMenu} paused={pausedPlayerIds.has(g.team1Player1Id)} checkedOut={checkedOutPlayerIds.has(g.team1Player1Id)} />
-                        </div>
-
-                        <div className="flex flex-col items-center justify-center gap-2 px-2 row-span-2" style={{ gridRow: '1 / 3', gridColumn: '2' }}>
-                          <span className="text-base font-extrabold text-zinc-500 tabular-nums tracking-tight">C{g.courtNumber}</span>
-                          <div className="w-px flex-1 bg-zinc-200/60" />
-                          <span className="text-xs font-bold text-zinc-400">VS</span>
-                          <div className="w-px flex-1 bg-zinc-200/60" />
-                        </div>
-
-                        <div className="flex items-center justify-center min-w-0 h-full">
-                          <PlayerTag name={g.t2p1Name} gender={g.t2p1Gender} level={g.t2p1Level} playerId={g.team2Player1Id} onContextMenu={handlePlayerContextMenu} paused={pausedPlayerIds.has(g.team2Player1Id)} checkedOut={checkedOutPlayerIds.has(g.team2Player1Id)} />
-                        </div>
-
-                        <div className="flex items-center justify-center min-w-0 h-full" style={{ gridRow: '2', gridColumn: '1' }}>
-                          <PlayerTag name={g.t1p2Name} gender={g.t1p2Gender} level={g.t1p2Level} playerId={g.team1Player2Id} onContextMenu={handlePlayerContextMenu} paused={pausedPlayerIds.has(g.team1Player2Id)} checkedOut={checkedOutPlayerIds.has(g.team1Player2Id)} />
-                        </div>
-
-                        <div className="flex items-center justify-center min-w-0 h-full" style={{ gridRow: '2', gridColumn: '3' }}>
-                          <PlayerTag name={g.t2p2Name} gender={g.t2p2Gender} level={g.t2p2Level} playerId={g.team2Player2Id} onContextMenu={handlePlayerContextMenu} paused={pausedPlayerIds.has(g.team2Player2Id)} checkedOut={checkedOutPlayerIds.has(g.team2Player2Id)} />
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
+                {activeGames.map(g => (
+                  <GameCourtCard
+                    key={g.id}
+                    game={g}
+                    variant="active"
+                    timerPhase={timers.get(g.courtNumber)?.phase}
+                    pausedPlayerIds={pausedPlayerIds}
+                    checkedOutPlayerIds={checkedOutPlayerIds}
+                    onContextMenu={handlePlayerContextMenu}
+                  />
+                ))}
               </div>
             </div>
           )}
@@ -1069,40 +852,15 @@ export function MatchPanel() {
               </h3>
               <div className="grid grid-cols-2 gap-3 flex-1 min-h-0" style={{ gridTemplateRows: '1fr 1fr' }}>
                 {pendingGames.map(g => (
-                  <div
+                  <GameCourtCard
                     key={g.id}
-                    className="bg-white rounded-2xl border border-zinc-200/70 p-5 h-full flex items-center"
-                    style={{ boxShadow: '0 2px 12px -4px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.02)' }}
-                  >
-                    <div className="grid gap-1 w-full h-full" style={{ gridTemplateColumns: '1fr auto 1fr', gridTemplateRows: '1fr 1fr' }}>
-                      <div className="flex items-center justify-center min-w-0 h-full">
-                        <DropSlot gameId={g.id} slot="team1Player1Id" playerId={g.team1Player1Id} onDropPlayer={handleDropPlayer}>
-                          <PlayerTag name={g.t1p1Name} gender={g.t1p1Gender} level={g.t1p1Level} playerId={g.team1Player1Id} onContextMenu={handlePlayerContextMenu} paused={pausedPlayerIds.has(g.team1Player1Id)} checkedOut={checkedOutPlayerIds.has(g.team1Player1Id)} />
-                        </DropSlot>
-                      </div>
-                      <div className="flex flex-col items-center justify-center gap-2 px-2 row-span-2" style={{ gridRow: '1 / 3', gridColumn: '2' }}>
-                        <span className="text-base font-extrabold text-zinc-500 tabular-nums tracking-tight">C{g.courtNumber}</span>
-                        <div className="w-px flex-1 bg-zinc-200/60" />
-                        <span className="text-xs font-bold text-zinc-400">VS</span>
-                        <div className="w-px flex-1 bg-zinc-200/60" />
-                      </div>
-                      <div className="flex items-center justify-center min-w-0 h-full">
-                        <DropSlot gameId={g.id} slot="team2Player1Id" playerId={g.team2Player1Id} onDropPlayer={handleDropPlayer}>
-                          <PlayerTag name={g.t2p1Name} gender={g.t2p1Gender} level={g.t2p1Level} playerId={g.team2Player1Id} onContextMenu={handlePlayerContextMenu} paused={pausedPlayerIds.has(g.team2Player1Id)} checkedOut={checkedOutPlayerIds.has(g.team2Player1Id)} />
-                        </DropSlot>
-                      </div>
-                      <div className="flex items-center justify-center min-w-0 h-full" style={{ gridRow: '2', gridColumn: '1' }}>
-                        <DropSlot gameId={g.id} slot="team1Player2Id" playerId={g.team1Player2Id} onDropPlayer={handleDropPlayer}>
-                          <PlayerTag name={g.t1p2Name} gender={g.t1p2Gender} level={g.t1p2Level} playerId={g.team1Player2Id} onContextMenu={handlePlayerContextMenu} paused={pausedPlayerIds.has(g.team1Player2Id)} checkedOut={checkedOutPlayerIds.has(g.team1Player2Id)} />
-                        </DropSlot>
-                      </div>
-                      <div className="flex items-center justify-center min-w-0 h-full" style={{ gridRow: '2', gridColumn: '3' }}>
-                        <DropSlot gameId={g.id} slot="team2Player2Id" playerId={g.team2Player2Id} onDropPlayer={handleDropPlayer}>
-                          <PlayerTag name={g.t2p2Name} gender={g.t2p2Gender} level={g.t2p2Level} playerId={g.team2Player2Id} onContextMenu={handlePlayerContextMenu} paused={pausedPlayerIds.has(g.team2Player2Id)} checkedOut={checkedOutPlayerIds.has(g.team2Player2Id)} />
-                        </DropSlot>
-                      </div>
-                    </div>
-                  </div>
+                    game={g}
+                    variant="pending"
+                    pausedPlayerIds={pausedPlayerIds}
+                    checkedOutPlayerIds={checkedOutPlayerIds}
+                    onContextMenu={handlePlayerContextMenu}
+                    onDropPlayer={handleDropPlayer}
+                  />
                 ))}
               </div>
             </div>
@@ -1135,32 +893,14 @@ export function MatchPanel() {
                 }}
               >
                 {pendingGames.map(g => (
-                  <div
+                  <GameCourtCard
                     key={g.id}
-                    className="bg-white/95 rounded-2xl border border-amber-200/60 p-6 h-full flex items-center"
-                    style={{ boxShadow: '0 8px 30px -8px rgba(234,179,8,0.25)' }}
-                  >
-                    <div className="grid gap-1 w-full h-full" style={{ gridTemplateColumns: '1fr auto 1fr', gridTemplateRows: '1fr 1fr' }}>
-                      <div className="flex items-center justify-center min-w-0 h-full">
-                        <PlayerTag name={g.t1p1Name} gender={g.t1p1Gender} level={g.t1p1Level} playerId={g.team1Player1Id} onContextMenu={handlePlayerContextMenu} paused={pausedPlayerIds.has(g.team1Player1Id)} checkedOut={checkedOutPlayerIds.has(g.team1Player1Id)} />
-                      </div>
-                      <div className="flex flex-col items-center justify-center gap-2 px-2 row-span-2" style={{ gridRow: '1 / 3', gridColumn: '2' }}>
-                        <span className="text-base font-extrabold text-amber-600 tabular-nums tracking-tight">C{g.courtNumber}</span>
-                        <div className="w-px flex-1 bg-amber-200/60" />
-                        <span className="text-xs font-bold text-amber-400">VS</span>
-                        <div className="w-px flex-1 bg-amber-200/60" />
-                      </div>
-                      <div className="flex items-center justify-center min-w-0 h-full">
-                        <PlayerTag name={g.t2p1Name} gender={g.t2p1Gender} level={g.t2p1Level} playerId={g.team2Player1Id} onContextMenu={handlePlayerContextMenu} paused={pausedPlayerIds.has(g.team2Player1Id)} checkedOut={checkedOutPlayerIds.has(g.team2Player1Id)} />
-                      </div>
-                      <div className="flex items-center justify-center min-w-0 h-full" style={{ gridRow: '2', gridColumn: '1' }}>
-                        <PlayerTag name={g.t1p2Name} gender={g.t1p2Gender} level={g.t1p2Level} playerId={g.team1Player2Id} onContextMenu={handlePlayerContextMenu} paused={pausedPlayerIds.has(g.team1Player2Id)} checkedOut={checkedOutPlayerIds.has(g.team1Player2Id)} />
-                      </div>
-                      <div className="flex items-center justify-center min-w-0 h-full" style={{ gridRow: '2', gridColumn: '3' }}>
-                        <PlayerTag name={g.t2p2Name} gender={g.t2p2Gender} level={g.t2p2Level} playerId={g.team2Player2Id} onContextMenu={handlePlayerContextMenu} paused={pausedPlayerIds.has(g.team2Player2Id)} checkedOut={checkedOutPlayerIds.has(g.team2Player2Id)} />
-                      </div>
-                    </div>
-                  </div>
+                    game={g}
+                    variant="warning"
+                    pausedPlayerIds={pausedPlayerIds}
+                    checkedOutPlayerIds={checkedOutPlayerIds}
+                    onContextMenu={handlePlayerContextMenu}
+                  />
                 ))}
               </div>
             </div>
