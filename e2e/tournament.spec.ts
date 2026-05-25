@@ -55,6 +55,10 @@ async function getStandings(page: Page, tournamentId: string) {
   );
 }
 
+function matchesForRound(detail: any, round: string) {
+  return detail.matches.filter((m: any) => m.round === round);
+}
+
 // ── Tests ──
 
 test.describe('Tournament Management', () => {
@@ -99,11 +103,12 @@ test.describe('Knockout Bracket', () => {
 
     // First half of matches should be byes and the other half should be actual matches
     const detail = await getTournamentDetail(page, t.id) as any;
-    const r1Matches = detail.matches.filter((m: any) => m.round === 'R1');
-    expect(r1Matches.length).toBe(4);
+    expect(detail.rounds[0]).toBe('QF');
+    const firstRoundMatches = matchesForRound(detail, detail.rounds[0]);
+    expect(firstRoundMatches.length).toBe(4);
 
     // At least 2 byes (6 players → 2 byes in an 8-entry bracket)
-    const byes = r1Matches.filter((m: any) => m.winner);
+    const byes = firstRoundMatches.filter((m: any) => m.winner);
     expect(byes.length).toBe(2); // by definition, bye has a winner assigned immediately
   });
 
@@ -115,21 +120,22 @@ test.describe('Knockout Bracket', () => {
     await generateBracket(page, t.id);
 
     const detail = await getTournamentDetail(page, t.id) as any;
-    const r1Matches = detail.matches.filter((m: any) => m.round === 'R1');
-    expect(r1Matches.length).toBe(2);
+    expect(detail.rounds[0]).toBe('SF');
+    const firstRoundMatches = matchesForRound(detail, detail.rounds[0]);
+    expect(firstRoundMatches.length).toBe(2);
 
     // Score the first match: team1 wins 21-15
-    await setScore(page, r1Matches[0].id, 21, 15);
+    await setScore(page, firstRoundMatches[0].id, 21, 15);
     // Score the second match: team2 wins 21-19
-    await setScore(page, r1Matches[1].id, 19, 21);
+    await setScore(page, firstRoundMatches[1].id, 19, 21);
 
     const detail2 = await getTournamentDetail(page, t.id) as any;
-    const r1After = detail2.matches.filter((m: any) => m.round === 'R1');
-    expect(r1After[0].winner).toBe('team1');
-    expect(r1After[0].team1Score).toBe(21);
-    expect(r1After[0].team2Score).toBe(15);
-    expect(r1After[1].winner).toBe('team2');
-    expect(r1After[1].team2Score).toBe(21);
+    const firstRoundAfter = matchesForRound(detail2, detail.rounds[0]);
+    expect(firstRoundAfter[0].winner).toBe('team1');
+    expect(firstRoundAfter[0].team1Score).toBe(21);
+    expect(firstRoundAfter[0].team2Score).toBe(15);
+    expect(firstRoundAfter[1].winner).toBe('team2');
+    expect(firstRoundAfter[1].team2Score).toBe(21);
   });
 
   test('advances winners to final round', async ({ page }) => {
@@ -141,18 +147,20 @@ test.describe('Knockout Bracket', () => {
 
     // Score both R1 matches
     const d1 = await getTournamentDetail(page, t.id) as any;
-    const r1 = d1.matches.filter((m: any) => m.round === 'R1');
-    await setScore(page, r1[0].id, 21, 15);
-    await setScore(page, r1[1].id, 21, 19);
+    const firstRound = d1.rounds[0];
+    expect(firstRound).toBe('SF');
+    const firstRoundMatches = matchesForRound(d1, firstRound);
+    await setScore(page, firstRoundMatches[0].id, 21, 15);
+    await setScore(page, firstRoundMatches[1].id, 21, 19);
 
     // Advance winners from R1 to next round
     const advanced = await page.evaluate(
-      (tid) => window.api.tournamentsAdvanceWinners(tid, 'R1'),
-      t.id
+      ({ tid, round }) => window.api.tournamentsAdvanceWinners(tid, round),
+      { tid: t.id, round: firstRound }
     ) as any[];
 
     expect(advanced.length).toBe(1); // 2 winners pair into 1 match
-    expect(advanced[0].round).toBe('R2');
+    expect(advanced[0].round).toBe('F');
   });
 });
 
@@ -207,19 +215,17 @@ test.describe('Tournament UI', () => {
     for (const p of players) await registerPlayer(page, t.id, p.id);
 
     await navigateTo(page, '/tournaments');
-    await page.waitForTimeout(300);
 
     // Tournament name should appear in the grid
-    await expect(page.locator('text=UI Test Cup')).toBeVisible();
+    await expect(page.getByText('UI Test Cup')).toBeVisible({ timeout: 10000 });
 
     // Navigate to detail
-    await navigateTo(page, `/tournament/${t.id}`);
-    await page.waitForTimeout(300);
+    await navigateTo(page, `/tournaments/${t.id}`);
 
-    await expect(page.locator('text=UI Test Cup')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'registration' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'bracket' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'standings' })).toBeVisible();
+    await expect(page.getByText('UI Test Cup')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('button', { name: 'registration', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'bracket', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'standings', exact: true })).toBeVisible();
   });
 
   test('registration tab shows registered players', async ({ page }) => {
@@ -227,15 +233,14 @@ test.describe('Tournament UI', () => {
     const [p1, p2] = await addTestPlayers(page, 2) as { id: string; name: string }[];
     await registerPlayer(page, t.id, p1.id, p2.id);
 
-    await navigateTo(page, `/tournament/${t.id}`);
-    await page.waitForTimeout(300);
+    await navigateTo(page, `/tournaments/${t.id}`);
+    await expect(page.getByText('Reg UI')).toBeVisible({ timeout: 10000 });
 
     // Click Registration tab
-    await page.getByRole('button', { name: 'registration' }).click();
-    await page.waitForTimeout(200);
+    await page.getByRole('button', { name: 'registration', exact: true }).click();
 
     // Both player names should appear
-    await expect(page.locator('text=' + p1.name)).toBeVisible();
-    await expect(page.locator('text=' + p2.name)).toBeVisible();
+    await expect(page.getByText(p1.name)).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(p2.name)).toBeVisible({ timeout: 10000 });
   });
 });

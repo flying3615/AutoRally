@@ -1,8 +1,11 @@
 import React, { Suspense, lazy } from 'react';
 import ReactDOM from 'react-dom/client';
 import { HashRouter, Navigate, Routes, Route, useParams } from 'react-router-dom';
+import { AllCommunityModule, ModuleRegistry } from 'ag-grid-community';
 import { Layout } from './components/Layout';
 import './index.css';
+
+ModuleRegistry.registerModules([AllCommunityModule]);
 
 const Dashboard = lazy(() => import('./pages/Dashboard').then(module => ({ default: module.Dashboard })));
 const Players = lazy(() => import('./pages/Players').then(module => ({ default: module.Players })));

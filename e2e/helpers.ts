@@ -34,7 +34,11 @@ export const test = base.extend<AppFixture>({
 
   page: async ({ app }, use) => {
     const page = await app.firstWindow();
-    await page.waitForLoadState('domcontentloaded');
+    await page.waitForFunction(() => (
+      Boolean(window.api)
+      && document.readyState !== 'loading'
+      && Boolean(document.querySelector('nav'))
+    ));
     await use(page);
   },
 });
@@ -51,16 +55,16 @@ export async function addPlayer(page: Page, name: string, gender: string = 'male
 
 // Create a session
 export async function createSession(page: Page, courtCount: number = 3) {
-  return await page.evaluate(
-    (courtCount) => window.api.sessionsCreate(courtCount),
-    courtCount
-  );
+  return await page.evaluate(async (courtCount) => {
+    await window.api.sessionsCreate(courtCount);
+    return window.api.sessionsGetActive();
+  }, courtCount);
 }
 
 // Checkin a player to a session
 export async function checkinPlayer(page: Page, playerId: string, sessionId: string) {
   await page.evaluate(
-    ({ playerId, sessionId }) => window.api.attendanceCheckin(playerId, sessionId),
+    ({ playerId, sessionId }) => window.api.attendanceCheckin(playerId, sessionId, 'cash'),
     { playerId, sessionId }
   );
 }
@@ -73,6 +77,7 @@ export async function getActiveSession(page: Page) {
 // Navigate via hash router
 export async function navigateTo(page: Page, route: string) {
   await page.evaluate((r) => { window.location.hash = r; }, route);
+  await page.waitForFunction((r) => window.location.hash === `#${r}`, route);
   await page.waitForTimeout(200);
 }
 
