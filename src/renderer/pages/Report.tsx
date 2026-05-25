@@ -2,6 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { AgGridReact } from 'ag-grid-react';
 import { levelColors, genderColors } from '../theme';
+import { PlayerParticipationBar } from '../components/reportCharts/PlayerParticipationBar';
+import { LevelDistributionBar } from '../components/reportCharts/LevelDistributionBar';
+import { GameTypePie } from '../components/reportCharts/GameTypePie';
+import { GamesPerRoundBar } from '../components/reportCharts/GamesPerRoundBar';
+import { MatchTypePie } from '../components/reportCharts/MatchTypePie';
 
 interface PlayerRow {
   playerId: string;
@@ -169,6 +174,34 @@ export function Report() {
     },
   ], []);
 
+  const players = playerData?.players ?? [];
+
+  const participationData = useMemo(() =>
+    [...players].sort((a, b) => b.pct - a.pct).map(p => ({ name: p.name, mixed: p.mixed, doubles: p.doubles, satOut: p.satOut, pct: p.pct })),
+  [players]);
+
+  const playerGameTypeMix = useMemo(() => [
+    { name: 'Doubles', value: players.reduce((s, p) => s + p.doubles, 0), color: '#059669' },
+    { name: 'Mixed',   value: players.reduce((s, p) => s + p.mixed, 0),   color: '#7c3aed' },
+  ].filter(d => d.value > 0), [players]);
+
+  const levelDistData = useMemo(() =>
+    [1, 2, 3, 4, 5].map(lv => ({ level: lv, count: players.filter(p => p.level === lv).length, color: levelColors[lv] ?? '#a1a1aa' })),
+  [players]);
+
+  const gamesPerRound = useMemo(() => {
+    const map = new Map<number, number>();
+    matchRows.forEach(m => map.set(m.round, (map.get(m.round) ?? 0) + 1));
+    return Array.from(map.entries()).sort(([a], [b]) => a - b).map(([r, c]) => ({ round: `R${r}`, count: c }));
+  }, [matchRows]);
+
+  const matchTypeCounts = useMemo(() => {
+    const map: Record<string, number> = {};
+    matchRows.forEach(m => { map[m.gameType] = (map[m.gameType] ?? 0) + 1; });
+    const colors: Record<string, string> = { mixed: '#7c3aed', 'male-double': '#2563eb', 'female-double': '#db2777', 'open-double': '#78716c' };
+    return Object.entries(map).map(([name, value]) => ({ name, value, color: colors[name] ?? '#a1a1aa' })).filter(d => d.value > 0);
+  }, [matchRows]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -207,32 +240,64 @@ export function Report() {
 
         {/* Player stats table */}
         {tab === 'players' && (
-          <div className="ag-theme-quartz" style={{ width: '100%' }}>
-            <AgGridReact
-              rowData={playerData?.players ?? []}
-              columnDefs={playerColumns}
-              defaultColDef={{ sortable: true, resizable: true }}
-              domLayout="autoHeight"
-              suppressRowHoverHighlight={false}
-              rowHeight={36}
-              headerHeight={38}
-            />
-          </div>
+          <>
+            {players.length > 0 && (
+              <div className="grid grid-cols-3 gap-4 mb-6">
+                <div className="col-span-3 bg-white border border-zinc-200/60 rounded-2xl p-5">
+                  <p className="text-xs font-semibold uppercase tracking-widest text-zinc-400 mb-4">Participation</p>
+                  <PlayerParticipationBar data={participationData} />
+                </div>
+                <div className="col-span-2 bg-white border border-zinc-200/60 rounded-2xl p-5">
+                  <p className="text-xs font-semibold uppercase tracking-widest text-zinc-400 mb-4">Level Distribution</p>
+                  <LevelDistributionBar data={levelDistData} />
+                </div>
+                <div className="bg-white border border-zinc-200/60 rounded-2xl p-5">
+                  <p className="text-xs font-semibold uppercase tracking-widest text-zinc-400 mb-4">Game Type Mix</p>
+                  <GameTypePie data={playerGameTypeMix} />
+                </div>
+              </div>
+            )}
+            <div className="ag-theme-quartz" style={{ width: '100%' }}>
+              <AgGridReact
+                rowData={playerData?.players ?? []}
+                columnDefs={playerColumns}
+                defaultColDef={{ sortable: true, resizable: true }}
+                domLayout="autoHeight"
+                suppressRowHoverHighlight={false}
+                rowHeight={36}
+                headerHeight={38}
+              />
+            </div>
+          </>
         )}
 
         {/* Match history table */}
         {tab === 'matches' && (
-          <div className="ag-theme-quartz" style={{ width: '100%' }}>
-            <AgGridReact
-              rowData={matchRows}
-              columnDefs={matchColumns}
-              defaultColDef={{ sortable: true, resizable: true }}
-              domLayout="autoHeight"
-              suppressRowHoverHighlight={false}
-              rowHeight={36}
-              headerHeight={60}
-            />
-          </div>
+          <>
+            {matchRows.length > 0 && (
+              <div className="grid grid-cols-3 gap-4 mb-6">
+                <div className="col-span-2 bg-white border border-zinc-200/60 rounded-2xl p-5">
+                  <p className="text-xs font-semibold uppercase tracking-widest text-zinc-400 mb-4">Games per Round</p>
+                  <GamesPerRoundBar data={gamesPerRound} />
+                </div>
+                <div className="bg-white border border-zinc-200/60 rounded-2xl p-5">
+                  <p className="text-xs font-semibold uppercase tracking-widest text-zinc-400 mb-4">By Type</p>
+                  <MatchTypePie data={matchTypeCounts} />
+                </div>
+              </div>
+            )}
+            <div className="ag-theme-quartz" style={{ width: '100%' }}>
+              <AgGridReact
+                rowData={matchRows}
+                columnDefs={matchColumns}
+                defaultColDef={{ sortable: true, resizable: true }}
+                domLayout="autoHeight"
+                suppressRowHoverHighlight={false}
+                rowHeight={36}
+                headerHeight={60}
+              />
+            </div>
+          </>
         )}
       </div>
     </div>

@@ -73,6 +73,7 @@
     "ag-grid-react": "^35.2.1",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
+    "recharts": "^3.8.1",
     "sql.js": "^1.14.1",
     "uuid": "^14.0.0",
     "zustand": "^5.0.13"
