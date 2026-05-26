@@ -34,7 +34,7 @@ test.describe('Match Flow', () => {
     await page.getByRole('button', { name: /Generate Matches/ }).click();
     await page.waitForTimeout(500);
 
-    await page.getByRole('button', { name: /Start Round/ }).click();
+    await page.getByRole('button', { name: /Skip Wait/ }).click();
     await page.waitForTimeout(500);
 
     await expect(page.getByText(/\d+:\d{2}/).first()).toBeVisible({ timeout: 5000 });
@@ -46,7 +46,7 @@ test.describe('Match Flow', () => {
     await page.getByRole('button', { name: /Generate Matches/ }).click();
     await page.waitForTimeout(500);
 
-    await page.getByRole('button', { name: /Start Round/ }).click();
+    await page.getByRole('button', { name: /Skip Wait/ }).click();
     await page.waitForTimeout(500);
 
     await expect(page.getByText(/\d+:\d{2}/).first()).toBeVisible({ timeout: 5000 });
@@ -64,7 +64,7 @@ test.describe('Match Flow', () => {
     await page.getByRole('button', { name: /Generate Matches/ }).click();
     await page.waitForTimeout(500);
 
-    await page.getByRole('button', { name: /Start Round/ }).click();
+    await page.getByRole('button', { name: /Skip Wait/ }).click();
     await page.waitForTimeout(500);
 
     await expect(page.getByText(/\d+:\d{2}/).first()).toBeVisible({ timeout: 5000 });
@@ -117,6 +117,39 @@ test.describe('Match Flow', () => {
     expect(new Set(courtNumbers).size).toBe(courtNumbers.length);
   });
 
+  test('shows pending countdown controls and skip starts the round', async ({ page }) => {
+    const { session } = await setupMatch(page, 16);
+
+    await page.getByRole('button', { name: /Generate Matches/ }).click();
+
+    await expect(page.getByText(/Auto-start in/)).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('Pending')).toBeVisible();
+
+    await page.getByRole('button', { name: /^Pause$/ }).click();
+    await expect(page.getByText(/Paused at/)).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole('button', { name: /Resume/ })).toBeVisible();
+
+    await page.getByRole('button', { name: /Skip Wait/ }).click();
+    await expect(page.getByText(/In Progress/).first()).toBeVisible({ timeout: 5000 });
+
+    const games = await page.evaluate((sid) => window.api.gamesListBySession(sid), session.id) as any[];
+    expect(games.filter((g: any) => g.status === 'playing')).toHaveLength(4);
+    expect(games.filter((g: any) => g.status === 'pending')).toHaveLength(0);
+  });
+
+  test('fills four courts when twenty players are waiting', async ({ page }) => {
+    const { session } = await setupMatch(page, 20);
+
+    await page.getByRole('button', { name: /Generate Matches/ }).click();
+    await expect(page.getByText(/Auto-start in/)).toBeVisible({ timeout: 5000 });
+
+    const games = await page.evaluate((sid) => window.api.gamesListBySession(sid), session.id) as any[];
+    const pending = games.filter((g: any) => g.status === 'pending');
+
+    expect(pending).toHaveLength(4);
+    expect(new Set(pending.map((g: any) => g.courtNumber)).size).toBe(4);
+  });
+
   test('auto-generates next round during warning', async ({ page }) => {
     await page.evaluate(
       (d) => window.api.settingsSet('gameDuration', d),
@@ -127,7 +160,7 @@ test.describe('Match Flow', () => {
 
     await page.getByRole('button', { name: /Generate Matches/ }).click();
     await page.waitForTimeout(500);
-    await page.getByRole('button', { name: /Start Round/ }).click();
+    await page.getByRole('button', { name: /Skip Wait/ }).click();
     await page.waitForTimeout(500);
 
     await expect(page.getByText(/\d+:\d{2}/).first()).toBeVisible({ timeout: 5000 });
