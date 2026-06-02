@@ -21,7 +21,6 @@ const MAX_PLAYERS_PER_LEVEL_WINDOW = 36;
 const MAX_COURT_CANDIDATES = 1200;
 const MAX_EXACT_CANDIDATES = 900;
 const BEAM_WIDTH = 160;
-const RELAXED_LEVEL_PENALTY_OFFSET = 100;
 
 interface CourtCandidate extends MatchResult {
   ids: string[];
@@ -59,8 +58,8 @@ function hashString(value: string, seed: number): number {
 
 function compareCandidate(a: CourtCandidate, b: CourtCandidate): number {
   return (
-    a.levelPenalty - b.levelPenalty ||
     a.fairnessPenalty - b.fairnessPenalty ||
+    a.levelPenalty - b.levelPenalty ||
     a.typePenalty - b.typePenalty ||
     a.teamBalancePenalty - b.teamBalancePenalty ||
     a.partnerPenalty - b.partnerPenalty ||
@@ -72,8 +71,8 @@ function compareCandidate(a: CourtCandidate, b: CourtCandidate): number {
 function compareState(a: SearchState, b: SearchState): number {
   return (
     b.count - a.count ||
-    a.levelPenalty - b.levelPenalty ||
     a.fairnessPenalty - b.fairnessPenalty ||
+    a.levelPenalty - b.levelPenalty ||
     a.typePenalty - b.typePenalty ||
     a.teamBalancePenalty - b.teamBalancePenalty ||
     a.partnerPenalty - b.partnerPenalty ||
@@ -204,13 +203,11 @@ export function generateMatches(
     (waitRank.get(p.id) ?? 0) * 10 +
     (hashString(p.id, seed) % 10);
 
-  const addCandidate = (group: PlayerInPool[], allowWideLevelGap = false) => {
+  const addCandidate = (group: PlayerInPool[]) => {
     const levels = group.map(p => p.level);
     const levelSpread = Math.max(...levels) - Math.min(...levels);
-    if (!allowWideLevelGap && levelSpread > 1) return;
-    const levelPenalty = levelSpread <= 1
-      ? levelSpread
-      : RELAXED_LEVEL_PENALTY_OFFSET + levelSpread;
+    if (levelSpread > 1) return;
+    const levelPenalty = levelSpread;
 
     const males = group.filter(p => p.gender === 'male');
     const females = group.filter(p => p.gender === 'female');
@@ -325,20 +322,5 @@ export function generateMatches(
   const targetCourtCount = Math.min(courtCount, Math.floor(pool.length / 4));
   const strictMatches = selectCurrentCandidates();
   if (strictMatches.length >= targetCourtCount) return strictMatches;
-
-  let relaxedPlayers = [...sorted].sort((a, b) => playerRank(a) - playerRank(b));
-  const relaxedLimit = Math.max(MAX_PLAYERS_PER_LEVEL_WINDOW, courtCount * 8);
-  if (relaxedPlayers.length > relaxedLimit) relaxedPlayers = relaxedPlayers.slice(0, relaxedLimit);
-
-  for (let a = 0; a < relaxedPlayers.length - 3; a++) {
-    for (let b = a + 1; b < relaxedPlayers.length - 2; b++) {
-      for (let c = b + 1; c < relaxedPlayers.length - 1; c++) {
-        for (let d = c + 1; d < relaxedPlayers.length; d++) {
-          addCandidate([relaxedPlayers[a]!, relaxedPlayers[b]!, relaxedPlayers[c]!, relaxedPlayers[d]!], true);
-        }
-      }
-    }
-  }
-
-  return selectCurrentCandidates(Number.MAX_SAFE_INTEGER);
+  return selectCurrentCandidates(Number.MAX_SAFE_INTEGER).slice(0, targetCourtCount);
 }

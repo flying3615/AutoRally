@@ -45,7 +45,7 @@ describe('generateMatches', () => {
     expect(team2Genders).toEqual(['female', 'male']);
   });
 
-  it('uses a wide-level match only as the fallback for an otherwise idle court', () => {
+  it('does not create a cross-level fallback when spread would exceed one level', () => {
     const pool = [
       makePlayer('m1', 'M1', 'male', 5),
       makePlayer('m2', 'M2', 'male', 4),
@@ -53,11 +53,8 @@ describe('generateMatches', () => {
       makePlayer('f2', 'F2', 'female', 2),
     ];
     const result = generateMatches(pool, 3, 1, []);
-    const allIds = result.flatMap(m => [...m.team1, ...m.team2]);
-    const levels = allIds.map(id => pool.find(p => p.id === id)!.level);
 
-    expect(result).toHaveLength(1);
-    expect(Math.max(...levels) - Math.min(...levels)).toBeGreaterThan(1);
+    expect(result).toHaveLength(0);
   });
 
   it('forms male-double when only same-level males available', () => {
@@ -200,7 +197,94 @@ describe('generateMatches', () => {
     expect(allIds.some(id => id.startsWith('l5_'))).toBe(false);
   });
 
-  it('uses a relaxed level fallback to fill an otherwise idle court', () => {
+  it('uses adjacent-level players to improve fairness when same-level groups can already fill courts', () => {
+    const level5Players = [
+      makePlayer('l5m', 'L5M', 'male', 5, 60),
+      makePlayer('l5f', 'L5F', 'female', 5, 59),
+    ];
+    const level4Players = [
+      makePlayer('l4m1', 'L4M1', 'male', 4, 58),
+      makePlayer('l4m2', 'L4M2', 'male', 4, 57),
+      makePlayer('l4f1', 'L4F1', 'female', 4, 56),
+      makePlayer('l4f2', 'L4F2', 'female', 4, 55),
+    ];
+    const level2Players = [
+      ...Array.from({ length: 6 }, (_, i) => makePlayer(`l2m${i + 1}`, `L2M${i + 1}`, 'male', 2, i + 20)),
+      ...Array.from({ length: 6 }, (_, i) => makePlayer(`l2f${i + 1}`, `L2F${i + 1}`, 'female', 2, i + 30)),
+    ];
+    const pastGames: Game[] = [
+      ...Array.from({ length: 3 }, (_, round) => ({
+        id: `l4_${round}`,
+        sessionId: 's',
+        courtNumber: 1,
+        team1Player1Id: 'l4m1',
+        team1Player2Id: 'l4f1',
+        team2Player1Id: 'l4m2',
+        team2Player2Id: 'l4f2',
+        status: 'completed' as const,
+        roundNumber: round + 1,
+        gameType: 'mixed' as const,
+        startedAt: null,
+        endedAt: null,
+      })),
+      ...Array.from({ length: 3 }, (_, round) => ({
+        id: `l2a_${round}`,
+        sessionId: 's',
+        courtNumber: 2,
+        team1Player1Id: 'l2m1',
+        team1Player2Id: 'l2f1',
+        team2Player1Id: 'l2m2',
+        team2Player2Id: 'l2f2',
+        status: 'completed' as const,
+        roundNumber: round + 1,
+        gameType: 'mixed' as const,
+        startedAt: null,
+        endedAt: null,
+      })),
+      ...Array.from({ length: 3 }, (_, round) => ({
+        id: `l2b_${round}`,
+        sessionId: 's',
+        courtNumber: 3,
+        team1Player1Id: 'l2m3',
+        team1Player2Id: 'l2f3',
+        team2Player1Id: 'l2m4',
+        team2Player2Id: 'l2f4',
+        status: 'completed' as const,
+        roundNumber: round + 1,
+        gameType: 'mixed' as const,
+        startedAt: null,
+        endedAt: null,
+      })),
+      ...Array.from({ length: 3 }, (_, round) => ({
+        id: `l2c_${round}`,
+        sessionId: 's',
+        courtNumber: 4,
+        team1Player1Id: 'l2m5',
+        team1Player2Id: 'l2f5',
+        team2Player1Id: 'l2m6',
+        team2Player2Id: 'l2f6',
+        status: 'completed' as const,
+        roundNumber: round + 1,
+        gameType: 'mixed' as const,
+        startedAt: null,
+        endedAt: null,
+      })),
+    ];
+    const pool = [...level5Players, ...level4Players, ...level2Players];
+
+    const result = generateMatches(pool, 4, 4, pastGames);
+    const allIds = result.flatMap(m => [...m.team1, ...m.team2]);
+
+    expect(result).toHaveLength(4);
+    expect(allIds).toContain('l5m');
+    expect(allIds).toContain('l5f');
+    for (const match of result) {
+      const levels = [...match.team1, ...match.team2].map(id => pool.find(p => p.id === id)!.level);
+      expect(Math.max(...levels) - Math.min(...levels)).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('does not use a relaxed cross-level fallback to fill an otherwise idle court', () => {
     const restingPlayers = [
       makePlayer('w1', 'W1', 'male', 1, 60),
       makePlayer('w2', 'W2', 'male', 1, 59),
@@ -229,9 +313,15 @@ describe('generateMatches', () => {
     const result = generateMatches(pool, 4, 2, pastGames);
     const allIds = result.flatMap(m => [...m.team1, ...m.team2]);
 
-    expect(result).toHaveLength(4);
-    expect(new Set(allIds).size).toBe(16);
-    for (const player of restingPlayers) expect(allIds).toContain(player.id);
+    expect(result).toHaveLength(3);
+    expect(new Set(allIds).size).toBe(12);
+    for (const player of restingPlayers.filter(p => p.level === 1)) {
+      expect(allIds).not.toContain(player.id);
+    }
+    for (const match of result) {
+      const levels = [...match.team1, ...match.team2].map(id => pool.find(p => p.id === id)!.level);
+      expect(Math.max(...levels) - Math.min(...levels)).toBeLessThanOrEqual(1);
+    }
   });
 
   it('fills courts from a single-gender waiting pool', () => {
