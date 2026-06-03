@@ -226,6 +226,162 @@ function EditPlayerModal({
   );
 }
 
+// ── Add Player Modal ──
+function AddPlayerModal({
+  onClose, onCreated,
+}: {
+  onClose: () => void;
+  onCreated: (player: PlayerInfo, checkIn: boolean) => void | Promise<void>;
+}) {
+  const [firstName, setFirstName] = useState('');
+  const [surname, setSurname] = useState('');
+  const [gender, setGender] = useState<'male' | 'female'>('male');
+  const [level, setLevel] = useState(3);
+  const [phone, setPhone] = useState('');
+  const [savingAction, setSavingAction] = useState<'add' | 'checkin' | null>(null);
+
+  const fullName = [firstName.trim(), surname.trim()].filter(Boolean).join(' ');
+
+  const handleCreate = async (checkIn: boolean) => {
+    if (!fullName || savingAction) return;
+    setSavingAction(checkIn ? 'checkin' : 'add');
+    try {
+      const created = await window.api.playersCreate({ name: fullName, gender, level, phone }) as PlayerInfo;
+      await onCreated(created, checkIn);
+      onClose();
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Failed to add player');
+    } finally {
+      setSavingAction(null);
+    }
+  };
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/30"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        className="bg-white rounded-2xl p-6 w-[420px] max-w-[90vw]"
+        style={{
+          boxShadow: '0 24px 48px -12px rgba(0,0,0,0.25), 0 0 0 1px rgba(0,0,0,0.04)',
+          animation: 'ctxFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+        }}
+      >
+        <h3 className="text-lg font-bold text-zinc-900 tracking-tight mb-5">Add Player</h3>
+
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <label className="block">
+              <span className="block text-xs font-semibold text-zinc-500 mb-1.5 uppercase tracking-wider">First Name</span>
+              <input
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-zinc-200 rounded-xl focus:outline-none focus:border-zinc-400 focus:ring-2 focus:ring-gray-100 transition-all"
+                autoFocus
+              />
+            </label>
+            <label className="block">
+              <span className="block text-xs font-semibold text-zinc-500 mb-1.5 uppercase tracking-wider">Surname</span>
+              <input
+                value={surname}
+                onChange={(e) => setSurname(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-zinc-200 rounded-xl focus:outline-none focus:border-zinc-400 focus:ring-2 focus:ring-gray-100 transition-all"
+              />
+            </label>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-zinc-500 mb-1.5 uppercase tracking-wider">Gender</label>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setGender('male')}
+                  className={`flex-1 py-2 text-sm font-medium rounded-xl border transition-all active:scale-95 ${
+                    gender === 'male'
+                      ? 'bg-zinc-800 border-zinc-900 text-white shadow-[0_1px_3px_rgba(0,0,0,0.12)]'
+                      : 'bg-white border-zinc-200 text-zinc-500 hover:bg-zinc-50'
+                  }`}
+                >
+                  Male
+                </button>
+                <button
+                  onClick={() => setGender('female')}
+                  className={`flex-1 py-2 text-sm font-medium rounded-xl border transition-all active:scale-95 ${
+                    gender === 'female'
+                      ? 'bg-zinc-800 border-zinc-900 text-white shadow-[0_1px_3px_rgba(0,0,0,0.12)]'
+                      : 'bg-white border-zinc-200 text-zinc-500 hover:bg-zinc-50'
+                  }`}
+                >
+                  Female
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-zinc-500 mb-1.5 uppercase tracking-wider">Level</label>
+              <div className="flex gap-1">
+                {[1, 2, 3, 4, 5].map(l => (
+                  <button
+                    key={l}
+                    onClick={() => setLevel(l)}
+                    className={`flex-1 py-2 text-sm font-bold rounded-xl border transition-all active:scale-95 ${
+                      level === l
+                        ? 'bg-zinc-800 border-zinc-900 text-white'
+                        : 'bg-white border-zinc-200 text-zinc-500 hover:bg-zinc-50'
+                    }`}
+                  >
+                    {l}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <label className="block">
+            <span className="block text-xs font-semibold text-zinc-500 mb-1.5 uppercase tracking-wider">Phone</span>
+            <input
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-zinc-200 rounded-xl focus:outline-none focus:border-zinc-400 focus:ring-2 focus:ring-gray-100 transition-all"
+              placeholder="Phone number"
+            />
+          </label>
+        </div>
+
+        <div className="flex justify-end gap-2 mt-6">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-50 rounded-xl transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => handleCreate(false)}
+            disabled={savingAction !== null || !fullName}
+            className="px-4 py-2 text-sm font-semibold border border-zinc-200 text-zinc-700 rounded-xl hover:bg-zinc-50 active:scale-[0.97] transition-all disabled:opacity-40"
+          >
+            {savingAction === 'add' ? 'Adding...' : 'Add'}
+          </button>
+          <button
+            onClick={() => handleCreate(true)}
+            disabled={savingAction !== null || !fullName}
+            className="px-5 py-2 text-sm font-semibold bg-zinc-800 text-white rounded-xl hover:bg-zinc-700 active:scale-[0.97] transition-all disabled:opacity-40 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.2)]"
+          >
+            {savingAction === 'checkin' ? 'Checking in...' : 'Add & Check in'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function Checkin() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const removingRef = useRef(new Set<string>());
@@ -237,6 +393,7 @@ export function Checkin() {
   const [groupBy, setGroupBy] = useState<'gender' | 'level'>('gender');
   const [checkedInSet, setCheckedInSet] = useState<Set<string>>(new Set());
   const [sessionFee, setSessionFee] = useState('10');
+  const [showAddPlayer, setShowAddPlayer] = useState(false);
 
   const load = async () => {
     if (!sessionId) return;
@@ -320,6 +477,16 @@ export function Checkin() {
     }
   };
 
+  const handlePlayerCreated = async (player: PlayerInfo, checkIn: boolean) => {
+    if (checkIn) {
+      await doCheckin(player.id, player.name, 'cash');
+    } else {
+      setLastCheckin(`${player.name} added`);
+      setTimeout(() => setLastCheckin(null), 2000);
+      await load();
+    }
+  };
+
   const renderCard = (p: PlayerInfo) => {
     const checked = checkedInSet.has(p.id);
     const isMale = p.gender === 'male';
@@ -370,6 +537,7 @@ export function Checkin() {
       <div
         key={p.id}
         onContextMenu={(e) => handleContextMenu(e, p)}
+        onDoubleClick={() => doCheckin(p.id, p.name, 'cash')}
         className="flex items-center rounded-md transition-all"
         style={{
           padding: '2px 4px',
@@ -377,6 +545,7 @@ export function Checkin() {
           borderColor: isMale ? '#bfdbfe' : '#f0c5dd',
           borderWidth: 1,
           borderStyle: 'solid',
+          cursor: 'pointer',
         }}
       >
         <span className="text-sm font-bold truncate flex-1" style={{ color: levelColors[p.level] ?? '#6b7280' }}>
@@ -435,6 +604,13 @@ export function Checkin() {
         />
       )}
 
+      {showAddPlayer && (
+        <AddPlayerModal
+          onClose={() => setShowAddPlayer(false)}
+          onCreated={handlePlayerCreated}
+        />
+      )}
+
       {/* === LEFT: Check-in Grid === */}
       <div className="flex-1 overflow-auto">
         <div className="px-4 py-3">
@@ -472,6 +648,12 @@ export function Checkin() {
             >
               Match Panel
             </Link>
+            <button
+              onClick={() => setShowAddPlayer(true)}
+              className="text-xs font-semibold px-3 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 active:scale-[0.97] transition-all shrink-0"
+            >
+              Add Player
+            </button>
             <div className="relative flex-1 max-w-sm">
               <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
