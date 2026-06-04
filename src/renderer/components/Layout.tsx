@@ -64,9 +64,17 @@ const navItems = [
 function Sidebar() {
   const location = useLocation();
   const { activeSession } = useSessionStore();
-  const [pinned, setPinned] = useState(false);
-  const [hovered, setHovered] = useState(false);
-  const expanded = pinned || hovered;
+  const [expanded, setExpanded] = useState(() => (
+    window.localStorage.getItem('autorally-sidebar-expanded') === 'true'
+  ));
+
+  const toggleExpanded = () => {
+    setExpanded(current => {
+      const next = !current;
+      window.localStorage.setItem('autorally-sidebar-expanded', String(next));
+      return next;
+    });
+  };
 
   const isActive = (to: string) => {
     if (to === '/') return location.pathname === '/';
@@ -82,16 +90,20 @@ function Sidebar() {
     <nav
       className="flex flex-col shrink-0 bg-white border-r border-zinc-200/60 overflow-hidden transition-all duration-200 ease-[cubic-bezier(0.25,0.1,0.25,1)]"
       style={{ width: expanded ? 192 : 52, WebkitAppRegion: 'drag' } as any}
-      onMouseEnter={() => !pinned && setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
     >
       {/* Header */}
-      <div className="flex items-center h-11 px-3.5 shrink-0 border-b border-zinc-100">
-        <div className="w-6 h-6 rounded-lg bg-zinc-800 flex items-center justify-center shrink-0 shadow-[0_1px_2px_rgba(0,0,0,0.12)]">
-          <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15.362 5.214A8.252 8.252 0 0112 21 8.25 8.25 0 016.038 7.048 8.287 8.287 0 009 9.6a8.983 8.983 0 013.361-6.867 8.21 8.21 0 003 2.48z" />
+      <div className="flex items-center h-11 px-2 shrink-0 border-b border-zinc-100" style={{ WebkitAppRegion: 'no-drag' } as any}>
+        <button
+          type="button"
+          onClick={toggleExpanded}
+          className="w-8 h-8 rounded-lg flex items-center justify-center text-zinc-500 hover:bg-zinc-50 hover:text-zinc-800 active:scale-90 transition-all"
+          aria-label={expanded ? 'Collapse sidebar' : 'Expand sidebar'}
+          title={expanded ? 'Collapse sidebar' : 'Expand sidebar'}
+        >
+          <svg className={`w-4 h-4 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
           </svg>
-        </div>
+        </button>
         <span className={`ml-2.5 text-[15px] font-semibold text-zinc-900 tracking-tight whitespace-nowrap transition-opacity duration-200 ${expanded ? 'opacity-100' : 'opacity-0'}`}>
           AutoRally
         </span>
@@ -172,26 +184,6 @@ function Sidebar() {
             </div>
           );
         })}
-      </div>
-
-      {/* Pin toggle */}
-      <div className="shrink-0 border-t border-zinc-100 py-1.5 px-2 flex justify-center" style={{ WebkitAppRegion: 'no-drag' } as any}>
-        <button
-          onClick={() => setPinned(p => !p)}
-          className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all active:scale-90 ${
-            pinned
-              ? 'bg-zinc-800 text-white shadow-[0_1px_3px_rgba(0,0,0,0.1)]'
-              : 'text-zinc-400 hover:bg-zinc-50 hover:text-zinc-600'
-          }`}
-          title={pinned ? 'Unpin sidebar' : 'Pin sidebar'}
-        >
-          <svg
-            className={`w-4 h-4 transition-transform duration-200 ${pinned ? '' : '-rotate-45'}`}
-            fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
-          </svg>
-        </button>
       </div>
     </nav>
   );
