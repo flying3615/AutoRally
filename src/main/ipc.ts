@@ -1,7 +1,8 @@
 import { ipcMain, BrowserWindow, dialog, app } from 'electron';
 import { v4 as uuid } from 'uuid';
 import { SqlValue } from 'sql.js';
-import { initDb, run, queryAll, queryOne, transaction } from './database';
+import { exportDatabaseBackup, importDatabaseBackup, initDb, run, queryAll, queryOne, transaction } from './database';
+import { backupFileName } from './databaseBackup';
 import {
   buildNextKnockoutMatches,
   computeTournamentStandings,
@@ -27,6 +28,39 @@ export async function registerIpcHandlers() {
 
   ipcMain.handle('settings:set', (_e, key: string, value: string) => {
     run('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', [key, value]);
+  });
+
+  ipcMain.handle('app:getVersion', () => app.getVersion());
+
+  ipcMain.handle('data:exportBackup', async () => {
+    const win = BrowserWindow.getFocusedWindow();
+    if (!win) return { canceled: true as const };
+
+    const { filePath, canceled } = await dialog.showSaveDialog(win, {
+      title: 'Export AutoRally Backup',
+      defaultPath: backupFileName(),
+      filters: [{ name: 'AutoRally Database Backup', extensions: ['db'] }],
+    });
+    if (canceled || !filePath) return { canceled: true as const };
+
+    exportDatabaseBackup(filePath);
+    return { canceled: false as const, filePath };
+  });
+
+  ipcMain.handle('data:importBackup', async () => {
+    const win = BrowserWindow.getFocusedWindow();
+    if (!win) return { canceled: true as const };
+
+    const { filePaths, canceled } = await dialog.showOpenDialog(win, {
+      title: 'Import AutoRally Backup',
+      filters: [{ name: 'AutoRally Database Backup', extensions: ['db'] }],
+      properties: ['openFile'],
+    });
+    if (canceled || filePaths.length === 0) return { canceled: true as const };
+
+    const filePath = filePaths[0]!;
+    await importDatabaseBackup(filePath);
+    return { canceled: false as const, filePath };
   });
 
   // ── Helpers ──

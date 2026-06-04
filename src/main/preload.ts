@@ -4,6 +4,11 @@ const api = {
   // Settings
   settingsGetAll: () => ipcRenderer.invoke('settings:getAll'),
   settingsSet: (key: string, value: string) => ipcRenderer.invoke('settings:set', key, value),
+  appVersion: () => ipcRenderer.invoke('app:getVersion') as Promise<string>,
+  dataExportBackup: () =>
+    ipcRenderer.invoke('data:exportBackup') as Promise<{ canceled: true } | { canceled: false; filePath: string }>,
+  dataImportBackup: () =>
+    ipcRenderer.invoke('data:importBackup') as Promise<{ canceled: true } | { canceled: false; filePath: string }>,
 
   // Players
   playersList: () => ipcRenderer.invoke('players:list'),
