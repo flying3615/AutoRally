@@ -1,5 +1,5 @@
-import warningSound from '../../alarm/time-warning.wav';
-import endSound from '../../alarm/time-up.wav';
+import warningSound from '../../alarm/time-warning-bilibili.mp3';
+import endSound from '../../alarm/time-up-lanhuacao.mp3';
 
 export type TimerCallback = (remaining: number, phase: 'running' | 'warning' | 'ended' | 'paused') => void;
 

@@ -19,7 +19,6 @@
     "test:watch": "vitest",
     "test:e2e": "npm run clean && npm run build && playwright test",
     "test:e2e:headed": "npm run clean && npm run build && playwright test --headed",
-    "generate:sounds": "node scripts/generate-sounds.cjs",
     "seed": "npx tsx scripts/seed.ts",
     "typecheck": "tsc --noEmit"
   },
