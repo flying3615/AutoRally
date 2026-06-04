@@ -199,11 +199,16 @@ function Sidebar() {
 
 function StatusBar() {
   const { activeSession, attendanceCount, playingCount, startPolling } = useSessionStore();
+  const [appVersion, setAppVersion] = useState('');
 
   useEffect(() => {
     const stop = startPolling();
     return stop;
   }, [startPolling]);
+
+  useEffect(() => {
+    window.api.appVersion().then(setAppVersion).catch(() => setAppVersion(''));
+  }, []);
 
   const showStats = activeSession !== null;
 
@@ -265,6 +270,12 @@ function StatusBar() {
               </svg>
               Match Panel
             </Link>
+          </>
+        )}
+        {appVersion && (
+          <>
+            {showStats && <span className="text-zinc-200">·</span>}
+            <span className="tabular-nums">v{appVersion}</span>
           </>
         )}
       </div>

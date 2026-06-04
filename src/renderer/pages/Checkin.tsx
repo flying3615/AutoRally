@@ -32,13 +32,21 @@ interface GameInfo {
   status: 'pending' | 'playing' | 'completed';
 }
 
+interface SessionInfo {
+  id: string;
+  date: string;
+  startTime: string | null;
+  status: 'active' | 'completed';
+}
+
 // ── Context Menu ──
 function ContextMenu({
-  x, y, player, onClose, onEdit,
+  x, y, player, onClose, onEdit, onDelete,
 }: {
   x: number; y: number; player: PlayerInfo;
   onClose: () => void;
   onEdit: () => void;
+  onDelete: () => void;
 }) {
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -85,6 +93,15 @@ function ContextMenu({
           <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
         </svg>
         Edit Player
+      </button>
+      <button
+        onClick={onDelete}
+        className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2.5 transition-colors"
+      >
+        <svg className="w-4 h-4 text-red-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673A2.25 2.25 0 0115.916 21H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+        </svg>
+        Delete Player
       </button>
     </div>
   );
@@ -226,6 +243,162 @@ function EditPlayerModal({
   );
 }
 
+// ── Add Player Modal ──
+function AddPlayerModal({
+  onClose, onCreated,
+}: {
+  onClose: () => void;
+  onCreated: (player: PlayerInfo, checkIn: boolean) => void | Promise<void>;
+}) {
+  const [firstName, setFirstName] = useState('');
+  const [surname, setSurname] = useState('');
+  const [gender, setGender] = useState<'male' | 'female'>('male');
+  const [level, setLevel] = useState(3);
+  const [phone, setPhone] = useState('');
+  const [savingAction, setSavingAction] = useState<'add' | 'checkin' | null>(null);
+
+  const fullName = [firstName.trim(), surname.trim()].filter(Boolean).join(' ');
+
+  const handleCreate = async (checkIn: boolean) => {
+    if (!fullName || savingAction) return;
+    setSavingAction(checkIn ? 'checkin' : 'add');
+    try {
+      const created = await window.api.playersCreate({ name: fullName, gender, level, phone }) as PlayerInfo;
+      await onCreated(created, checkIn);
+      onClose();
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Failed to add player');
+    } finally {
+      setSavingAction(null);
+    }
+  };
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/30"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        className="bg-white rounded-2xl p-6 w-[420px] max-w-[90vw]"
+        style={{
+          boxShadow: '0 24px 48px -12px rgba(0,0,0,0.25), 0 0 0 1px rgba(0,0,0,0.04)',
+          animation: 'ctxFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+        }}
+      >
+        <h3 className="text-lg font-bold text-zinc-900 tracking-tight mb-5">Add Player</h3>
+
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <label className="block">
+              <span className="block text-xs font-semibold text-zinc-500 mb-1.5 uppercase tracking-wider">First Name</span>
+              <input
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-zinc-200 rounded-xl focus:outline-none focus:border-zinc-400 focus:ring-2 focus:ring-gray-100 transition-all"
+                autoFocus
+              />
+            </label>
+            <label className="block">
+              <span className="block text-xs font-semibold text-zinc-500 mb-1.5 uppercase tracking-wider">Surname</span>
+              <input
+                value={surname}
+                onChange={(e) => setSurname(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-zinc-200 rounded-xl focus:outline-none focus:border-zinc-400 focus:ring-2 focus:ring-gray-100 transition-all"
+              />
+            </label>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-zinc-500 mb-1.5 uppercase tracking-wider">Gender</label>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setGender('male')}
+                  className={`flex-1 py-2 text-sm font-medium rounded-xl border transition-all active:scale-95 ${
+                    gender === 'male'
+                      ? 'bg-zinc-800 border-zinc-900 text-white shadow-[0_1px_3px_rgba(0,0,0,0.12)]'
+                      : 'bg-white border-zinc-200 text-zinc-500 hover:bg-zinc-50'
+                  }`}
+                >
+                  Male
+                </button>
+                <button
+                  onClick={() => setGender('female')}
+                  className={`flex-1 py-2 text-sm font-medium rounded-xl border transition-all active:scale-95 ${
+                    gender === 'female'
+                      ? 'bg-zinc-800 border-zinc-900 text-white shadow-[0_1px_3px_rgba(0,0,0,0.12)]'
+                      : 'bg-white border-zinc-200 text-zinc-500 hover:bg-zinc-50'
+                  }`}
+                >
+                  Female
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-zinc-500 mb-1.5 uppercase tracking-wider">Level</label>
+              <div className="flex gap-1">
+                {[1, 2, 3, 4, 5].map(l => (
+                  <button
+                    key={l}
+                    onClick={() => setLevel(l)}
+                    className={`flex-1 py-2 text-sm font-bold rounded-xl border transition-all active:scale-95 ${
+                      level === l
+                        ? 'bg-zinc-800 border-zinc-900 text-white'
+                        : 'bg-white border-zinc-200 text-zinc-500 hover:bg-zinc-50'
+                    }`}
+                  >
+                    {l}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <label className="block">
+            <span className="block text-xs font-semibold text-zinc-500 mb-1.5 uppercase tracking-wider">Phone</span>
+            <input
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-zinc-200 rounded-xl focus:outline-none focus:border-zinc-400 focus:ring-2 focus:ring-gray-100 transition-all"
+              placeholder="Phone number"
+            />
+          </label>
+        </div>
+
+        <div className="flex justify-end gap-2 mt-6">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-50 rounded-xl transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => handleCreate(false)}
+            disabled={savingAction !== null || !fullName}
+            className="px-4 py-2 text-sm font-semibold border border-zinc-200 text-zinc-700 rounded-xl hover:bg-zinc-50 active:scale-[0.97] transition-all disabled:opacity-40"
+          >
+            {savingAction === 'add' ? 'Adding...' : 'Add'}
+          </button>
+          <button
+            onClick={() => handleCreate(true)}
+            disabled={savingAction !== null || !fullName}
+            className="px-5 py-2 text-sm font-semibold bg-zinc-800 text-white rounded-xl hover:bg-zinc-700 active:scale-[0.97] transition-all disabled:opacity-40 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.2)]"
+          >
+            {savingAction === 'checkin' ? 'Checking in...' : 'Add & Check in'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function Checkin() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const removingRef = useRef(new Set<string>());
@@ -233,24 +406,41 @@ export function Checkin() {
   const [attendance, setAttendance] = useState<AttendanceInfo[]>([]);
   const [games, setGames] = useState<GameInfo[]>([]);
   const [search, setSearch] = useState('');
-  const [lastCheckin, setLastCheckin] = useState<string | null>(null);
   const [groupBy, setGroupBy] = useState<'gender' | 'level'>('gender');
   const [checkedInSet, setCheckedInSet] = useState<Set<string>>(new Set());
   const [sessionFee, setSessionFee] = useState('10');
+  const [showAddPlayer, setShowAddPlayer] = useState(false);
+  const [lastSessionPlayers, setLastSessionPlayers] = useState<PlayerInfo[]>([]);
 
   const load = async () => {
     if (!sessionId) return;
-    const [allPlayers, attendList, gameList, settings] = await Promise.all([
+    const [allPlayers, attendList, gameList, settings, sessionList] = await Promise.all([
       window.api.playersList(),
       window.api.attendanceListBySession(sessionId),
       window.api.gamesListBySession(sessionId),
       window.api.settingsGetAll() as Promise<Record<string, string>>,
+      window.api.sessionsList(),
     ]);
-    setPlayers(allPlayers as PlayerInfo[]);
+    const typedPlayers = allPlayers as PlayerInfo[];
+    const typedSessions = sessionList as SessionInfo[];
+    const playerById = new Map(typedPlayers.map(p => [p.id, p]));
+    const previousSession = typedSessions
+      .filter(s => s.id !== sessionId && s.status === 'completed')
+      .sort((a, b) => new Date(b.startTime ?? b.date).getTime() - new Date(a.startTime ?? a.date).getTime())[0];
+    const previousAttendance = previousSession
+      ? await window.api.attendanceListBySession(previousSession.id) as AttendanceInfo[]
+      : [];
+    const previousPlayers = previousAttendance
+      .map(a => playerById.get(a.playerId))
+      .filter((p): p is PlayerInfo => Boolean(p));
+    previousPlayers.sort((a, b) => b.level - a.level);
+
+    setPlayers(typedPlayers);
     setAttendance(attendList as AttendanceInfo[]);
     setGames(gameList as GameInfo[]);
     setCheckedInSet(new Set((attendList as AttendanceInfo[]).map(a => a.playerId)));
     setSessionFee(settings.sessionFee ?? '10');
+    setLastSessionPlayers(previousPlayers);
   };
 
   useEffect(() => { load(); }, [sessionId]);
@@ -267,8 +457,6 @@ export function Checkin() {
         next.delete(playerId);
         return next;
       });
-      setLastCheckin(`${playerName} removed`);
-      setTimeout(() => setLastCheckin(null), 2000);
       load();
     } finally {
       removingRef.current.delete(playerId);
@@ -290,6 +478,22 @@ export function Checkin() {
     setCtxMenu(null);
   };
 
+  const handleDeletePlayer = async () => {
+    if (!ctxMenu) return;
+    const player = ctxMenu.player;
+    const ok = window.confirm(`Delete ${player.name}? This will remove their check-ins and payment history.`);
+    if (!ok) return;
+
+    await window.api.playersDelete(player.id);
+    setCtxMenu(null);
+    setCheckedInSet(prev => {
+      const next = new Set(prev);
+      next.delete(player.id);
+      return next;
+    });
+    await load();
+  };
+
   const filtered = players.filter(p =>
     p.name.toLowerCase().includes(search.toLowerCase())
   );
@@ -306,17 +510,24 @@ export function Checkin() {
   const femaleWaiting = waitingPlayers.filter(p => p.gender === 'female');
 
   const fee = Number(sessionFee) || 10;
+  const lastSessionQuickPlayers = lastSessionPlayers.filter(p => !checkedInSet.has(p.id));
 
   const doCheckin = async (playerId: string, playerName: string, method: 'credit' | 'cash') => {
     if (!sessionId) return;
     try {
       await window.api.attendanceCheckin(playerId, sessionId, method);
       setCheckedInSet(prev => new Set(prev).add(playerId));
-      setLastCheckin(playerName);
-      setTimeout(() => setLastCheckin(null), 2000);
       load();
     } catch (err: any) {
       alert(err?.message ?? 'Check-in failed');
+    }
+  };
+
+  const handlePlayerCreated = async (player: PlayerInfo, checkIn: boolean) => {
+    if (checkIn) {
+      await doCheckin(player.id, player.name, 'cash');
+    } else {
+      await load();
     }
   };
 
@@ -370,6 +581,7 @@ export function Checkin() {
       <div
         key={p.id}
         onContextMenu={(e) => handleContextMenu(e, p)}
+        onDoubleClick={() => doCheckin(p.id, p.name, 'cash')}
         className="flex items-center rounded-md transition-all"
         style={{
           padding: '2px 4px',
@@ -377,6 +589,7 @@ export function Checkin() {
           borderColor: isMale ? '#bfdbfe' : '#f0c5dd',
           borderWidth: 1,
           borderStyle: 'solid',
+          cursor: 'pointer',
         }}
       >
         <span className="text-sm font-bold truncate flex-1" style={{ color: levelColors[p.level] ?? '#6b7280' }}>
@@ -423,6 +636,7 @@ export function Checkin() {
           player={ctxMenu.player}
           onClose={() => setCtxMenu(null)}
           onEdit={handleEdit}
+          onDelete={handleDeletePlayer}
         />
       )}
 
@@ -432,6 +646,13 @@ export function Checkin() {
           player={editingPlayer}
           onClose={() => setEditingPlayer(null)}
           onSaved={() => { setEditingPlayer(null); load(); }}
+        />
+      )}
+
+      {showAddPlayer && (
+        <AddPlayerModal
+          onClose={() => setShowAddPlayer(false)}
+          onCreated={handlePlayerCreated}
         />
       )}
 
@@ -472,6 +693,12 @@ export function Checkin() {
             >
               Match Panel
             </Link>
+            <button
+              onClick={() => setShowAddPlayer(true)}
+              className="text-xs font-semibold px-3 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 active:scale-[0.97] transition-all shrink-0"
+            >
+              Add Player
+            </button>
             <div className="relative flex-1 max-w-sm">
               <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
@@ -487,18 +714,21 @@ export function Checkin() {
             </div>
           </div>
 
-          {/* Success toast */}
-          {lastCheckin && (
-            <div
-              className={`mb-2 text-xs font-semibold rounded-md px-3 py-1 inline-block ${
-                lastCheckin.includes('removed')
-                  ? 'text-red-600 bg-red-50 border border-red-200'
-                  : 'text-emerald-600 bg-emerald-50 border border-emerald-200'
-              }`}
-              style={{ animation: 'ctxFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)' }}
+          {lastSessionQuickPlayers.length > 0 && (
+            <section
+              aria-label="Last session quick check-in"
+              className="mb-3 rounded-xl border border-amber-200 bg-amber-50/60 px-3 py-2"
             >
-              {lastCheckin}
-            </div>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-amber-700">Last Session</span>
+                <span className="text-[11px] text-amber-700/70">
+                  {lastSessionQuickPlayers.length} returning
+                </span>
+              </div>
+              <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-1">
+                {lastSessionQuickPlayers.map(p => renderCard(p))}
+              </div>
+            </section>
           )}
 
           {/* Player grid — grouped */}

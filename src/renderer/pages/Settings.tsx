@@ -177,6 +177,9 @@ export function Settings() {
   const { upcomingSessions: upcoming, refreshUpcoming } = useSessionStore();
   const [modalSession, setModalSession] = useState<UpcomingSession | null>(null);
   const [showAdd, setShowAdd] = useState(false);
+  const [appVersion, setAppVersion] = useState('');
+  const [backupBusy, setBackupBusy] = useState<'export' | 'import' | null>(null);
+  const [backupMessage, setBackupMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
     window.api.settingsGetAll().then((s: Record<string, string>) => {
@@ -186,6 +189,7 @@ export function Settings() {
         gameDuration: s.gameDuration ?? '15',
       });
     });
+    window.api.appVersion().then(setAppVersion).catch(() => setAppVersion(''));
     refreshUpcoming();
   }, []);
 
@@ -200,6 +204,40 @@ export function Settings() {
   const handleDelete = async (id: string) => {
     await window.api.upcomingSessionsDelete(id);
     refreshUpcoming();
+  };
+
+  const handleExportBackup = async () => {
+    setBackupBusy('export');
+    setBackupMessage(null);
+    try {
+      const result = await window.api.dataExportBackup();
+      if (!result.canceled) {
+        setBackupMessage({ type: 'success', text: `Backup exported to ${result.filePath}` });
+      }
+    } catch (err: any) {
+      setBackupMessage({ type: 'error', text: err?.message ?? 'Failed to export backup' });
+    } finally {
+      setBackupBusy(null);
+    }
+  };
+
+  const handleImportBackup = async () => {
+    const ok = window.confirm('Importing a backup will replace all current players, sessions, games, payments, and settings on this computer. Continue?');
+    if (!ok) return;
+
+    setBackupBusy('import');
+    setBackupMessage(null);
+    try {
+      const result = await window.api.dataImportBackup();
+      if (!result.canceled) {
+        setBackupMessage({ type: 'success', text: 'Backup imported. Reloading data...' });
+        setTimeout(() => window.location.reload(), 600);
+      }
+    } catch (err: any) {
+      setBackupMessage({ type: 'error', text: err?.message ?? 'Failed to import backup' });
+    } finally {
+      setBackupBusy(null);
+    }
   };
 
   const formatDate = (dateStr: string, timeStr: string) => {
@@ -218,7 +256,10 @@ export function Settings() {
         <div className="flex items-center justify-between mb-8">
           <div>
             <h2 className="text-xl font-bold text-zinc-900 tracking-tight">Settings</h2>
-            <p className="text-sm text-zinc-400 mt-0.5">Match parameters, fee configuration, and upcoming sessions</p>
+            <p className="text-sm text-zinc-400 mt-0.5">
+              Match parameters, fee configuration, and upcoming sessions
+              {appVersion && <span className="ml-2 font-mono tabular-nums">v{appVersion}</span>}
+            </p>
           </div>
           <div className="flex items-center gap-3">
             <button
@@ -329,6 +370,52 @@ export function Settings() {
             <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-medium text-zinc-400">NZD / person</span>
           </div>
           <p className="text-xs text-zinc-400 mt-2.5">Auto-deducted from balance on check-in</p>
+        </div>
+
+        {/* Data Backup */}
+        <div className="border-t border-zinc-200 pt-10 mb-10">
+          <div className="flex items-start justify-between gap-6">
+            <div>
+              <h3 className="text-lg font-bold text-zinc-900 tracking-tight">Data Backup</h3>
+              <p className="text-sm text-zinc-400 mt-0.5">
+                Export or restore the full local database, including players, sessions, games, payments, and settings
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={handleExportBackup}
+                disabled={backupBusy !== null}
+                className="h-9 px-4 text-sm font-semibold bg-white border border-zinc-200 text-zinc-700 rounded-lg hover:border-zinc-300 hover:bg-zinc-50 active:scale-[0.97] disabled:opacity-50 transition-all inline-flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v12m0 0l-4-4m4 4l4-4M4.5 19.5h15" />
+                </svg>
+                {backupBusy === 'export' ? 'Exporting...' : 'Export Backup'}
+              </button>
+              <button
+                onClick={handleImportBackup}
+                disabled={backupBusy !== null}
+                className="h-9 px-4 text-sm font-semibold bg-red-50 border border-red-200 text-red-700 rounded-lg hover:bg-red-100 hover:border-red-300 active:scale-[0.97] disabled:opacity-50 transition-all inline-flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 21V9m0 0l-4 4m4-4l4 4M4.5 4.5h15" />
+                </svg>
+                {backupBusy === 'import' ? 'Importing...' : 'Import Backup'}
+              </button>
+            </div>
+          </div>
+
+          {backupMessage && (
+            <div
+              className={`mt-4 rounded-xl border px-4 py-3 text-sm font-medium ${
+                backupMessage.type === 'success'
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                  : 'border-red-200 bg-red-50 text-red-700'
+              }`}
+            >
+              {backupMessage.text}
+            </div>
+          )}
         </div>
 
         {/* Upcoming Sessions */}

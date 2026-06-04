@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { app } from 'electron';
 import { v4 as uuid } from 'uuid';
+import { validateAutoRallyDatabase } from './databaseBackup';
 
 const dbPath = path.join(app.getPath('userData'), 'autorally.db');
 let db: Database | null = null;
@@ -50,7 +51,8 @@ function debounceSave() {
   saveTimer = setTimeout(save, 500);
 }
 
-function migrate(db: Database) {
+function migrate(db: Database, options: { seedIfEmpty?: boolean; saveDirty?: boolean } = {}) {
+  const { seedIfEmpty = true, saveDirty = true } = options;
   db.run(`
     CREATE TABLE IF NOT EXISTS settings (
       key TEXT PRIMARY KEY,
@@ -198,9 +200,43 @@ function migrate(db: Database) {
   if (migrateGameTypeConstraint(db)) dirty = true;
   if (migrateAttendanceAndBalancesCascade(db)) dirty = true;
 
-  seedPlayersIfEmpty(db);
+  if (seedIfEmpty) seedPlayersIfEmpty(db);
 
-  if (dirty) save();
+  if (dirty && saveDirty) save();
+}
+
+export function getDatabasePath() {
+  return dbPath;
+}
+
+export function exportDatabaseBackup(destinationPath: string) {
+  saveDb();
+  fs.copyFileSync(dbPath, destinationPath);
+}
+
+export async function importDatabaseBackup(sourcePath: string) {
+  const SQL = await initSqlJs();
+  const imported = new SQL.Database(fs.readFileSync(sourcePath));
+  try {
+    imported.run('PRAGMA foreign_keys = ON');
+    validateAutoRallyDatabase(imported);
+    migrate(imported, { seedIfEmpty: false, saveDirty: false });
+    validateAutoRallyDatabase(imported);
+
+    if (saveTimer) {
+      clearTimeout(saveTimer);
+      saveTimer = null;
+    }
+
+    const tmpPath = dbPath + '.import';
+    fs.writeFileSync(tmpPath, Buffer.from(imported.export()));
+    if (db) db.close();
+    fs.renameSync(tmpPath, dbPath);
+    db = imported;
+  } catch (err) {
+    imported.close();
+    throw err;
+  }
 }
 
 function seedPlayersIfEmpty(db: Database) {

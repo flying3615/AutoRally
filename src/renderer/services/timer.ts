@@ -1,5 +1,5 @@
-import warningSound from '../../alarm/classic-alarm-995.wav';
-import endSound from '../../alarm/mixkit-security-facility-breach-alarm-994.wav';
+import warningSound from '../../alarm/time-warning.wav';
+import endSound from '../../alarm/time-up.wav';
 
 export type TimerCallback = (remaining: number, phase: 'running' | 'warning' | 'ended' | 'paused') => void;
 

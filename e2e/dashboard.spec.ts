@@ -28,6 +28,22 @@ async function insertCompletedSession(
 }
 
 test.describe('Dashboard', () => {
+  test('shows the app version in the status bar and settings page', async ({ page }) => {
+    await expect(page.getByText('v1.0.0')).toBeVisible({ timeout: 5000 });
+
+    await navigateTo(page, '/settings');
+
+    await expect(page.locator('main').getByText('v1.0.0')).toBeVisible({ timeout: 5000 });
+  });
+
+  test('shows full database backup controls in settings', async ({ page }) => {
+    await navigateTo(page, '/settings');
+
+    await expect(page.getByRole('heading', { name: 'Data Backup' })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Export Backup/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Import Backup/ })).toBeVisible();
+  });
+
   test('does not show negative durations from invalid completed sessions', async ({ app, page }) => {
     await insertCompletedSession(app, {
       id: 'bad-duration-session',
