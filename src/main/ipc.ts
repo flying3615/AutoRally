@@ -101,10 +101,19 @@ export async function registerIpcHandlers() {
   });
 
   ipcMain.handle('players:delete', (_e, id: string) => {
-    run('DELETE FROM balances WHERE playerId = ?', [id]);
-    run('DELETE FROM payments WHERE playerId = ?', [id]);
-    run('DELETE FROM attendance WHERE playerId = ?', [id]);
-    run('DELETE FROM players WHERE id = ?', [id]);
+    transaction(() => {
+      const gameRef = queryOne<{ id: string }>(
+        `SELECT id FROM games WHERE team1Player1Id = ? OR team1Player2Id = ? OR team2Player1Id = ? OR team2Player2Id = ? LIMIT 1`,
+        [id, id, id, id]
+      );
+      if (gameRef) {
+        throw new Error('Cannot delete player with existing game records');
+      }
+      run('DELETE FROM balances WHERE playerId = ?', [id]);
+      run('DELETE FROM payments WHERE playerId = ?', [id]);
+      run('DELETE FROM attendance WHERE playerId = ?', [id]);
+      run('DELETE FROM players WHERE id = ?', [id]);
+    });
   });
 
   // ── Sessions ──
@@ -287,11 +296,14 @@ export async function registerIpcHandlers() {
   });
 
   ipcMain.handle('payments:topup', (_e, playerId: string, amount: number) => {
-    const now = new Date().toISOString();
-    run('INSERT INTO payments (id, playerId, sessionId, amount, status, paidDate, paymentType) VALUES (?, ?, NULL, ?, ?, ?, ?)',
-      [uuid(), playerId, amount, 'paid', now, 'topup']);
-    run('UPDATE balances SET balance = balance + ?, lastUpdated = ? WHERE playerId = ?',
-      [amount, now, playerId]);
+    if (amount <= 0) throw new Error('Amount must be positive');
+    transaction(() => {
+      const now = new Date().toISOString();
+      run('INSERT INTO payments (id, playerId, sessionId, amount, status, paidDate, paymentType) VALUES (?, ?, NULL, ?, ?, ?, ?)',
+        [uuid(), playerId, amount, 'paid', now, 'topup']);
+      run('UPDATE balances SET balance = balance + ?, lastUpdated = ? WHERE playerId = ?',
+        [amount, now, playerId]);
+    });
   });
 
   // ── Balances ──
@@ -694,19 +706,22 @@ export async function registerIpcHandlers() {
   });
 
   ipcMain.handle('tournaments:update', (_e, id: string, data: { name?: string; description?: string; date?: string; format?: string; courtCount?: number }) => {
+    const ALLOWED = new Set(['name', 'description', 'date', 'format', 'courtCount']);
     const sets: string[] = [];
     const vals: SqlValue[] = [];
     for (const [k, v] of Object.entries(data)) {
-      if (v !== undefined) { sets.push(`${k} = ?`); vals.push(v as SqlValue); }
+      if (v !== undefined && ALLOWED.has(k)) { sets.push(`${k} = ?`); vals.push(v as SqlValue); }
     }
     if (sets.length > 0) { vals.push(id); run(`UPDATE tournaments SET ${sets.join(', ')} WHERE id = ?`, vals); }
   });
 
   ipcMain.handle('tournaments:delete', (_e, id: string) => {
-    run('DELETE FROM tournament_standings WHERE tournamentId = ?', [id]);
-    run('DELETE FROM tournament_matches WHERE tournamentId = ?', [id]);
-    run('DELETE FROM tournament_registrations WHERE tournamentId = ?', [id]);
-    run('DELETE FROM tournaments WHERE id = ?', [id]);
+    transaction(() => {
+      run('DELETE FROM tournament_standings WHERE tournamentId = ?', [id]);
+      run('DELETE FROM tournament_matches WHERE tournamentId = ?', [id]);
+      run('DELETE FROM tournament_registrations WHERE tournamentId = ?', [id]);
+      run('DELETE FROM tournaments WHERE id = ?', [id]);
+    });
   });
 
   ipcMain.handle('tournaments:registrations', (_e, tournamentId: string) => {
@@ -767,32 +782,40 @@ export async function registerIpcHandlers() {
   }
 
   ipcMain.handle('tournaments:generateBracket', (_e, tournamentId: string) => {
-    // Delete existing matches for this tournament
-    run('DELETE FROM tournament_matches WHERE tournamentId = ?', [tournamentId]);
-    run('DELETE FROM tournament_standings WHERE tournamentId = ?', [tournamentId]);
+    return transaction(() => {
+      // Delete existing matches for this tournament
+      run('DELETE FROM tournament_matches WHERE tournamentId = ?', [tournamentId]);
+      run('DELETE FROM tournament_standings WHERE tournamentId = ?', [tournamentId]);
 
-    const t = queryOne<{ format: string; courtCount: number }>('SELECT format, courtCount FROM tournaments WHERE id = ?', [tournamentId]);
-    if (!t) return [];
+      const t = queryOne<{ format: string; courtCount: number }>('SELECT format, courtCount FROM tournaments WHERE id = ?', [tournamentId]);
+      if (!t) return [];
 
-    const regs = queryAll<TournamentRegistration>(
-      `SELECT tr.*, p1.name as player1Name, p1.gender as player1Gender, p1.level as player1Level,
-         p2.name as player2Name, p2.gender as player2Gender, p2.level as player2Level
-       FROM tournament_registrations tr
-       JOIN players p1 ON tr.player1Id = p1.id
-       LEFT JOIN players p2 ON tr.player2Id = p2.id
-       WHERE tr.tournamentId = ?`, [tournamentId]
-    );
+      const regs = queryAll<TournamentRegistration>(
+        `SELECT tr.*, p1.name as player1Name, p1.gender as player1Gender, p1.level as player1Level,
+           p2.name as player2Name, p2.gender as player2Gender, p2.level as player2Level
+         FROM tournament_registrations tr
+         JOIN players p1 ON tr.player1Id = p1.id
+         LEFT JOIN players p2 ON tr.player2Id = p2.id
+         WHERE tr.tournamentId = ?`, [tournamentId]
+      );
 
-    if (regs.length < 2) return [];
+      if (regs.length < 2) return [];
 
-    const matches = t.format === 'knockout'
-      ? generateKnockoutMatches(tournamentId, regs, uuid)
-      : generateRoundRobinMatches(tournamentId, regs, t.courtCount, uuid);
-    for (const match of matches) insertTournamentMatch(match);
-    return matches;
+      const matches = t.format === 'knockout'
+        ? generateKnockoutMatches(tournamentId, regs, uuid)
+        : generateRoundRobinMatches(tournamentId, regs, t.courtCount, uuid);
+      for (const match of matches) insertTournamentMatch(match);
+      return matches;
+    });
   });
 
   ipcMain.handle('tournaments:setScore', (_e, matchId: string, team1Score: number, team2Score: number) => {
+    if (!Number.isInteger(team1Score) || team1Score < 0 || !Number.isInteger(team2Score) || team2Score < 0) {
+      throw new Error('Scores must be non-negative integers');
+    }
+    if (team1Score === team2Score) {
+      throw new Error('Scores cannot be equal');
+    }
     const winner = team1Score > team2Score ? 'team1' : 'team2';
     run('UPDATE tournament_matches SET team1Score = ?, team2Score = ?, winner = ?, status = \'completed\', completedAt = ? WHERE id = ?',
       [team1Score, team2Score, winner, new Date().toISOString(), matchId]);
