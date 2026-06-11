@@ -296,7 +296,7 @@ export async function registerIpcHandlers() {
   });
 
   ipcMain.handle('payments:topup', (_e, playerId: string, amount: number) => {
-    if (amount <= 0) throw new Error('Amount must be positive');
+    if (!Number.isFinite(amount) || amount <= 0) throw new Error('Amount must be a positive number');
     transaction(() => {
       const now = new Date().toISOString();
       run('INSERT INTO payments (id, playerId, sessionId, amount, status, paidDate, paymentType) VALUES (?, ?, NULL, ?, ?, ?, ?)',
