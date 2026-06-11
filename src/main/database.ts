@@ -8,6 +8,7 @@ import { validateAutoRallyDatabase } from './databaseBackup';
 const dbPath = path.join(app.getPath('userData'), 'autorally.db');
 let db: Database | null = null;
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
+let inTransaction = false;
 
 export async function initDb(): Promise<Database> {
   if (db) return db;
@@ -462,19 +463,38 @@ export function closeDb() {
 export function run(sql: string, params?: SqlValue[]) {
   const d = getDb();
   d.run(sql, params);
-  debounceSave();
+  if (!inTransaction) debounceSave();
 }
 
 export function transaction<T>(fn: () => T): T {
   const d = getDb();
+
+  // Prevent a previously scheduled auto-save from firing mid-transaction.
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+  }
+
+  const wasInTransaction = inTransaction;
   d.run('BEGIN');
+  inTransaction = true;
+
+  let committed = false;
   try {
     const result = fn();
     d.run('COMMIT');
+    committed = true;
     return result;
   } catch (err) {
-    d.run('ROLLBACK');
+    try {
+      d.run('ROLLBACK');
+    } catch {
+      // Ignore rollback errors and preserve the original failure.
+    }
     throw err;
+  } finally {
+    inTransaction = wasInTransaction;
+    if (committed && !inTransaction) debounceSave();
   }
 }
 
