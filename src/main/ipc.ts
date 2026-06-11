@@ -109,6 +109,18 @@ export async function registerIpcHandlers() {
       if (gameRef) {
         throw new Error('Cannot delete player with existing game records');
       }
+      const tournRef = queryOne<{ id: string }>(
+        `SELECT id FROM tournament_registrations WHERE player1Id = ? OR player2Id = ?
+         UNION ALL
+         SELECT id FROM tournament_matches WHERE team1Player1Id = ? OR team1Player2Id = ? OR team2Player1Id = ? OR team2Player2Id = ?
+         UNION ALL
+         SELECT id FROM tournament_standings WHERE player1Id = ? OR player2Id = ?
+         LIMIT 1`,
+        [id, id, id, id, id, id, id, id]
+      );
+      if (tournRef) {
+        throw new Error('Cannot delete player with tournament records');
+      }
       run('DELETE FROM balances WHERE playerId = ?', [id]);
       run('DELETE FROM payments WHERE playerId = ?', [id]);
       run('DELETE FROM attendance WHERE playerId = ?', [id]);
