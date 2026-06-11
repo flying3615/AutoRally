@@ -468,18 +468,33 @@ export function run(sql: string, params?: SqlValue[]) {
 
 export function transaction<T>(fn: () => T): T {
   const d = getDb();
+
+  // Prevent a previously scheduled auto-save from firing mid-transaction.
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+  }
+
+  const wasInTransaction = inTransaction;
   d.run('BEGIN');
   inTransaction = true;
+
+  let committed = false;
   try {
     const result = fn();
     d.run('COMMIT');
-    inTransaction = false;
-    debounceSave();
+    committed = true;
     return result;
   } catch (err) {
-    d.run('ROLLBACK');
-    inTransaction = false;
+    try {
+      d.run('ROLLBACK');
+    } catch {
+      // Ignore rollback errors and preserve the original failure.
+    }
     throw err;
+  } finally {
+    inTransaction = wasInTransaction;
+    if (committed && !inTransaction) debounceSave();
   }
 }
 
