@@ -165,28 +165,62 @@ export function Tournaments() {
     );
   }
 
+  const activeCount = rows.filter(r => r.status === 'active').length;
+  const upcomingCount = rows.filter(r => r.status === 'upcoming').length;
+  const completedCount = rows.filter(r => r.status === 'completed').length;
+
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="w-[90%] mx-auto px-8 py-10" style={{ animation: 'fadeIn 0.3s ease' }}>
-        <div className="flex items-end justify-between mb-6">
-          <p className="text-sm text-zinc-400 font-medium">{rows.length} tournaments</p>
+    <div className="ar-page">
+      <div className="ar-page-inner">
+        <div className="ar-page-header">
+          <div>
+            <h1 className="ar-page-title">Tournaments</h1>
+            <p className="ar-page-copy">{rows.length} tournaments across active, upcoming, and completed events.</p>
+          </div>
           <button onClick={() => setShowCreate(true)}
-            className="h-9 px-4 text-sm font-medium bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 active:scale-[0.97] shadow-[0_2px_8px_-2px_rgba(0,0,0,0.15)] transition-all inline-flex items-center gap-2">
+            className="ar-primary-button">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
             Create Tournament
           </button>
         </div>
 
-        <div className="ag-theme-quartz" style={{ width: '100%' }}>
-          <AgGridReact
-            rowData={rows}
-            columnDefs={columnDefs}
-            defaultColDef={{ sortable: true, resizable: true, flex: 1 }}
-            domLayout="autoHeight"
-            rowHeight={52}
-            headerHeight={38}
-            onRowDoubleClicked={(e) => { if (e.data) navigate(`/tournaments/${e.data.id}`); }}
-          />
+        <div className="grid grid-cols-4 gap-4 mb-6">
+          <div className="ar-stat-card">
+            <p className="ar-stat-label">Total</p>
+            <p className="ar-stat-value">{rows.length}</p>
+          </div>
+          <div className="ar-stat-card">
+            <p className="ar-stat-label">Active</p>
+            <p className="ar-stat-value !text-emerald-600">{activeCount}</p>
+          </div>
+          <div className="ar-stat-card">
+            <p className="ar-stat-label">Upcoming</p>
+            <p className="ar-stat-value !text-2xl">{upcomingCount}</p>
+          </div>
+          <div className="ar-stat-card">
+            <p className="ar-stat-label">Completed</p>
+            <p className="ar-stat-value !text-2xl">{completedCount}</p>
+          </div>
+        </div>
+
+        <div className="ar-card p-4">
+          <div className="flex items-center justify-between mb-3">
+            <p className="ar-section-label">Tournament registry</p>
+            <p className="text-[11px] text-zinc-400 tabular-nums font-mono">{rows.length} records</p>
+          </div>
+          <div className="ar-table-shell">
+            <div className="ag-theme-quartz" style={{ width: '100%' }}>
+              <AgGridReact
+                rowData={rows}
+                columnDefs={columnDefs}
+                defaultColDef={{ sortable: true, resizable: true, flex: 1 }}
+                domLayout="autoHeight"
+                rowHeight={52}
+                headerHeight={38}
+                onRowDoubleClicked={(e) => { if (e.data) navigate(`/tournaments/${e.data.id}`); }}
+              />
+            </div>
+          </div>
         </div>
       </div>
 

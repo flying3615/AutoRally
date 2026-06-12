@@ -363,9 +363,9 @@ export function Layout() {
     <GameProvider>
       <div className="flex h-screen bg-[var(--ar-bg)]">
         <Sidebar />
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">
           <TopBar />
-          <main className="flex-1 overflow-hidden relative">
+          <main className="flex-1 min-h-0 overflow-hidden relative">
             <Outlet />
           </main>
           <StatusBar />

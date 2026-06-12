@@ -211,24 +211,38 @@ export function Report() {
   }
 
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="w-[90%] mx-auto px-8 py-10" style={{ animation: 'fadeIn 0.3s ease' }}>
+    <div className="ar-page">
+      <div className="ar-page-inner">
+        <div className="ar-page-header">
+          <div>
+            <h1 className="ar-page-title">Session report</h1>
+            <p className="ar-page-copy">Participation balance, match mix, and round-by-round activity.</p>
+          </div>
+          <div className="text-xs text-zinc-400 font-mono tabular-nums">
+            {tab === 'players' ? `${players.length} players` : `${matchRows.length} games`}
+          </div>
+        </div>
+
         {/* Tab bar */}
-        <div className="flex items-center gap-1 mb-6">
+        <div className="ar-toolbar">
+          <div className="ar-segment">
           <button
             onClick={() => setTab('players')}
-            className={`text-sm font-medium px-3 py-1.5 rounded-lg transition-colors ${tab === 'players' ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600'}`}
+            data-active={tab === 'players'}
+            className="ar-segment-button"
           >
             Players
           </button>
           <button
             onClick={() => setTab('matches')}
-            className={`text-sm font-medium px-3 py-1.5 rounded-lg transition-colors ${tab === 'matches' ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600'}`}
+            data-active={tab === 'matches'}
+            className="ar-segment-button"
           >
             Matches
           </button>
+          </div>
           {tab === 'players' && (
-            <div className="ml-auto flex items-center gap-4 text-xs text-zinc-400">
+            <div className="flex items-center gap-4 text-xs text-zinc-400">
               <span>Total played: <strong className="text-zinc-700">{playerData?.players.reduce((s, p) => s + p.played, 0) ?? 0}</strong></span>
               <span>Avg: <strong className="text-zinc-700">{playerData ? Math.round(playerData.players.reduce((s, p) => s + p.pct, 0) / playerData.players.length) : 0}%</strong></span>
             </div>
@@ -243,30 +257,32 @@ export function Report() {
           <>
             {players.length > 0 && (
               <div className="grid grid-cols-3 gap-4 mb-6">
-                <div className="col-span-3 bg-white border border-zinc-200/60 rounded-2xl p-5">
-                  <p className="text-xs font-semibold uppercase tracking-widest text-zinc-400 mb-4">Participation</p>
+                <div className="ar-card col-span-3 p-5">
+                  <p className="ar-section-label mb-4">Participation</p>
                   <PlayerParticipationBar data={participationData} />
                 </div>
-                <div className="col-span-2 bg-white border border-zinc-200/60 rounded-2xl p-5">
-                  <p className="text-xs font-semibold uppercase tracking-widest text-zinc-400 mb-4">Level Distribution</p>
+                <div className="ar-card col-span-2 p-5">
+                  <p className="ar-section-label mb-4">Level distribution</p>
                   <LevelDistributionBar data={levelDistData} />
                 </div>
-                <div className="bg-white border border-zinc-200/60 rounded-2xl p-5">
-                  <p className="text-xs font-semibold uppercase tracking-widest text-zinc-400 mb-4">Game Type Mix</p>
+                <div className="ar-card p-5">
+                  <p className="ar-section-label mb-4">Game type mix</p>
                   <GameTypePie data={playerGameTypeMix} />
                 </div>
               </div>
             )}
-            <div className="ag-theme-quartz" style={{ width: '100%' }}>
-              <AgGridReact
-                rowData={playerData?.players ?? []}
-                columnDefs={playerColumns}
-                defaultColDef={{ sortable: true, resizable: true }}
-                domLayout="autoHeight"
-                suppressRowHoverHighlight={false}
-                rowHeight={36}
-                headerHeight={38}
-              />
+            <div className="ar-table-shell">
+              <div className="ag-theme-quartz" style={{ width: '100%' }}>
+                <AgGridReact
+                  rowData={playerData?.players ?? []}
+                  columnDefs={playerColumns}
+                  defaultColDef={{ sortable: true, resizable: true }}
+                  domLayout="autoHeight"
+                  suppressRowHoverHighlight={false}
+                  rowHeight={36}
+                  headerHeight={38}
+                />
+              </div>
             </div>
           </>
         )}
@@ -276,26 +292,28 @@ export function Report() {
           <>
             {matchRows.length > 0 && (
               <div className="grid grid-cols-3 gap-4 mb-6">
-                <div className="col-span-2 bg-white border border-zinc-200/60 rounded-2xl p-5">
-                  <p className="text-xs font-semibold uppercase tracking-widest text-zinc-400 mb-4">Games per Round</p>
+                <div className="ar-card col-span-2 p-5">
+                  <p className="ar-section-label mb-4">Games per round</p>
                   <GamesPerRoundBar data={gamesPerRound} />
                 </div>
-                <div className="bg-white border border-zinc-200/60 rounded-2xl p-5">
-                  <p className="text-xs font-semibold uppercase tracking-widest text-zinc-400 mb-4">By Type</p>
+                <div className="ar-card p-5">
+                  <p className="ar-section-label mb-4">By type</p>
                   <MatchTypePie data={matchTypeCounts} />
                 </div>
               </div>
             )}
-            <div className="ag-theme-quartz" style={{ width: '100%' }}>
-              <AgGridReact
-                rowData={matchRows}
-                columnDefs={matchColumns}
-                defaultColDef={{ sortable: true, resizable: true }}
-                domLayout="autoHeight"
-                suppressRowHoverHighlight={false}
-                rowHeight={36}
-                headerHeight={60}
-              />
+            <div className="ar-table-shell">
+              <div className="ag-theme-quartz" style={{ width: '100%' }}>
+                <AgGridReact
+                  rowData={matchRows}
+                  columnDefs={matchColumns}
+                  defaultColDef={{ sortable: true, resizable: true }}
+                  domLayout="autoHeight"
+                  suppressRowHoverHighlight={false}
+                  rowHeight={36}
+                  headerHeight={60}
+                />
+              </div>
             </div>
           </>
         )}

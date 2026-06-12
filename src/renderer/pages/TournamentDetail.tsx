@@ -255,36 +255,36 @@ export function TournamentDetail() {
   ];
 
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="w-[90%] mx-auto px-8 py-10" style={{ animation: 'fadeIn 0.3s ease' }}>
+    <div className="ar-page">
+      <div className="ar-page-inner">
         {/* Header */}
-        <div className="flex items-center justify-between mb-2">
+        <div className="ar-page-header !mb-5">
           <div>
-            <h2 className="text-xl font-bold text-zinc-900 tracking-tight">{data.name}</h2>
-            <p className="text-sm text-zinc-400">{data.date} · {formatLabel(data.format)} · {data.courtCount} courts</p>
+            <h1 className="ar-page-title">{data.name}</h1>
+            <p className="ar-page-copy">{data.date} · {formatLabel(data.format)} · {data.courtCount} courts</p>
           </div>
           <span className={`text-xs font-semibold px-3 py-1 rounded-full ${data.status === 'active' ? 'bg-emerald-50 text-emerald-700' : data.status === 'completed' ? 'bg-zinc-100 text-zinc-500' : 'bg-blue-50 text-blue-700'}`}>{data.status}</span>
         </div>
 
-        <div className="mt-5 mb-5 border border-zinc-200/70 bg-white rounded-xl p-4">
+        <div className="ar-card p-4 mb-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-1">Current step</p>
+              <p className="ar-section-label mb-1">Current step</p>
               <p className="text-sm font-semibold text-zinc-900">{nextAction}</p>
               {actionError && <p className="mt-2 text-xs font-medium text-red-600">{actionError}</p>}
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <button onClick={() => { setRegError(null); setShowAddReg(true); setTab('registration'); }}
-                className="h-8 px-3 text-sm font-medium border border-zinc-200 text-zinc-700 rounded-lg hover:bg-zinc-50 active:scale-[0.97] transition-all">
+                className="ar-secondary-button !min-h-8 !px-3">
                 Register
               </button>
               <button onClick={handleGenerate} disabled={busyAction !== null || regs.length < 2}
-                className={`h-8 px-3 text-sm font-semibold rounded-lg active:scale-[0.97] transition-all disabled:opacity-40 ${matches.length > 0 ? 'bg-amber-600 text-white hover:bg-amber-700' : 'bg-emerald-600 text-white hover:bg-emerald-700'}`}>
+                className={`${matches.length > 0 ? 'ar-secondary-button' : 'ar-accent-button'} !min-h-8 !px-3`}>
                 {busyAction === 'generate' ? 'Generating...' : matches.length > 0 ? 'Regenerate' : 'Generate Schedule'}
               </button>
               {data.format === 'knockout' && (
                 <button onClick={handleAdvance} disabled={!canAdvance || busyAction !== null}
-                  className="h-8 px-3 text-sm font-semibold bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 active:scale-[0.97] transition-all disabled:opacity-40">
+                  className="ar-primary-button !min-h-8 !px-3">
                   {busyAction === 'advance' ? 'Advancing...' : 'Advance Winners'}
                 </button>
               )}
@@ -297,7 +297,7 @@ export function TournamentDetail() {
           <div className="mt-4 grid grid-cols-2 md:grid-cols-5 gap-2">
             {steps.map((step, index) => (
               <div key={step.label}
-                className={`rounded-lg border px-3 py-2 ${step.done ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-zinc-200 bg-zinc-50 text-zinc-400'}`}>
+                className={`ar-stat-card !rounded-lg !px-3 !py-2 ${step.done ? '!border-emerald-200 !bg-emerald-50 text-emerald-800' : '!bg-zinc-50 text-zinc-400'}`}>
                 <p className="text-[11px] font-mono tabular-nums">{String(index + 1).padStart(2, '0')}</p>
                 <p className="text-xs font-semibold">{step.label}</p>
               </div>
@@ -306,10 +306,11 @@ export function TournamentDetail() {
         </div>
 
         {/* Tabs */}
-        <div className="flex items-center gap-1 mb-6 mt-4">
+        <div className="ar-segment mb-6">
           {(['overview', 'registration', 'bracket', 'standings'] as const).map(t => (
             <button key={t} onClick={() => setTab(t)}
-              className={`text-sm font-medium px-3 py-1.5 rounded-lg transition-colors capitalize ${tab === t ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600'}`}
+              data-active={tab === t}
+              className="ar-segment-button capitalize"
             >{t}</button>
           ))}
         </div>
@@ -319,13 +320,13 @@ export function TournamentDetail() {
           <div className="max-w-lg">
             {data.description && <p className="text-sm text-zinc-500 mb-4">{data.description}</p>}
             <div className="grid grid-cols-2 gap-4">
-              <div className="bg-white border border-zinc-200/60 rounded-2xl p-5">
-                <p className="text-xs text-zinc-400 font-semibold uppercase tracking-wider mb-1">Registrations</p>
-                <p className="text-3xl font-bold text-zinc-900 tabular-nums font-mono">{data.registrationCount}</p>
+              <div className="ar-stat-card">
+                <p className="ar-stat-label">Registrations</p>
+                <p className="ar-stat-value">{data.registrationCount}</p>
               </div>
-              <div className="bg-white border border-zinc-200/60 rounded-2xl p-5">
-                <p className="text-xs text-zinc-400 font-semibold uppercase tracking-wider mb-1">Rounds</p>
-                <p className="text-3xl font-bold text-zinc-900 tabular-nums font-mono">{data.rounds.length}</p>
+              <div className="ar-stat-card">
+                <p className="ar-stat-label">Rounds</p>
+                <p className="ar-stat-value">{data.rounds.length}</p>
               </div>
             </div>
           </div>

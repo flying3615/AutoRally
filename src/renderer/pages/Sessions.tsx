@@ -129,21 +129,21 @@ function SessionDetail({ session, onBack }: { session: SessionInfo; onBack: () =
       ) : (
         <>
           <div className="grid grid-cols-4 gap-3 mb-8">
-            <div className="bg-white border border-zinc-200/60 rounded-2xl p-4">
-              <p className="text-[11px] text-zinc-400 font-semibold uppercase tracking-wider">Checked in</p>
-              <p className="text-2xl font-bold text-zinc-900 tabular-nums font-mono mt-1">{attendance.length}</p>
+            <div className="ar-stat-card">
+              <p className="ar-stat-label">Checked in</p>
+              <p className="ar-stat-value !text-2xl">{attendance.length}</p>
             </div>
-            <div className="bg-white border border-zinc-200/60 rounded-2xl p-4">
-              <p className="text-[11px] text-zinc-400 font-semibold uppercase tracking-wider">Games</p>
-              <p className="text-2xl font-bold text-zinc-900 tabular-nums font-mono mt-1">{gamesCompleted}</p>
+            <div className="ar-stat-card">
+              <p className="ar-stat-label">Games</p>
+              <p className="ar-stat-value !text-2xl">{gamesCompleted}</p>
             </div>
-            <div className="bg-white border border-zinc-200/60 rounded-2xl p-4">
-              <p className="text-[11px] text-zinc-400 font-semibold uppercase tracking-wider">Collected</p>
-              <p className="text-2xl font-bold text-emerald-600 tabular-nums font-mono mt-1">${totalPaid.toFixed(0)}</p>
+            <div className="ar-stat-card">
+              <p className="ar-stat-label">Collected</p>
+              <p className="ar-stat-value !text-2xl !text-emerald-600">${totalPaid.toFixed(0)}</p>
             </div>
-            <div className="bg-white border border-zinc-200/60 rounded-2xl p-4">
-              <p className="text-[11px] text-zinc-400 font-semibold uppercase tracking-wider">Unpaid</p>
-              <p className="text-2xl font-bold text-red-500 tabular-nums font-mono mt-1">${totalUnpaid.toFixed(0)}</p>
+            <div className="ar-stat-card">
+              <p className="ar-stat-label">Unpaid</p>
+              <p className="ar-stat-value !text-2xl !text-red-500">${totalUnpaid.toFixed(0)}</p>
             </div>
           </div>
 
@@ -274,7 +274,7 @@ function SessionsGrid({ sessions, onSelect }: { sessions: SessionInfo[]; onSelec
   ];
 
   return (
-    <div className="bg-white rounded-2xl border border-zinc-200/60 overflow-hidden">
+    <div className="ar-table-shell">
       <div className="ag-theme-quartz" style={{ width: '100%' }}>
         <AgGridReact<SessionInfo>
           rowData={sessions}
@@ -354,8 +354,8 @@ export function Sessions() {
   const selectedSession = sessions.find(s => s.id === selectedSessionId);
 
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="w-[90%] mx-auto px-8 py-10" style={{ animation: 'fadeIn 0.3s ease' }}>
+    <div className="ar-page">
+      <div className="ar-page-inner">
 
         {/* Session detail drill-down */}
         {selectedSessionId && selectedSession ? (
@@ -363,12 +363,15 @@ export function Sessions() {
         ) : (
           <>
             {/* Header */}
-            <div className="flex items-end justify-between mb-6">
-              <p className="text-sm text-zinc-400">{sessions.length} sessions recorded</p>
+            <div className="ar-page-header">
+              <div>
+                <h1 className="ar-page-title">Sessions</h1>
+                <p className="ar-page-copy">{sessions.length} sessions recorded across club nights.</p>
+              </div>
               <button
                 onClick={handleCreate}
                 disabled={!!activeSession}
-                className="h-9 px-4 text-sm font-medium bg-zinc-800 text-white rounded-lg hover:bg-zinc-700 active:scale-[0.97] disabled:opacity-30 disabled:cursor-not-allowed shadow-[0_2px_8px_-2px_rgba(0,0,0,0.15)] transition-all inline-flex items-center justify-center"
+                className="ar-primary-button"
               >
                 New Session
               </button>
@@ -376,7 +379,7 @@ export function Sessions() {
 
             {/* Active session banner */}
             {activeSession && (
-              <div className="relative overflow-hidden rounded-2xl bg-zinc-900 mb-8 shadow-[0_8px_30px_-12px_rgba(0,0,0,0.25)]">
+              <div className="ar-hero-card mb-8">
                 <div className="dot-pattern" />
                 <div className="relative p-6">
                   <div className="flex items-center justify-between">
@@ -398,18 +401,18 @@ export function Sessions() {
                       </Link>
                       <Link
                         to={`/match/${activeSession.id}`}
-                        className="h-8 px-3.5 text-sm font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 active:scale-[0.97] shadow-[0_2px_8px_-2px_rgba(5,150,105,0.3)] transition-all inline-flex items-center justify-center"
+                        className="ar-accent-button !min-h-8 !px-3.5"
                       >
                         Match Panel
                       </Link>
                       {confirmEndId === activeSession.id ? (
                         <button onClick={() => handleEnd(activeSession.id)}
-                          className="h-8 px-3.5 text-sm font-medium bg-red-500 text-white rounded-lg hover:bg-red-600 active:scale-[0.97] shadow-[0_2px_8px_-2px_rgba(239,68,68,0.3)] transition-all inline-flex items-center justify-center">
+                          className="ar-danger-button !min-h-8 !px-3.5">
                           Confirm End
                         </button>
                       ) : (
                         <button onClick={() => requestEnd(activeSession.id)}
-                          className="h-8 px-3.5 text-sm font-medium bg-red-500 text-white rounded-lg hover:bg-red-600 active:scale-[0.97] shadow-[0_2px_8px_-2px_rgba(239,68,68,0.3)] transition-all inline-flex items-center justify-center">
+                          className="ar-danger-button !min-h-8 !px-3.5">
                           End
                         </button>
                       )}
@@ -423,7 +426,7 @@ export function Sessions() {
             {sessions.length > 0 ? (
               <div>
                 <div className="flex items-center justify-between mb-3">
-                  <p className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">All Sessions</p>
+                  <p className="ar-section-label">All sessions</p>
                   <p className="text-[11px] text-zinc-400 tabular-nums font-mono">{sessions.length} records</p>
                 </div>
                 <SessionsGrid sessions={sessions} onSelect={id => setSelectedSessionId(id)} />
