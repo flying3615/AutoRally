@@ -121,6 +121,7 @@ function ActionsCell({ data }: ICellRendererParams<PlayerWithBalance>) {
       <button
         ref={btnRef}
         onClick={() => { setOpen(!open); setConfirmDelete(false); }}
+        aria-label={`Open actions for ${data.name}`}
         className="w-7 h-7 rounded-lg text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 transition-all inline-flex items-center justify-center"
       >
         <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
@@ -485,7 +486,7 @@ export function Players() {
                 Imported <strong>{importResult.imported}</strong> players
                 {importResult.skipped > 0 && <>, skipped <strong>{importResult.skipped}</strong> duplicates</>}
               </span>
-              <button onClick={() => setImportResult(null)} className="ml-auto text-zinc-400 hover:text-zinc-600">
+              <button onClick={() => setImportResult(null)} aria-label="Dismiss import result" className="ml-auto text-zinc-400 hover:text-zinc-600">
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                 </svg>

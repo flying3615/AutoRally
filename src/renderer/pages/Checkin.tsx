@@ -445,7 +445,7 @@ export function Checkin() {
 
   useEffect(() => { load(); }, [sessionId]);
 
-  const handleUncheck = async (playerId: string, playerName: string) => {
+  const handleUncheck = async (playerId: string) => {
     if (removingRef.current.has(playerId)) return;
     const att = attendance.find(a => a.playerId === playerId);
     if (!att) return;
@@ -512,7 +512,7 @@ export function Checkin() {
   const fee = Number(sessionFee) || 10;
   const lastSessionQuickPlayers = lastSessionPlayers.filter(p => !checkedInSet.has(p.id));
 
-  const doCheckin = async (playerId: string, playerName: string, method: 'credit' | 'cash') => {
+  const doCheckin = async (playerId: string, method: 'credit' | 'cash') => {
     if (!sessionId) return;
     try {
       await window.api.attendanceCheckin(playerId, sessionId, method);
@@ -525,7 +525,7 @@ export function Checkin() {
 
   const handlePlayerCreated = async (player: PlayerInfo, checkIn: boolean) => {
     if (checkIn) {
-      await doCheckin(player.id, player.name, 'cash');
+      await doCheckin(player.id, 'cash');
     } else {
       await load();
     }
@@ -540,7 +540,7 @@ export function Checkin() {
       return (
         <button
           key={p.id}
-          onClick={() => handleUncheck(p.id, p.name)}
+          onClick={() => handleUncheck(p.id)}
           onContextMenu={(e) => handleContextMenu(e, p)}
           className="relative flex items-center rounded-md text-left transition-all active:scale-[0.98] group/check"
           style={{
@@ -581,7 +581,7 @@ export function Checkin() {
       <div
         key={p.id}
         onContextMenu={(e) => handleContextMenu(e, p)}
-        onDoubleClick={() => doCheckin(p.id, p.name, 'cash')}
+        onDoubleClick={() => doCheckin(p.id, 'cash')}
         className="flex items-center rounded-md transition-all"
         style={{
           padding: '2px 4px',
@@ -598,14 +598,14 @@ export function Checkin() {
         </span>
         <div className="flex items-center gap-0.5 shrink-0 ml-1">
           <button
-            onClick={() => doCheckin(p.id, p.name, 'credit')}
+            onClick={() => doCheckin(p.id, 'credit')}
             disabled={!canCredit}
             className="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-zinc-800 text-white hover:bg-zinc-700 active:scale-95 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
           >
             Cr
           </button>
           <button
-            onClick={() => doCheckin(p.id, p.name, 'cash')}
+            onClick={() => doCheckin(p.id, 'cash')}
             className="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-emerald-600 text-white hover:bg-emerald-500 active:scale-95 transition-all"
           >
             $
@@ -708,7 +708,7 @@ export function Checkin() {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search player name..."
-                className="w-full pl-7 pr-3 py-1.5 text-sm border border-zinc-200 rounded-lg focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all"
+                className="w-full pl-7 pr-3 py-1.5 text-sm border border-zinc-200 rounded-lg focus:outline-none focus:border-zinc-400 focus:ring-2 focus:ring-gray-100 transition-all"
                 autoFocus
               />
             </div>
