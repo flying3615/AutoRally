@@ -49,6 +49,20 @@ for (const selector of expectedCssClasses) {
   }
 }
 
+const arPageRule = css.match(/\.ar-page\s*\{[^}]*\}/s)?.[0] ?? '';
+const expectedArPageDeclarations = [
+  ['height', '100%'],
+  ['min-height', '0'],
+  ['overflow-y', 'auto'],
+];
+
+for (const [property, value] of expectedArPageDeclarations) {
+  const declarationPattern = new RegExp(`(^|[;{])\\s*${property}\\s*:\\s*${value}\\s*(;|})`);
+  if (!declarationPattern.test(arPageRule)) {
+    failures.push(`${files.css} .ar-page missing ${property}: ${value}`);
+  }
+}
+
 for (const [key, classes] of Object.entries(pageContracts)) {
   const rel = files[key];
   const source = read(rel);
