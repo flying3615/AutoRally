@@ -104,6 +104,13 @@ function Sidebar() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
           </svg>
         </button>
+        <Link
+          to="/"
+          className={`ml-1.5 w-8 h-8 rounded-lg bg-zinc-900 text-white text-[11px] font-bold tracking-tight flex items-center justify-center transition-opacity ${expanded ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+          aria-label="Go to AutoRally dashboard"
+        >
+          AR
+        </Link>
         <span className={`ml-2.5 text-[15px] font-semibold text-zinc-900 tracking-tight whitespace-nowrap transition-opacity duration-200 ${expanded ? 'opacity-100' : 'opacity-0'}`}>
           AutoRally
         </span>
@@ -119,6 +126,8 @@ function Sidebar() {
             <div key={item.to}>
               <Link
                 to={item.to}
+                aria-current={active ? 'page' : undefined}
+                title={!expanded ? item.label : undefined}
                 className={`flex items-center h-9 mx-1.5 px-2 rounded-lg transition-all duration-150 ${
                   active
                     ? 'bg-zinc-800 text-white shadow-[0_1px_3px_rgba(0,0,0,0.1)]'
@@ -320,7 +329,9 @@ function TopBar() {
       <div className="flex items-center gap-3 shrink-0" style={{ WebkitAppRegion: 'no-drag' } as any}>
         {isSubpage && (
           <button
+            type="button"
             onClick={() => navigate(-1)}
+            aria-label="Back to previous page"
             className="inline-flex items-center gap-1.5 text-[13px] font-medium text-zinc-400 hover:text-zinc-700 transition-colors active:scale-[0.97]"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -334,7 +345,7 @@ function TopBar() {
       {/* Scrolling upcoming-sessions text */}
       <div className="flex-1 mx-4 overflow-hidden">
         {marqueeText && (
-          <span className="marquee-text text-[13px] font-medium text-red-600">{marqueeText}</span>
+          <span className="marquee-text text-[13px] font-medium text-emerald-700">{marqueeText}</span>
         )}
       </div>
 
@@ -350,7 +361,7 @@ function TopBar() {
 export function Layout() {
   return (
     <GameProvider>
-      <div className="flex h-screen bg-[#F7F7F8]">
+      <div className="flex h-screen bg-[var(--ar-bg)]">
         <Sidebar />
         <div className="flex-1 flex flex-col overflow-hidden">
           <TopBar />

@@ -8,6 +8,23 @@
   --font-mono: "DM Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 }
 
+/* ── AutoRally product design system ── */
+:root {
+  --ar-bg: #f8fafb;
+  --ar-surface: #ffffff;
+  --ar-surface-muted: #f4f4f5;
+  --ar-fg: #18181b;
+  --ar-muted: #71717a;
+  --ar-border: #e4e4e7;
+  --ar-accent: #059669;
+  --ar-accent-soft: #ecfdf5;
+  --ar-danger: #dc2626;
+  --ar-warning: #d97706;
+  --ar-radius-control: 8px;
+  --ar-radius-card: 16px;
+  --ar-shadow-card: 0 2px 8px -4px rgba(0, 0, 0, 0.08);
+}
+
 /* ── Base ── */
 html {
   -webkit-font-smoothing: antialiased;
@@ -20,6 +37,8 @@ body {
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   font-optical-sizing: auto;
   font-size: 1rem; /* 18px */
+  background: var(--ar-bg);
+  color: var(--ar-fg);
 }
 
 ::selection {
@@ -30,6 +49,33 @@ body {
 /* ── Smooth transitions globally ── */
 * {
   scroll-behavior: smooth;
+}
+
+button,
+a,
+[role="button"] {
+  cursor: pointer;
+}
+
+button:disabled,
+[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
+:where(a, button, input, select, textarea):focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--ar-accent) 72%, white);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 /* ── Spring easing utility ── */

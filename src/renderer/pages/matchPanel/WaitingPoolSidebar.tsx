@@ -61,7 +61,7 @@ export function WaitingPoolSidebar({
             value={checkinSearch}
             onChange={(e) => onCheckinSearchChange(e.target.value)}
             placeholder="Search player to check in..."
-            className="w-full pl-8 pr-3 py-1.5 text-xs border border-zinc-200 rounded-lg focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 transition-all"
+            className="w-full pl-8 pr-3 py-1.5 text-xs border border-zinc-200 rounded-lg focus:outline-none focus:border-zinc-400 focus:ring-1 focus:ring-gray-100 transition-all"
           />
         </div>
 
