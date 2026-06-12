@@ -16,6 +16,7 @@
     "dist:linux": "npm run build && electron-builder --linux",
     "dist:all": "npm run build && electron-builder --mac --win --linux",
     "test": "vitest run",
+    "test:ui-contracts": "node scripts/check-page-ui-contracts.js",
     "test:watch": "vitest",
     "test:e2e": "npm run clean && npm run build && playwright test",
     "test:e2e:headed": "npm run clean && npm run build && playwright test --headed",

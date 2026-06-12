@@ -149,15 +149,19 @@ export function Dashboard() {
   }
 
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="w-[90%] mx-auto px-8 py-10" style={{ animation: 'fadeIn 0.3s ease' }}>
+    <div className="ar-page">
+      <div className="ar-page-inner">
 
         {/* Header */}
-        <div className="flex items-center justify-end mb-6">
+        <div className="ar-page-header">
+          <div>
+            <h1 className="ar-page-title">Dashboard</h1>
+            <p className="ar-page-copy">Live club operations, recent sessions, and payment health.</p>
+          </div>
           <button
             onClick={() => setShowCreate(true)}
             disabled={!!s.activeSession}
-            className="h-9 px-4 text-sm font-medium bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 active:scale-[0.97] shadow-[0_2px_8px_-2px_rgba(0,0,0,0.15)] transition-all inline-flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed"
+            className="ar-primary-button"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -168,7 +172,8 @@ export function Dashboard() {
 
         {/* Active Session Hero */}
         {s.activeSession ? (
-          <div className="relative overflow-hidden rounded-2xl bg-zinc-900 mb-8 shadow-[0_8px_30px_-12px_rgba(0,0,0,0.25)]">
+          <div className="ar-hero-card mb-8">
+            <div className="dot-pattern" />
             <div className="relative p-8">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
@@ -188,7 +193,7 @@ export function Dashboard() {
                       await window.api.sessionsEnd(s.activeSession!.id);
                       load();
                     }}
-                    className="h-9 px-4 text-sm font-medium bg-red-500 text-white rounded-lg hover:bg-red-600 active:scale-[0.97] shadow-[0_2px_8px_-2px_rgba(239,68,68,0.3)] transition-all inline-flex items-center"
+                    className="ar-danger-button"
                   >
                     End Session
                   </button>
@@ -239,22 +244,22 @@ export function Dashboard() {
 
         {/* Stats grid */}
         <div className="grid grid-cols-3 gap-4 mb-8">
-          <div className="bg-white border border-zinc-200/60 rounded-2xl p-5">
-            <p className="text-[11px] text-zinc-400 font-semibold uppercase tracking-wider mb-2">Sessions</p>
-            <p className="text-3xl font-bold text-zinc-900 tabular-nums tracking-tight font-mono">{s.sessionCount}</p>
+          <div className="ar-stat-card">
+            <p className="ar-stat-label">Sessions</p>
+            <p className="ar-stat-value">{s.sessionCount}</p>
             {s.avgDurationMin != null && (
-              <p className="text-sm text-zinc-400 mt-1">avg {formatDuration(s.avgDurationMin)}</p>
+              <p className="ar-stat-meta">avg {formatDuration(s.avgDurationMin)}</p>
             )}
           </div>
 
-          <div className="bg-white border border-zinc-200/60 rounded-2xl p-5">
-            <p className="text-xs text-zinc-400 font-semibold uppercase tracking-wider mb-2">Players</p>
-            <p className="text-3xl font-bold text-zinc-900 tabular-nums tracking-tight font-mono">{s.playerCount}</p>
+          <div className="ar-stat-card">
+            <p className="ar-stat-label">Players</p>
+            <p className="ar-stat-value">{s.playerCount}</p>
           </div>
 
-          <div className="bg-white border border-zinc-200/60 rounded-2xl p-5">
-            <p className="text-xs text-zinc-400 font-semibold uppercase tracking-wider mb-2">Games Played</p>
-            <p className="text-3xl font-bold text-zinc-900 tabular-nums tracking-tight font-mono">{s.gamesPlayed}</p>
+          <div className="ar-stat-card">
+            <p className="ar-stat-label">Games played</p>
+            <p className="ar-stat-value">{s.gamesPlayed}</p>
           </div>
         </div>
 
@@ -262,10 +267,10 @@ export function Dashboard() {
         {s.recentSessions.length > 0 && (
           <div>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-bold text-zinc-700 tracking-tight">Recent Sessions</h3>
+              <h3 className="ar-section-label">Recent sessions</h3>
               <Link to="/sessions" className="text-xs font-medium text-zinc-400 hover:text-zinc-600 transition-colors">View all &rarr;</Link>
             </div>
-            <div className="bg-white border border-zinc-200/60 rounded-2xl overflow-hidden">
+            <div className="ar-table-shell">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-zinc-100">

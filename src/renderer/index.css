@@ -150,6 +150,213 @@ button:disabled,
   border-left: none;
 }
 
+/* ── Page-level product shell ── */
+.ar-page {
+  min-height: 100%;
+  overflow-y: auto;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(248, 250, 251, 0) 220px),
+    var(--ar-bg);
+}
+
+.ar-page-inner {
+  width: min(1180px, 90%);
+  margin: 0 auto;
+  padding: 40px 32px 48px;
+  animation: fadeIn 0.3s ease;
+}
+
+.ar-page-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.ar-page-title {
+  color: var(--ar-fg);
+  font-size: 24px;
+  line-height: 1.15;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.ar-page-copy {
+  margin-top: 6px;
+  color: var(--ar-muted);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.ar-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.ar-card {
+  background: var(--ar-surface);
+  border: 1px solid color-mix(in srgb, var(--ar-border) 86%, transparent);
+  border-radius: var(--ar-radius-card);
+  box-shadow: var(--ar-shadow-card);
+}
+
+.ar-panel {
+  background: var(--ar-surface);
+  border: 1px solid color-mix(in srgb, var(--ar-border) 82%, transparent);
+  border-radius: 20px;
+  box-shadow: 0 18px 45px -36px rgba(24, 24, 27, 0.28);
+}
+
+.ar-stat-card {
+  background: var(--ar-surface);
+  border: 1px solid color-mix(in srgb, var(--ar-border) 86%, transparent);
+  border-radius: var(--ar-radius-card);
+  padding: 20px;
+  box-shadow: var(--ar-shadow-card);
+}
+
+.ar-stat-label,
+.ar-section-label {
+  color: #a1a1aa;
+  font-size: 11px;
+  line-height: 1.2;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.ar-stat-value {
+  margin-top: 8px;
+  color: var(--ar-fg);
+  font-family: "DM Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 32px;
+  line-height: 1;
+  font-weight: 500;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+}
+
+.ar-stat-meta {
+  margin-top: 6px;
+  color: var(--ar-muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.ar-hero-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 20px;
+  background: #18181b;
+  box-shadow: 0 24px 55px -36px rgba(24, 24, 27, 0.65);
+}
+
+.ar-table-shell {
+  overflow: hidden;
+  background: var(--ar-surface);
+  border: 1px solid color-mix(in srgb, var(--ar-border) 88%, transparent);
+  border-radius: var(--ar-radius-card);
+  box-shadow: var(--ar-shadow-card);
+}
+
+.ar-segment {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  background: color-mix(in srgb, var(--ar-surface-muted) 84%, white);
+  border: 1px solid color-mix(in srgb, var(--ar-border) 75%, transparent);
+  border-radius: 12px;
+}
+
+.ar-segment-button {
+  min-height: 32px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  color: var(--ar-muted);
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.15s ease;
+}
+
+.ar-segment-button:hover {
+  color: #3f3f46;
+}
+
+.ar-segment-button[data-active="true"] {
+  color: var(--ar-fg);
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(24, 24, 27, 0.08);
+}
+
+.ar-primary-button,
+.ar-secondary-button,
+.ar-accent-button,
+.ar-danger-button {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: var(--ar-radius-control);
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.15s ease;
+}
+
+.ar-primary-button {
+  background: #27272a;
+  color: #fff;
+  box-shadow: 0 2px 8px -2px rgba(24, 24, 27, 0.18);
+}
+
+.ar-primary-button:hover { background: #18181b; }
+
+.ar-accent-button {
+  background: var(--ar-accent);
+  color: #fff;
+  box-shadow: 0 2px 8px -2px rgba(5, 150, 105, 0.32);
+}
+
+.ar-accent-button:hover { background: #047857; }
+
+.ar-secondary-button {
+  color: #3f3f46;
+  border: 1px solid var(--ar-border);
+  background: #fff;
+}
+
+.ar-secondary-button:hover { background: var(--ar-surface-muted); }
+
+.ar-danger-button {
+  background: var(--ar-danger);
+  color: #fff;
+  box-shadow: 0 2px 8px -2px rgba(220, 38, 38, 0.32);
+}
+
+.ar-danger-button:hover { background: #b91c1c; }
+
+.ar-primary-button:active,
+.ar-secondary-button:active,
+.ar-accent-button:active,
+.ar-danger-button:active {
+  transform: scale(0.97);
+}
+
+.ar-primary-button:disabled,
+.ar-secondary-button:disabled,
+.ar-accent-button:disabled,
+.ar-danger-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+}
+
 /* ── Animations ── */
 @keyframes ctxFadeIn {
   from { opacity: 0; transform: scale(0.96) translateY(-4px); }

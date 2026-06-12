@@ -17,6 +17,7 @@ export function Payments() {
   const [unpaid, setUnpaid] = useState<PaymentInfo[]>([]);
   const [tab, setTab] = useState<'unpaid' | 'all'>('unpaid');
   const [isMarking, setIsMarking] = useState(false);
+  const totalUnpaid = unpaid.reduce((sum, p) => sum + p.amount, 0);
 
   const load = async () => {
     const unpaidList = await window.api.paymentsListUnpaid();
@@ -46,21 +47,21 @@ export function Payments() {
   };
 
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="w-[90%] mx-auto px-8 py-10" style={{ animation: 'fadeIn 0.3s ease' }}>
+    <div className="ar-page">
+      <div className="ar-page-inner">
 
         {/* Header */}
-        <div className="flex items-end justify-between mb-6">
-          <p className="text-sm text-zinc-400">Track unpaid records and balance changes</p>
-          <div className="flex items-center gap-2">
+        <div className="ar-page-header">
+          <div>
+            <h1 className="ar-page-title">Payments</h1>
+            <p className="ar-page-copy">Track unpaid records and settle session fees quickly.</p>
+          </div>
+          <div className="ar-toolbar !mb-0">
             {unpaid.length > 0 && (
               <button
                 onClick={handleMarkAllPaid}
                 disabled={isMarking}
-                className="h-8 px-3.5 text-sm font-medium bg-emerald-600 text-white rounded-lg
-                  hover:bg-emerald-500 active:scale-[0.97] shadow-[0_2px_8px_-2px_rgba(5,150,105,0.3)]
-                  transition-all inline-flex items-center justify-center gap-1.5
-                  disabled:opacity-50 disabled:cursor-not-allowed"
+                className="ar-accent-button"
               >
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
@@ -71,15 +72,28 @@ export function Payments() {
           </div>
         </div>
 
+        <div className="grid grid-cols-3 gap-4 mb-6">
+          <div className="ar-stat-card">
+            <p className="ar-stat-label">Unpaid players</p>
+            <p className="ar-stat-value">{unpaid.length}</p>
+          </div>
+          <div className="ar-stat-card">
+            <p className="ar-stat-label">Outstanding</p>
+            <p className="ar-stat-value !text-red-500">${totalUnpaid.toFixed(0)}</p>
+          </div>
+          <div className="ar-stat-card">
+            <p className="ar-stat-label">Payment queue</p>
+            <p className="ar-stat-value !text-2xl">{unpaid.length > 0 ? 'Open' : 'Clear'}</p>
+            <p className="ar-stat-meta">{unpaid.length > 0 ? 'Action needed' : 'No pending fees'}</p>
+          </div>
+        </div>
+
         {/* Tab bar */}
-        <div className="flex gap-1 mb-6 p-1 bg-zinc-100/80 rounded-xl w-fit">
+        <div className="ar-segment mb-6">
           <button
             onClick={() => setTab('unpaid')}
-            className={`px-4 py-1.5 text-sm font-medium rounded-lg transition-all duration-150 ${
-              tab === 'unpaid'
-                ? 'bg-white text-zinc-900 shadow-[0_1px_3px_rgba(0,0,0,0.06)]'
-                : 'text-zinc-500 hover:text-zinc-700'
-            }`}
+            data-active={tab === 'unpaid'}
+            className="ar-segment-button"
           >
             Unpaid
             {unpaid.length > 0 && (
@@ -92,11 +106,8 @@ export function Payments() {
           </button>
           <button
             onClick={() => setTab('all')}
-            className={`px-4 py-1.5 text-sm font-medium rounded-lg transition-all duration-150 ${
-              tab === 'all'
-                ? 'bg-white text-zinc-900 shadow-[0_1px_3px_rgba(0,0,0,0.06)]'
-                : 'text-zinc-500 hover:text-zinc-700'
-            }`}
+            data-active={tab === 'all'}
+            className="ar-segment-button"
           >
             All Records
           </button>
@@ -106,13 +117,12 @@ export function Payments() {
         {tab === 'unpaid' && (
           <>
             {unpaid.length > 0 ? (
-              <div className="space-y-2">
+              <div className="ar-card overflow-hidden divide-y divide-zinc-100/80">
                 {unpaid.map(p => {
                   return (
                     <div
                       key={p.id}
-                      className="flex items-center gap-4 px-5 py-3.5 bg-white border border-zinc-200/80 rounded-2xl
-                        hover:border-zinc-300 hover:shadow-[0_4px_12px_-4px_rgba(0,0,0,0.06)] transition-all duration-200 group"
+                      className="flex items-center gap-4 px-5 py-3.5 bg-white hover:bg-zinc-50/70 transition-all duration-200 group"
                     >
                       {/* Avatar */}
                       <div
@@ -141,25 +151,13 @@ export function Payments() {
                       {/* Action */}
                       <button
                         onClick={() => handleMarkPaid(p.id)}
-                        className="shrink-0 h-8 px-3 text-xs font-semibold text-emerald-600 bg-emerald-50
-                          rounded-lg hover:bg-emerald-100 active:scale-95 transition-all
-                          opacity-0 group-hover:opacity-100"
+                        className="shrink-0 h-8 px-3 text-xs font-semibold text-emerald-600 bg-emerald-50 rounded-lg hover:bg-emerald-100 active:scale-95 transition-all opacity-0 group-hover:opacity-100"
                       >
                         Mark Paid
                       </button>
                     </div>
                   );
                 })}
-
-                {/* Summary bar */}
-                <div className="flex items-center justify-between px-5 py-3 mt-4 rounded-2xl bg-red-50/70 border border-red-100/80">
-                  <span className="text-sm text-red-700 font-medium">
-                    {unpaid.length} players unpaid
-                  </span>
-                  <span className="text-lg font-bold text-red-600 tabular-nums">
-                    ${unpaid.reduce((sum, p) => sum + p.amount, 0).toFixed(0)}
-                  </span>
-                </div>
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center py-24 text-zinc-400">
