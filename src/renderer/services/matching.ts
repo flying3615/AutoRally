@@ -256,19 +256,12 @@ export function generateMatches(
         tie,
       };
 
-      if (
+      const better =
         !bestTeams ||
-        balance - bestTeams.balance ||
-        partners - bestTeams.partners ||
-        tie - bestTeams.tie
-      ) {
-        const better =
-          !bestTeams ||
-          balance < bestTeams.balance ||
-          (balance === bestTeams.balance && partners < bestTeams.partners) ||
-          (balance === bestTeams.balance && partners === bestTeams.partners && tie < bestTeams.tie);
-        if (better) bestTeams = current;
-      }
+        balance < bestTeams.balance ||
+        (balance === bestTeams.balance && partners < bestTeams.partners) ||
+        (balance === bestTeams.balance && partners === bestTeams.partners && tie < bestTeams.tie);
+      if (better) bestTeams = current;
     }
     if (!bestTeams) return;
 
