@@ -1,7 +1,8 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { useGameContext } from '../contexts/GameContext';
-import { genderColors } from '../theme';
+import { courtPhase, genderColors } from '../theme';
+import type { CourtPhase } from '../theme';
 import { GameCourtCard } from './matchPanel/GameCourtCard';
 import { WaitingPoolSidebar } from './matchPanel/WaitingPoolSidebar';
 import { formatSecondsAsClock, pendingCountdownLabel } from './matchPanel/time';
@@ -357,6 +358,14 @@ export function MatchPanel() {
     generatePendingRound: handleGenerate,
   });
 
+  // Floating master timer reads the shared phase palette. 'ended' shows as the
+  // running (green) treatment here, matching the previous inline behaviour.
+  const masterPhase: CourtPhase =
+    masterTimer?.phase === 'paused' ? 'paused'
+    : masterTimer?.phase === 'warning' ? 'warning'
+    : 'running';
+  const masterColors = courtPhase[masterPhase];
+
   return (
     <div className="absolute inset-0 flex">
       <style>{`
@@ -479,14 +488,10 @@ export function MatchPanel() {
               className="fixed top-12 left-1/2 -translate-x-1/2 z-40 flex items-center gap-6 rounded-2xl border"
               style={{
                 padding: '12px 32px',
-                backgroundColor: masterTimer?.phase === 'paused' ? 'rgba(245,244,241,0.95)' : masterTimer?.phase === 'warning' ? 'rgba(255,251,235,0.95)' : 'rgba(240,253,244,0.95)',
-                borderColor: masterTimer?.phase === 'paused' ? '#d6d3d1' : masterTimer?.phase === 'warning' ? '#fde68a' : '#bbf7d0',
+                backgroundColor: masterColors.surfaceGlass,
+                borderColor: masterColors.border,
                 backdropFilter: 'blur(8px)',
-                boxShadow: masterTimer?.phase === 'paused'
-                  ? '0 8px 30px -8px rgba(120,113,108,0.2)'
-                  : masterTimer?.phase === 'warning'
-                    ? '0 8px 30px -8px rgba(234,179,8,0.35)'
-                    : '0 8px 30px -8px rgba(34,197,94,0.25)',
+                boxShadow: masterColors.overlayShadow,
                 animation: 'ctxFadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
               }}
             >
@@ -495,14 +500,14 @@ export function MatchPanel() {
                   className="font-mono font-bold tabular-nums tracking-tight leading-none"
                   style={{
                     fontSize: '64px',
-                    color: masterTimer?.phase === 'warning' ? '#d97706' : masterTimer?.phase === 'paused' ? '#a16207' : '#16a34a',
+                    color: masterColors.text,
                   }}
                 >
                   {masterTimer ? formatSecondsAsClock(masterTimer.remaining) : `--:--`}
                 </span>
                 <div className="flex flex-col gap-0.5">
                   <span className="text-xs font-semibold uppercase tracking-wider"
-                    style={{ color: masterTimer?.phase === 'paused' ? '#a16207' : masterTimer?.phase === 'warning' ? '#d97706' : '#16a34a' }}>
+                    style={{ color: masterColors.text }}>
                     {masterTimer?.phase === 'paused' ? 'Paused' : masterTimer?.phase === 'warning' ? 'Time Warning' : 'In Progress'}
                   </span>
                   <span className="text-xs text-zinc-500">

@@ -37,3 +37,55 @@ export const genderColors = {
     accent: '#e11d48', // Rose-600 — for icons/badges
   },
 } as const;
+
+// Translucent accent wash — drag-over highlights and subtle active surfaces.
+// Tinted with the single accent (Emerald-600) so interaction cues stay on-brand.
+export const accentWash = 'rgba(5, 150, 105, 0.08)';
+
+// ── Court / timer phase palette ──
+// Single source of truth for match-panel status colors. Both the court cards
+// and the floating master timer derive their surface/border/text/shadow from
+// here, so a phase always reads as the same hue across the screen.
+export type CourtPhase = 'running' | 'warning' | 'ended' | 'paused';
+
+export const courtPhase: Record<CourtPhase, {
+  surface: string;        // solid court-card background
+  surfaceGlass: string;   // translucent background for the blurred floating timer
+  border: string;
+  text: string;           // strong foreground: timer digits + status label
+  cardShadow: string;     // elevation for court cards
+  overlayShadow: string;  // stronger elevation for the floating timer
+}> = {
+  running: {
+    surface: '#f0fdf4',
+    surfaceGlass: 'rgba(240, 253, 244, 0.95)',
+    border: '#bbf7d0',
+    text: '#16a34a',
+    cardShadow: '0 4px 20px -8px rgba(34, 197, 94, 0.12)',
+    overlayShadow: '0 8px 30px -8px rgba(34, 197, 94, 0.25)',
+  },
+  warning: {
+    surface: '#fffbeb',
+    surfaceGlass: 'rgba(255, 251, 235, 0.95)',
+    border: '#fde68a',
+    text: '#d97706',
+    cardShadow: '0 4px 20px -8px rgba(234, 179, 8, 0.2)',
+    overlayShadow: '0 8px 30px -8px rgba(234, 179, 8, 0.35)',
+  },
+  ended: {
+    surface: '#fef2f2',
+    surfaceGlass: 'rgba(254, 242, 242, 0.95)',
+    border: '#fecaca',
+    text: '#ef4444',
+    cardShadow: '0 4px 20px -8px rgba(239, 68, 68, 0.15)',
+    overlayShadow: '0 8px 30px -8px rgba(239, 68, 68, 0.25)',
+  },
+  paused: {
+    surface: '#f5f5f4',
+    surfaceGlass: 'rgba(245, 244, 241, 0.95)',
+    border: '#d6d3d1',
+    text: '#a16207',
+    cardShadow: '0 4px 20px -8px rgba(120, 113, 108, 0.1)',
+    overlayShadow: '0 8px 30px -8px rgba(120, 113, 108, 0.2)',
+  },
+};

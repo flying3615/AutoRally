@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { genderColors, levelColors } from '../../theme';
+import { accentWash, courtPhase, genderColors, levelColors } from '../../theme';
+import type { CourtPhase } from '../../theme';
 import type { AttendanceInfo, GameInfo } from './types';
 
 type PlayerContextHandler = (e: React.MouseEvent, id: string) => void;
@@ -21,7 +22,7 @@ function DropSlot({
       draggable
       className="rounded-lg cursor-grab w-full h-full flex items-center justify-center"
       style={{
-        backgroundColor: over ? 'rgba(59,130,246,0.06)' : 'transparent',
+        backgroundColor: over ? accentWash : 'transparent',
       }}
       onDragStart={(e) => {
         e.dataTransfer.setData('application/x-player-id', playerId);
@@ -176,19 +177,16 @@ export function PlayerCard({
 
 function gameCardStyle(variant: GameCourtCardProps['variant'], timerPhase?: GameCourtCardProps['timerPhase']) {
   if (variant === 'active') {
-    const isPaused = timerPhase === 'paused';
-    const isEnded = timerPhase === 'ended';
-    const isWarning = timerPhase === 'warning';
+    const phase: CourtPhase =
+      timerPhase === 'paused' ? 'paused'
+      : timerPhase === 'ended' ? 'ended'
+      : timerPhase === 'warning' ? 'warning'
+      : 'running';
+    const pc = courtPhase[phase];
     return {
-      backgroundColor: isPaused ? '#f5f5f4' : isEnded ? '#fef2f2' : isWarning ? '#fffbeb' : '#f0fdf4',
-      borderColor: isPaused ? '#d6d3d1' : isEnded ? '#fecaca' : isWarning ? '#fde68a' : '#bbf7d0',
-      boxShadow: isPaused
-        ? '0 4px 20px -8px rgba(120,113,108,0.1)'
-        : isEnded
-          ? '0 4px 20px -8px rgba(239,68,68,0.15)'
-          : isWarning
-            ? '0 4px 20px -8px rgba(234,179,8,0.2)'
-            : '0 4px 20px -8px rgba(34,197,94,0.12)',
+      backgroundColor: pc.surface,
+      borderColor: pc.border,
+      boxShadow: pc.cardShadow,
     };
   }
 
