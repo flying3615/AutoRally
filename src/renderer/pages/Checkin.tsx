@@ -1,6 +1,8 @@
 import { useEffect, useState, useRef } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { levelColors, genderColors } from '../theme';
+import { confirm } from '../stores/confirmStore';
+import { toast } from '../stores/toastStore';
 
 interface PlayerInfo {
   id: string;
@@ -127,7 +129,7 @@ function EditPlayerModal({
       await window.api.playersUpdate(player.id, { name, gender, level, phone });
       onSaved();
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Failed to save player');
+      toast.error(err instanceof Error ? err.message : 'Failed to save player');
     } finally {
       setSaving(false);
     }
@@ -267,7 +269,7 @@ function AddPlayerModal({
       await onCreated(created, checkIn);
       onClose();
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Failed to add player');
+      toast.error(err instanceof Error ? err.message : 'Failed to add player');
     } finally {
       setSavingAction(null);
     }
@@ -481,7 +483,12 @@ export function Checkin() {
   const handleDeletePlayer = async () => {
     if (!ctxMenu) return;
     const player = ctxMenu.player;
-    const ok = window.confirm(`Delete ${player.name}? This will remove their check-ins and payment history.`);
+    const ok = await confirm({
+      title: `Delete ${player.name}?`,
+      message: 'This will remove their check-ins and payment history.',
+      confirmLabel: 'Delete',
+      danger: true,
+    });
     if (!ok) return;
 
     await window.api.playersDelete(player.id);
@@ -519,7 +526,7 @@ export function Checkin() {
       setCheckedInSet(prev => new Set(prev).add(playerId));
       load();
     } catch (err: any) {
-      alert(err?.message ?? 'Check-in failed');
+      toast.error(err?.message ?? 'Check-in failed');
     }
   };
 

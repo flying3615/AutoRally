@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { GameProvider } from '../contexts/GameContext';
 import { useSessionStore } from '../stores/sessionStore';
+import { ToastViewport } from './Toast';
+import { ConfirmDialog } from './ConfirmDialog';
 
 const navItems = [
   {
@@ -371,6 +373,8 @@ export function Layout() {
           <StatusBar />
         </div>
       </div>
+      <ToastViewport />
+      <ConfirmDialog />
     </GameProvider>
   );
 }

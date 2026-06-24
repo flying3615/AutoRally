@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { AgGridReact } from 'ag-grid-react';
+import { confirm } from '../stores/confirmStore';
 
 const formatLabel = (f: string) => f === 'knockout' ? 'Knockout' : f === 'round_robin' ? 'Round Robin' : 'Mixed';
 
@@ -171,7 +172,13 @@ export function TournamentDetail() {
       const message = hasCompletedMatches
         ? 'Regenerating will delete the current schedule and completed scores. Continue?'
         : 'Regenerating will replace the current schedule. Continue?';
-      if (!window.confirm(message)) return;
+      const ok = await confirm({
+        title: 'Regenerate schedule?',
+        message,
+        confirmLabel: 'Regenerate',
+        danger: true,
+      });
+      if (!ok) return;
     }
 
     setBusyAction('generate');

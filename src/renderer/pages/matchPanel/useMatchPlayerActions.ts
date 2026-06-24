@@ -1,4 +1,6 @@
 import { useMemo, useState, type MouseEvent } from 'react';
+import { confirm } from '../../stores/confirmStore';
+import { toast } from '../../stores/toastStore';
 import type { AttendanceInfo, ContextMenuTarget, GameInfo, PlayerInfo } from './types';
 
 interface UseMatchPlayerActionsParams {
@@ -91,14 +93,17 @@ export function useMatchPlayerActions({
 
   const handleRestoreCheckin = async (target: ContextMenuTarget) => {
     if (!sessionId) return;
-    const useCash = window.confirm(
-      `Re-check in ${target.name}?\n\nOK = Credit   Cancel = Cash`
-    );
-    const method = useCash ? 'credit' : 'cash';
+    const useCredit = await confirm({
+      title: `Re-check in ${target.name}?`,
+      message: 'Choose how to record this re-check-in.',
+      confirmLabel: 'Use Credit',
+      cancelLabel: 'Use Cash',
+    });
+    const method = useCredit ? 'credit' : 'cash';
     try {
       await window.api.attendanceCheckin(target.playerId, sessionId, method as 'credit' | 'cash');
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Check-in failed');
+      toast.error(err instanceof Error ? err.message : 'Check-in failed');
       return;
     }
     setCtxMenu(null);
@@ -141,7 +146,7 @@ export function useMatchPlayerActions({
       }
     } catch (err) {
       console.error('Replace player failed:', err);
-      alert('Failed to move player. Please try again.');
+      toast.error('Failed to move player. Please try again.');
     }
     await load();
   };

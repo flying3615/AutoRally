@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { toast } from '../stores/toastStore';
 
 interface PaymentInfo {
   id: string;
@@ -38,7 +39,7 @@ export function Payments() {
         await window.api.paymentsMarkPaid(p.id);
       }
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Failed to mark payments as paid');
+      toast.error(err instanceof Error ? err.message : 'Failed to mark payments as paid');
     } finally {
       setIsMarking(false);
       load();

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useSessionStore } from '../stores/sessionStore';
+import { confirm } from '../stores/confirmStore';
 
 interface SettingsData {
   courtCount: string;
@@ -222,7 +223,12 @@ export function Settings() {
   };
 
   const handleImportBackup = async () => {
-    const ok = window.confirm('Importing a backup will replace all current players, sessions, games, payments, and settings on this computer. Continue?');
+    const ok = await confirm({
+      title: 'Import backup?',
+      message: 'Importing a backup will replace all current players, sessions, games, payments, and settings on this computer.',
+      confirmLabel: 'Import & Replace',
+      danger: true,
+    });
     if (!ok) return;
 
     setBackupBusy('import');

@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import { generateMatches } from '../../services/matching';
+import { toast } from '../../stores/toastStore';
 import type { AttendanceInfo, GameInfo, Settings } from './types';
 
 interface UseMatchGenerationParams {
@@ -65,7 +66,7 @@ export function useMatchGeneration({
       const matches = generateMatches(pool, courtCount, nextRound, countedGames);
 
       if (matches.length === 0) {
-        alert(`Not enough players to generate matches (waiting pool has ${pool.length} players, need at least ${courtCount * 4})`);
+        toast.info(`Not enough players to generate matches (waiting pool has ${pool.length} players, need at least ${courtCount * 4})`);
         return;
       }
 
@@ -84,7 +85,7 @@ export function useMatchGeneration({
       }
       load();
     } catch (err: unknown) {
-      alert('Failed to generate matches: ' + (err instanceof Error ? err.message : String(err)));
+      toast.error('Failed to generate matches: ' + (err instanceof Error ? err.message : String(err)));
     }
   }, [sessionId, settings, attendance, playingIds, activeGames, load]);
 }
