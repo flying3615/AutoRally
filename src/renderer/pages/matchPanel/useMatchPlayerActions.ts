@@ -1,5 +1,5 @@
 import { useMemo, useState, type MouseEvent } from 'react';
-import { confirm } from '../../stores/confirmStore';
+import { choose } from '../../stores/confirmStore';
 import { toast } from '../../stores/toastStore';
 import type { AttendanceInfo, ContextMenuTarget, GameInfo, PlayerInfo } from './types';
 
@@ -93,13 +93,17 @@ export function useMatchPlayerActions({
 
   const handleRestoreCheckin = async (target: ContextMenuTarget) => {
     if (!sessionId) return;
-    const useCredit = await confirm({
+    const choice = await choose({
       title: `Re-check in ${target.name}?`,
-      message: 'Choose how to record this re-check-in.',
-      confirmLabel: 'Use Credit',
-      cancelLabel: 'Use Cash',
+      message: 'Choose how to record this re-check-in, or press Esc to cancel.',
+      actions: [
+        { value: 'cash', label: 'Use Cash' },
+        { value: 'credit', label: 'Use Credit', tone: 'primary' },
+      ],
+      dismissValue: null,
     });
-    const method = useCredit ? 'credit' : 'cash';
+    if (choice === null) return;  // dismissed — abort entirely, no check-in
+    const method = choice === 'credit' ? 'credit' : 'cash';
     try {
       await window.api.attendanceCheckin(target.playerId, sessionId, method as 'credit' | 'cash');
     } catch (err: unknown) {
