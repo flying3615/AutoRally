@@ -533,6 +533,9 @@ export function Checkin() {
     try {
       await window.api.attendanceCheckin(playerId, sessionId, method);
       setCheckedInSet(prev => new Set(prev).add(playerId));
+      if (method === 'defer') {
+        setUnpaidIds(prev => new Set(prev).add(playerId));
+      }
       load();
     } catch (err: any) {
       alert(err?.message ?? 'Check-in failed');
