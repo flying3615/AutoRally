@@ -4,6 +4,23 @@ import type { AttendanceInfo, GameInfo } from './types';
 
 type PlayerContextHandler = (e: React.MouseEvent, id: string) => void;
 type DropPlayerHandler = (gameId: string, slot: string, newPlayerId: string, sourceData?: string) => void;
+type CourtSlot = 'team1Player1Id' | 'team1Player2Id' | 'team2Player1Id' | 'team2Player2Id';
+
+// ── Court header helpers ──
+const GAME_TYPE_LABEL: Record<string, string> = {
+  'mixed': 'Mixed',
+  'male-double': "Men's",
+  'female-double': "Women's",
+  'open-double': 'Open',
+};
+
+function levelRangeLabel(levels: number[]): string {
+  const valid = levels.filter(l => Number.isFinite(l));
+  if (valid.length === 0) return 'Lv —';
+  const lo = Math.min(...valid);
+  const hi = Math.max(...valid);
+  return lo === hi ? `Lv ${lo}` : `Lv ${lo}-${hi}`;
+}
 
 function DropSlot({
   gameId, slot, playerId, onDropPlayer, children,
@@ -64,7 +81,7 @@ function PlayerTag({
 
   return (
     <div
-      className="inline-flex items-center justify-center w-full h-full px-2 py-5 rounded-xl select-none relative min-w-0 overflow-hidden"
+      className="inline-flex items-center justify-center w-full h-full px-2 py-3 rounded-xl select-none relative min-w-0 overflow-hidden"
       style={{
         backgroundColor: paused ? '#f5f5f4' : checkedOut ? '#fef2f2' : gc.bg,
         borderWidth: 1,
@@ -105,6 +122,54 @@ function PlayerTag({
         </span>
       )}
     </div>
+  );
+}
+
+// ── NEXT UP chip — draggable / droppable next-round slot ──
+function NextUpChip({
+  game, slot, name, gender, onDropPlayer,
+}: {
+  game: GameInfo; slot: CourtSlot; name: string; gender: string;
+  onDropPlayer?: DropPlayerHandler;
+}) {
+  const [over, setOver] = useState(false);
+  const dot = gender === 'male' ? genderColors.male.accent : genderColors.female.accent;
+  const playerId = game[slot];
+  const source = `${game.id}:${slot}`;
+
+  return (
+    <span
+      draggable
+      title="Drag to swap — or drop a waiting-pool player here"
+      onDragStart={(e) => {
+        e.dataTransfer.setData('application/x-player-id', playerId);
+        e.dataTransfer.setData('application/x-source', source);
+        e.dataTransfer.setData('text/plain', playerId);
+        e.dataTransfer.effectAllowed = 'move';
+      }}
+      onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
+      onDragEnter={(e) => { e.preventDefault(); setOver(true); }}
+      onDragLeave={() => setOver(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setOver(false);
+        const draggedId = e.dataTransfer.getData('application/x-player-id') || e.dataTransfer.getData('text/plain');
+        const src = e.dataTransfer.getData('application/x-source');
+        if (draggedId && onDropPlayer) onDropPlayer(game.id, slot, draggedId, src || undefined);
+      }}
+      className="inline-flex items-center gap-1.5 cursor-grab text-[13px] font-semibold text-zinc-600 rounded-lg px-2 py-1 truncate max-w-[120px]"
+      style={{
+        borderWidth: 1,
+        borderStyle: 'dashed',
+        borderColor: over ? '#f59e0b' : '#d4d4d8',
+        backgroundColor: over ? '#fef3c7' : 'transparent',
+        transition: 'background-color 0.12s ease, border-color 0.12s ease',
+      }}
+    >
+      <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: dot }} />
+      <span className="truncate">{name}</span>
+    </span>
   );
 }
 
@@ -180,15 +245,15 @@ function gameCardStyle(variant: GameCourtCardProps['variant'], timerPhase?: Game
     const isEnded = timerPhase === 'ended';
     const isWarning = timerPhase === 'warning';
     return {
-      backgroundColor: isPaused ? '#f5f5f4' : isEnded ? '#fef2f2' : isWarning ? '#fffbeb' : '#f0fdf4',
-      borderColor: isPaused ? '#d6d3d1' : isEnded ? '#fecaca' : isWarning ? '#fde68a' : '#bbf7d0',
+      backgroundColor: '#ffffff',
+      borderColor: isPaused ? '#e7e5e4' : isEnded ? '#fecaca' : isWarning ? '#fde68a' : '#bbf7d0',
       boxShadow: isPaused
-        ? '0 4px 20px -8px rgba(120,113,108,0.1)'
+        ? '0 4px 20px -10px rgba(120,113,108,0.12)'
         : isEnded
-          ? '0 4px 20px -8px rgba(239,68,68,0.15)'
+          ? '0 4px 20px -10px rgba(239,68,68,0.18)'
           : isWarning
-            ? '0 4px 20px -8px rgba(234,179,8,0.2)'
-            : '0 4px 20px -8px rgba(34,197,94,0.12)',
+            ? '0 4px 20px -10px rgba(234,179,8,0.22)'
+            : '0 4px 20px -10px rgba(34,197,94,0.18)',
     };
   }
 
@@ -207,10 +272,47 @@ function gameCardStyle(variant: GameCourtCardProps['variant'], timerPhase?: Game
   };
 }
 
+// ── Court header (badge + type/level pill + status indicator) ──
+function courtHeaderTokens(variant: GameCourtCardProps['variant'], timerPhase?: GameCourtCardProps['timerPhase']) {
+  if (variant === 'active') {
+    const map: Record<string, { label: string; color: string; dot: string }> = {
+      running: { label: 'LIVE', color: '#16a34a', dot: '#22c55e' },
+      warning: { label: 'ENDING', color: '#d97706', dot: '#f59e0b' },
+      paused: { label: 'PAUSED', color: '#a16207', dot: '#ca8a04' },
+      ended: { label: 'DONE', color: '#dc2626', dot: '#ef4444' },
+    };
+    const ind = map[timerPhase ?? 'running'] ?? map.running!;
+    return {
+      badgeBg: timerPhase === 'paused' ? '#78716c' : '#059669',
+      badgeShadow: timerPhase === 'paused' ? 'rgba(120,113,108,0.45)' : 'rgba(5,150,105,0.55)',
+      pillBg: '#d1fae5',
+      pillText: '#047857',
+      ind,
+    };
+  }
+  if (variant === 'warning') {
+    return {
+      badgeBg: '#d97706',
+      badgeShadow: 'rgba(217,119,6,0.5)',
+      pillBg: '#fef3c7',
+      pillText: '#b45309',
+      ind: { label: 'NEXT UP', color: '#d97706', dot: '#f59e0b' },
+    };
+  }
+  return {
+    badgeBg: '#52525b',
+    badgeShadow: 'rgba(82,82,91,0.4)',
+    pillBg: '#f4f4f5',
+    pillText: '#71717a',
+    ind: { label: 'NEXT UP', color: '#94a3b8', dot: '#cbd5e1' },
+  };
+}
+
 interface GameCourtCardProps {
   game: GameInfo;
   variant: 'active' | 'pending' | 'warning';
   timerPhase?: 'running' | 'warning' | 'ended' | 'paused';
+  nextUpGame?: GameInfo;
   pausedPlayerIds: Set<string>;
   checkedOutPlayerIds: Set<string>;
   onContextMenu: PlayerContextHandler;
@@ -221,18 +323,21 @@ export function GameCourtCard({
   game,
   variant,
   timerPhase,
+  nextUpGame,
   pausedPlayerIds,
   checkedOutPlayerIds,
   onContextMenu,
   onDropPlayer,
 }: GameCourtCardProps) {
-  const isPaused = timerPhase === 'paused';
   const style = gameCardStyle(variant, timerPhase);
-  const courtColor = variant === 'warning' ? '#d97706' : '#71717a';
   const lineColor = variant === 'warning' ? 'rgba(253,230,138,0.6)' : 'rgba(228,228,231,0.6)';
+  const { badgeBg, badgeShadow, pillBg, pillText, ind } = courtHeaderTokens(variant, timerPhase);
+
+  const typeLabel = GAME_TYPE_LABEL[game.gameType] ?? 'Match';
+  const levelLabel = levelRangeLabel([game.t1p1Level, game.t1p2Level, game.t2p1Level, game.t2p2Level]);
 
   const renderPlayer = (
-    slot: 'team1Player1Id' | 'team1Player2Id' | 'team2Player1Id' | 'team2Player2Id',
+    slot: CourtSlot,
     name: string,
     gender: string,
     level: number,
@@ -260,39 +365,81 @@ export function GameCourtCard({
 
   return (
     <div
-      className="rounded-2xl border p-5 h-full flex items-center relative"
+      className="rounded-2xl border h-full flex flex-col relative overflow-hidden"
       style={style}
     >
-      {isPaused && (
-        <div className="absolute top-2 right-2 text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full z-10">
-          Paused
+      {/* Header: court badge · type/level pill · status */}
+      <div className="flex items-center justify-between gap-2 px-4 pt-3.5 shrink-0">
+        <div className="flex items-center gap-3 min-w-0">
+          <div
+            className="rounded-xl flex flex-col items-center justify-center shrink-0"
+            style={{ width: 50, height: 50, backgroundColor: badgeBg, boxShadow: `0 8px 18px -8px ${badgeShadow}` }}
+          >
+            <span className="text-[8px] font-bold leading-none" style={{ letterSpacing: '0.14em', color: 'rgba(255,255,255,0.75)' }}>COURT</span>
+            <span className="font-mono font-medium text-white leading-tight" style={{ fontSize: 26 }}>{game.courtNumber}</span>
+          </div>
+          <span
+            className="text-[11px] font-semibold rounded-md px-2 py-1 truncate"
+            style={{ color: pillText, backgroundColor: pillBg }}
+          >
+            {typeLabel} · {levelLabel}
+          </span>
         </div>
-      )}
+        <span className="inline-flex items-center gap-1.5 text-[11px] font-bold shrink-0" style={{ letterSpacing: '0.06em', color: ind.color }}>
+          {variant === 'active' && (
+            <span className="w-[7px] h-[7px] rounded-full animate-pulse" style={{ backgroundColor: ind.dot }} />
+          )}
+          {ind.label}
+        </span>
+      </div>
 
-      <div className="grid gap-1 w-full h-full" style={{ gridTemplateColumns: '1fr auto 1fr', gridTemplateRows: '1fr 1fr' }}>
-        <div className="flex items-center justify-center min-w-0 h-full">
-          {renderPlayer('team1Player1Id', game.t1p1Name, game.t1p1Gender, game.t1p1Level)}
-        </div>
+      {/* Players: 2×2 with VS divider */}
+      <div className="flex-1 min-h-0 px-4 pt-2.5 pb-2.5">
+        <div className="grid gap-1.5 w-full h-full" style={{ gridTemplateColumns: '1fr auto 1fr', gridTemplateRows: '1fr 1fr' }}>
+          <div className="flex items-center justify-center min-w-0 h-full">
+            {renderPlayer('team1Player1Id', game.t1p1Name, game.t1p1Gender, game.t1p1Level)}
+          </div>
 
-        <div className="flex flex-col items-center justify-center gap-2 px-2 row-span-2" style={{ gridRow: '1 / 3', gridColumn: '2' }}>
-          <span className="text-base font-extrabold tabular-nums tracking-tight" style={{ color: courtColor }}>C{game.courtNumber}</span>
-          <div className="w-px flex-1" style={{ backgroundColor: lineColor }} />
-          <span className="text-xs font-bold" style={{ color: variant === 'warning' ? '#f59e0b' : '#a1a1aa' }}>VS</span>
-          <div className="w-px flex-1" style={{ backgroundColor: lineColor }} />
-        </div>
+          <div className="flex flex-col items-center justify-center gap-1.5 px-1" style={{ gridRow: '1 / 3', gridColumn: '2' }}>
+            <div className="w-px flex-1" style={{ backgroundColor: lineColor }} />
+            <span className="text-xs font-bold" style={{ color: variant === 'warning' ? '#f59e0b' : '#a1a1aa' }}>VS</span>
+            <div className="w-px flex-1" style={{ backgroundColor: lineColor }} />
+          </div>
 
-        <div className="flex items-center justify-center min-w-0 h-full">
-          {renderPlayer('team2Player1Id', game.t2p1Name, game.t2p1Gender, game.t2p1Level)}
-        </div>
+          <div className="flex items-center justify-center min-w-0 h-full">
+            {renderPlayer('team2Player1Id', game.t2p1Name, game.t2p1Gender, game.t2p1Level)}
+          </div>
 
-        <div className="flex items-center justify-center min-w-0 h-full" style={{ gridRow: '2', gridColumn: '1' }}>
-          {renderPlayer('team1Player2Id', game.t1p2Name, game.t1p2Gender, game.t1p2Level)}
-        </div>
+          <div className="flex items-center justify-center min-w-0 h-full" style={{ gridRow: '2', gridColumn: '1' }}>
+            {renderPlayer('team1Player2Id', game.t1p2Name, game.t1p2Gender, game.t1p2Level)}
+          </div>
 
-        <div className="flex items-center justify-center min-w-0 h-full" style={{ gridRow: '2', gridColumn: '3' }}>
-          {renderPlayer('team2Player2Id', game.t2p2Name, game.t2p2Gender, game.t2p2Level)}
+          <div className="flex items-center justify-center min-w-0 h-full" style={{ gridRow: '2', gridColumn: '3' }}>
+            {renderPlayer('team2Player2Id', game.t2p2Name, game.t2p2Gender, game.t2p2Level)}
+          </div>
         </div>
       </div>
+
+      {/* NEXT UP — inline next-round preview (active courts only) */}
+      {variant === 'active' && (
+        <div
+          className="shrink-0 mx-4 mb-3 pt-2.5 flex items-center gap-2 min-w-0"
+          style={{ borderTop: '1px dashed #e4e4e7' }}
+        >
+          <span className="text-[10px] font-bold text-slate-400 shrink-0" style={{ letterSpacing: '0.1em' }}>NEXT UP</span>
+          {nextUpGame ? (
+            <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+              <NextUpChip game={nextUpGame} slot="team1Player1Id" name={nextUpGame.t1p1Name} gender={nextUpGame.t1p1Gender} onDropPlayer={onDropPlayer} />
+              <NextUpChip game={nextUpGame} slot="team1Player2Id" name={nextUpGame.t1p2Name} gender={nextUpGame.t1p2Gender} onDropPlayer={onDropPlayer} />
+              <span className="text-[11px] font-bold text-slate-300">vs</span>
+              <NextUpChip game={nextUpGame} slot="team2Player1Id" name={nextUpGame.t2p1Name} gender={nextUpGame.t2p1Gender} onDropPlayer={onDropPlayer} />
+              <NextUpChip game={nextUpGame} slot="team2Player2Id" name={nextUpGame.t2p2Name} gender={nextUpGame.t2p2Gender} onDropPlayer={onDropPlayer} />
+            </div>
+          ) : (
+            <span className="text-[11px] text-zinc-400 font-medium truncate">Waiting for enough players to fill the next round</span>
+          )}
+        </div>
+      )}
     </div>
   );
 }

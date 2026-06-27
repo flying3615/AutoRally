@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { useGameContext } from '../contexts/GameContext';
 import { genderColors } from '../theme';
@@ -251,6 +251,16 @@ function EditPlayerModal({
   );
 }
 
+// ── Round status bar tokens ──
+function roundStatusTokens(phase?: 'running' | 'warning' | 'ended' | 'paused') {
+  switch (phase) {
+    case 'paused': return { color: '#a16207', label: 'Paused' };
+    case 'warning': return { color: '#d97706', label: 'Ending soon' };
+    case 'ended': return { color: '#dc2626', label: 'Round over' };
+    default: return { color: '#16a34a', label: 'In progress' };
+  }
+}
+
 // ═══════════════════════════════════════════
 // Main MatchPanel Component
 // ═══════════════════════════════════════════
@@ -275,7 +285,19 @@ export function MatchPanel() {
     femaleWaiting,
   } = useMatchPanelData(sessionId);
   const [poolWidth, setPoolWidth] = useState(288);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const isDragging = useRef(false);
+
+  useEffect(() => {
+    const handler = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', handler);
+    return () => document.removeEventListener('fullscreenchange', handler);
+  }, []);
+
+  const toggleFullscreen = () => {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else document.documentElement.requestFullscreen();
+  };
   const { timers, startGame, pauseGame, resumeGame, earlyFinishGame } = useGameContext();
   const {
     checkinFeedback,
@@ -357,6 +379,23 @@ export function MatchPanel() {
     generatePendingRound: handleGenerate,
   });
 
+  const roundDurationSeconds = (Number(settings.gameDuration) || 0) * 60;
+  const status = roundStatusTokens(masterTimer?.phase);
+
+  // Shared round progress (all courts run on the same clock)
+  const roundPct = roundDurationSeconds > 0 && masterTimer
+    ? Math.max(0, Math.min(100, (masterTimer.remaining / roundDurationSeconds) * 100))
+    : 0;
+  const roundBarColor = masterTimer?.phase === 'warning' ? '#f59e0b'
+    : masterTimer?.phase === 'paused' ? '#a8a29e'
+    : masterTimer?.phase === 'ended' ? '#ef4444' : '#22c55e';
+
+  const pendingByCourt = useMemo(() => {
+    const map = new Map<number, typeof pendingGames[number]>();
+    for (const g of pendingGames) map.set(g.courtNumber, g);
+    return map;
+  }, [pendingGames]);
+
   return (
     <div className="absolute inset-0 flex">
       <style>{`
@@ -396,234 +435,241 @@ export function MatchPanel() {
       {/* === LEFT: Match Area === */}
       <div className="flex-1 overflow-auto relative">
         <div className="p-4 min-h-full flex flex-col">
-          {/* Compact Header */}
-          <div className="flex items-center justify-between mb-3 shrink-0">
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-zinc-500">
-                Checked in <strong className="text-zinc-700">{attendance.length}</strong>
-              </span>
-              <span className="text-xs text-zinc-500">
-                Waiting <strong className="text-zinc-700">{waitingPlayers.length}</strong>
-              </span>
-              <span className="text-xs text-zinc-500">
-                Round <strong className="text-zinc-700">{currentRound}</strong>
-              </span>
-              {pausedPlayers.length > 0 && (
-                <span className="text-xs text-amber-600">
-                  Paused <strong>{pausedPlayers.length}</strong> players
-                </span>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              {activeGames.length === 0 && pendingGames.length === 0 && (
-                <button
-                  onClick={handleGenerate}
-                  className="px-4 py-1.5 bg-emerald-600 text-white text-xs font-semibold rounded-lg
-                    hover:bg-emerald-700 active:scale-[0.97] transition-transform"
-                >
-                  Generate Matches
-                </button>
-              )}
-              {pendingGames.length > 0 && activeGames.length === 0 && !isWarning && (
-                <div className="flex items-center gap-2">
-                  <span className="px-3 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-100 rounded-lg tabular-nums">
-                    {pendingCountdownLabel(pendingCountdown.remaining, pendingCountdown.paused)}
+
+            {/* ── Round status bar (active) OR compact controls (idle) ── */}
+            {activeGames.length > 0 ? (
+              <div
+                className="shrink-0 mb-3 relative overflow-hidden flex items-center justify-between gap-6 bg-white border border-zinc-200 rounded-2xl px-5 py-3"
+                style={{ boxShadow: '0 2px 8px -4px rgba(0,0,0,0.08)', animation: 'ctxFadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1)' }}
+              >
+                {/* round + counts */}
+                <div className="flex items-center gap-5 min-w-0">
+                  <div>
+                    <div className="text-[10px] font-bold text-zinc-400" style={{ letterSpacing: '0.12em' }}>ROUND</div>
+                    <div className="font-mono font-medium leading-none text-zinc-900" style={{ fontSize: 30, letterSpacing: '-0.03em' }}>{currentRound}</div>
+                  </div>
+                  <div className="w-px h-9 bg-zinc-200" />
+                  <div className="flex flex-col gap-0.5 text-[13px] text-zinc-500 font-medium">
+                    <span><strong className="text-zinc-800 font-semibold">{activeGames.length}</strong> courts active</span>
+                    <span>
+                      <strong className="text-zinc-800 font-semibold">{attendance.length}</strong> checked in
+                      <span className="text-zinc-300 mx-1.5">·</span>
+                      <strong className="text-zinc-800 font-semibold">{waitingPlayers.length}</strong> waiting
+                      {pausedPlayers.length > 0 && (
+                        <>
+                          <span className="text-zinc-300 mx-1.5">·</span>
+                          <strong className="text-amber-600 font-semibold">{pausedPlayers.length}</strong> paused
+                        </>
+                      )}
+                    </span>
+                  </div>
+                </div>
+
+                {/* shared timer */}
+                <div className="flex items-center gap-4 shrink-0">
+                  <div className="flex flex-col items-end gap-0.5">
+                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold" style={{ color: status.color }}>
+                      <span className="w-[7px] h-[7px] rounded-full animate-pulse" style={{ backgroundColor: status.color }} />
+                      {status.label}
+                    </span>
+                    <span className="text-[11px] text-zinc-400 font-medium">Shared round timer</span>
+                  </div>
+                  <span
+                    className="font-mono font-medium tabular-nums leading-none"
+                    style={{ fontSize: 54, letterSpacing: '-0.04em', color: status.color }}
+                  >
+                    {masterTimer ? formatSecondsAsClock(masterTimer.remaining) : '--:--'}
                   </span>
-                  {pendingCountdown.paused ? (
+                </div>
+
+                {/* actions */}
+                <div className="flex items-center gap-2 shrink-0">
+                  {anyPaused ? (
                     <button
-                      onClick={pendingCountdown.resume}
-                      className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-semibold rounded-lg
-                        hover:bg-emerald-700 active:scale-[0.97] transition-transform"
+                      onClick={handleResumeAll}
+                      className="h-9 px-4 bg-emerald-600 text-white text-[13px] font-semibold rounded-lg hover:bg-emerald-700 active:scale-[0.97] transition-transform"
                     >
-                      Resume
+                      Resume all
                     </button>
                   ) : (
                     <button
-                      onClick={pendingCountdown.pause}
-                      className="px-3 py-1.5 bg-amber-500 text-white text-xs font-semibold rounded-lg
-                        hover:bg-amber-600 active:scale-[0.97] transition-transform"
+                      onClick={handlePauseAll}
+                      className="h-9 px-4 bg-amber-500 text-white text-[13px] font-semibold rounded-lg hover:bg-amber-600 active:scale-[0.97] transition-transform"
                     >
-                      Pause
+                      Pause all
                     </button>
                   )}
                   <button
-                    onClick={pendingCountdown.skip}
-                    className="px-4 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg
-                      hover:bg-blue-700 active:scale-[0.97] transition-transform"
-                    style={{ boxShadow: '0 4px 12px -4px rgba(37,99,235,0.4)' }}
+                    onClick={handleFinishAll}
+                    className="h-9 px-4 bg-red-600 text-white text-[13px] font-semibold rounded-lg hover:bg-red-700 active:scale-[0.97] transition-transform"
+                    style={{ boxShadow: '0 2px 8px -2px rgba(220,38,38,0.4)' }}
                   >
-                    Skip Wait
+                    End round
+                  </button>
+                  <button
+                    onClick={toggleFullscreen}
+                    title="全屏 (Esc 退出)"
+                    className="h-9 w-9 flex items-center justify-center text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 rounded-lg transition-colors"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+                    </svg>
                   </button>
                 </div>
-              )}
-            </div>
-          </div>
 
-          {/* Empty state — no games at all */}
-          {activeGames.length === 0 && pendingGames.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-24 text-zinc-400">
-              <svg className="w-16 h-16 mb-4 opacity-20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15.362 5.214A8.252 8.252 0 0112 21 8.25 8.25 0 016.038 7.048 8.287 8.287 0 009 9.6a8.983 8.983 0 013.361-6.867 8.21 8.21 0 003 2.48z" />
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 18a3.75 3.75 0 00.495-7.467 5.99 5.99 0 00-1.925 3.546 5.974 5.974 0 01-2.133-1A3.75 3.75 0 0012 18z" />
-              </svg>
-              <p className="text-sm font-medium mb-1">No matches generated yet</p>
-              <p className="text-xs opacity-60 ">
-                {waitingPlayers.length} players in pool (M {maleWaiting.length} / F {femaleWaiting.length})
-              </p>
-            </div>
-          )}
-
-          {/* === Fixed Timer Overlay — pinned to top-center when games active === */}
-          {activeGames.length > 0 && (
-            <div
-              className="fixed top-12 left-1/2 -translate-x-1/2 z-40 flex items-center gap-6 rounded-2xl border"
-              style={{
-                padding: '12px 32px',
-                backgroundColor: masterTimer?.phase === 'paused' ? 'rgba(245,244,241,0.95)' : masterTimer?.phase === 'warning' ? 'rgba(255,251,235,0.95)' : 'rgba(240,253,244,0.95)',
-                borderColor: masterTimer?.phase === 'paused' ? '#d6d3d1' : masterTimer?.phase === 'warning' ? '#fde68a' : '#bbf7d0',
-                backdropFilter: 'blur(8px)',
-                boxShadow: masterTimer?.phase === 'paused'
-                  ? '0 8px 30px -8px rgba(120,113,108,0.2)'
-                  : masterTimer?.phase === 'warning'
-                    ? '0 8px 30px -8px rgba(234,179,8,0.35)'
-                    : '0 8px 30px -8px rgba(34,197,94,0.25)',
-                animation: 'ctxFadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
-              }}
-            >
-              <div className="flex items-center gap-5">
-                <span
-                  className="font-mono font-bold tabular-nums tracking-tight leading-none"
-                  style={{
-                    fontSize: '64px',
-                    color: masterTimer?.phase === 'warning' ? '#d97706' : masterTimer?.phase === 'paused' ? '#a16207' : '#16a34a',
-                  }}
-                >
-                  {masterTimer ? formatSecondsAsClock(masterTimer.remaining) : `--:--`}
-                </span>
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-xs font-semibold uppercase tracking-wider"
-                    style={{ color: masterTimer?.phase === 'paused' ? '#a16207' : masterTimer?.phase === 'warning' ? '#d97706' : '#16a34a' }}>
-                    {masterTimer?.phase === 'paused' ? 'Paused' : masterTimer?.phase === 'warning' ? 'Time Warning' : 'In Progress'}
+                {/* Shared round progress bar */}
+                <div className="absolute bottom-0 left-0 right-0 h-[3px]" style={{ backgroundColor: '#f4f4f5' }}>
+                  <div
+                    className="h-full"
+                    style={{ width: `${roundPct}%`, backgroundColor: roundBarColor, transition: 'width 1s linear' }}
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between mb-3 shrink-0">
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-zinc-500">
+                    Checked in <strong className="text-zinc-700">{attendance.length}</strong>
                   </span>
                   <span className="text-xs text-zinc-500">
-                    {activeGames.length} courts
-                    {pendingGames.length > 0 && ` · ${pendingGames.length} pending`}
+                    Waiting <strong className="text-zinc-700">{waitingPlayers.length}</strong>
                   </span>
+                  <span className="text-xs text-zinc-500">
+                    Round <strong className="text-zinc-700">{currentRound}</strong>
+                  </span>
+                  {pausedPlayers.length > 0 && (
+                    <span className="text-xs text-amber-600">
+                      Paused <strong>{pausedPlayers.length}</strong> players
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={toggleFullscreen}
+                    title="全屏 (Esc 退出)"
+                    className="p-1.5 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 rounded-lg transition-colors"
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+                    </svg>
+                  </button>
+                  {pendingGames.length === 0 && (
+                    <button
+                      onClick={() => { void handleGenerate(); }}
+                      className="px-4 py-1.5 bg-emerald-600 text-white text-xs font-semibold rounded-lg
+                        hover:bg-emerald-700 active:scale-[0.97] transition-transform"
+                    >
+                      Generate Matches
+                    </button>
+                  )}
+                  {pendingGames.length > 0 && !isWarning && (
+                    <div className="flex items-center gap-2">
+                      <span className="px-3 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-100 rounded-lg tabular-nums">
+                        {pendingCountdownLabel(pendingCountdown.remaining, pendingCountdown.paused)}
+                      </span>
+                      {pendingCountdown.paused ? (
+                        <button
+                          onClick={pendingCountdown.resume}
+                          className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-semibold rounded-lg
+                            hover:bg-emerald-700 active:scale-[0.97] transition-transform"
+                        >
+                          Resume
+                        </button>
+                      ) : (
+                        <button
+                          onClick={pendingCountdown.pause}
+                          className="px-3 py-1.5 bg-amber-500 text-white text-xs font-semibold rounded-lg
+                            hover:bg-amber-600 active:scale-[0.97] transition-transform"
+                        >
+                          Pause
+                        </button>
+                      )}
+                      <button
+                        onClick={pendingCountdown.skip}
+                        className="px-4 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg
+                          hover:bg-blue-700 active:scale-[0.97] transition-transform"
+                        style={{ boxShadow: '0 4px 12px -4px rgba(37,99,235,0.4)' }}
+                      >
+                        Skip Wait
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
-              <div className="w-px h-8 bg-zinc-200" />
-              <div className="flex items-center gap-2">
-                {anyPaused ? (
-                  <button
-                    onClick={handleResumeAll}
-                    className="px-4 py-1.5 bg-emerald-600 text-white text-xs font-semibold rounded-lg
-                      hover:bg-emerald-700 active:scale-[0.97] transition-transform"
-                  >
-                    Resume All
-                  </button>
-                ) : (
-                  <button
-                    onClick={handlePauseAll}
-                    className="px-4 py-1.5 bg-amber-500 text-white text-xs font-semibold rounded-lg
-                      hover:bg-amber-600 active:scale-[0.97] transition-transform"
-                  >
-                    Pause All
-                  </button>
-                )}
-                <button
-                  onClick={handleFinishAll}
-                  className="px-4 py-1.5 bg-red-500 text-white text-xs font-semibold rounded-lg
-                    hover:bg-red-600 active:scale-[0.97] transition-transform"
-                >
-                  End All
-                </button>
-              </div>
-            </div>
-          )}
+            )}
 
-          {/* Active Games */}
-          {activeGames.length > 0 && (
-            <div className="flex-1 min-h-0 mb-4 flex flex-col">
-              <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2 shrink-0">In Progress</h3>
-              <div className="grid grid-cols-2 gap-3 flex-1 min-h-0" style={{ gridTemplateRows: '1fr 1fr' }}>
-                {activeGames.map(g => (
-                  <GameCourtCard
-                    key={g.id}
-                    game={g}
-                    variant="active"
-                    timerPhase={timers.get(g.courtNumber)?.phase}
-                    pausedPlayerIds={pausedPlayerIds}
-                    checkedOutPlayerIds={checkedOutPlayerIds}
-                    onContextMenu={handlePlayerContextMenu}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Pending Games — hidden during warning (shown as overlay) */}
-          {pendingGames.length > 0 && !isWarning && (
-            <div className="flex-1 min-h-0 mb-4 flex flex-col">
-              <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2 shrink-0">
-                {activeGames.length > 0 ? 'Next Round' : 'Pending'}
-              </h3>
-              <div className="grid grid-cols-2 gap-3 flex-1 min-h-0" style={{ gridTemplateRows: '1fr 1fr' }}>
-                {pendingGames.map(g => (
-                  <GameCourtCard
-                    key={g.id}
-                    game={g}
-                    variant="pending"
-                    pausedPlayerIds={pausedPlayerIds}
-                    checkedOutPlayerIds={checkedOutPlayerIds}
-                    onContextMenu={handlePlayerContextMenu}
-                    onDropPlayer={handleDropPlayer}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-
-        </div>
-
-        {/* Warning overlay: next round preview on top of active games */}
-        {isWarning && pendingGames.length > 0 && (
-          <div
-            className="absolute inset-0 z-30 flex flex-col items-center overflow-hidden"
-            style={{ backgroundColor: 'rgba(0,0,0,0.12)', backdropFilter: 'blur(2px)' }}
-          >
-            <div className="w-[85%] h-full flex flex-col items-center justify-center" style={{ maxWidth: '900px' }}>
-              <div className="flex items-center gap-3 mb-6 shrink-0">
-                <span className="w-3 h-3 rounded-full bg-amber-400 animate-pulse" />
-                <h3 className="text-xl font-bold text-amber-700 tracking-tight">
-                  Next Round Preview
-                </h3>
-                <span className="text-sm text-amber-500 font-medium">
-                  ({pendingGames.length} courts)
+            {/* Round ending soon — get next-up players ready */}
+            {activeGames.length > 0 && isWarning && (
+              <div
+                className="shrink-0 mb-3 flex items-center gap-3 rounded-xl px-4 py-2.5"
+                style={{ backgroundColor: '#fef3c7', border: '1px solid #fcd34d', boxShadow: '0 4px 16px -8px rgba(245,158,11,0.4)', animation: 'fadeSlideIn 0.3s ease' }}
+              >
+                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
+                <span className="text-[13px] font-semibold text-amber-700">
+                  Round ending soon — players in the <strong>NEXT UP</strong> rows, head to your court and get ready.
                 </span>
               </div>
-              <div
-                className="grid gap-4 w-full flex-1"
-                style={{
-                  gridTemplateColumns: pendingGames.length === 1 ? '1fr' : '1fr 1fr',
-                  maxWidth: pendingGames.length === 1 ? '420px' : undefined,
-                  alignContent: 'center',
-                }}
-              >
-                {pendingGames.map(g => (
-                  <GameCourtCard
-                    key={g.id}
-                    game={g}
-                    variant="warning"
-                    pausedPlayerIds={pausedPlayerIds}
-                    checkedOutPlayerIds={checkedOutPlayerIds}
-                    onContextMenu={handlePlayerContextMenu}
-                  />
-                ))}
+            )}
+
+            {/* Empty state — no games at all */}
+            {activeGames.length === 0 && pendingGames.length === 0 && (
+              <div className="flex flex-col items-center justify-center py-24 text-zinc-400">
+                <svg className="w-16 h-16 mb-4 opacity-20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.362 5.214A8.252 8.252 0 0112 21 8.25 8.25 0 016.038 7.048 8.287 8.287 0 009 9.6a8.983 8.983 0 013.361-6.867 8.21 8.21 0 003 2.48z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 18a3.75 3.75 0 00.495-7.467 5.99 5.99 0 00-1.925 3.546 5.974 5.974 0 01-2.133-1A3.75 3.75 0 0012 18z" />
+                </svg>
+                <p className="text-sm font-medium mb-1">No matches generated yet</p>
+                <p className="text-xs opacity-60 ">
+                  {waitingPlayers.length} players in pool (M {maleWaiting.length} / F {femaleWaiting.length})
+                </p>
               </div>
-            </div>
+            )}
+
+            {/* Active Games */}
+            {activeGames.length > 0 && (
+              <div className="flex-1 min-h-0 mb-4 flex flex-col">
+                <div className="grid grid-cols-2 gap-3 flex-1 min-h-0" style={{ gridTemplateRows: '1fr 1fr' }}>
+                  {activeGames.map(g => (
+                    <GameCourtCard
+                      key={g.id}
+                      game={g}
+                      variant="active"
+                      timerPhase={timers.get(g.courtNumber)?.phase}
+                      nextUpGame={pendingByCourt.get(g.courtNumber)}
+                      pausedPlayerIds={pausedPlayerIds}
+                      checkedOutPlayerIds={checkedOutPlayerIds}
+                      onContextMenu={handlePlayerContextMenu}
+                      onDropPlayer={handleDropPlayer}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Pending preview — only before the round starts (next-round shows inline on each live court) */}
+            {activeGames.length === 0 && pendingGames.length > 0 && (
+              <div className="flex-1 min-h-0 mb-4 flex flex-col">
+                <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2 shrink-0">
+                  Pending
+                </h3>
+                <div className="grid grid-cols-2 gap-3 flex-1 min-h-0" style={{ gridTemplateRows: '1fr 1fr' }}>
+                  {pendingGames.map(g => (
+                    <GameCourtCard
+                      key={g.id}
+                      game={g}
+                      variant="pending"
+                      pausedPlayerIds={pausedPlayerIds}
+                      checkedOutPlayerIds={checkedOutPlayerIds}
+                      onContextMenu={handlePlayerContextMenu}
+                      onDropPlayer={handleDropPlayer}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
           </div>
-        )}
-      </div>
+        </div>
 
       <WaitingPoolSidebar
         width={poolWidth}
@@ -639,6 +685,118 @@ export function MatchPanel() {
         onCheckin={handleCheckin}
         onPlayerContextMenu={handlePlayerContextMenu}
       />
+
+      {/* ── Fullscreen Overlay ── */}
+      {isFullscreen && (
+        <div className="fixed inset-0 z-50 bg-white flex flex-col">
+          {/* Header bar */}
+          <div className="flex items-center justify-between px-6 shrink-0 border-b border-zinc-100" style={{ height: 64 }}>
+            <div className="flex items-center gap-5">
+              {masterTimer && (
+                <>
+                  <span
+                    className="font-mono font-medium tabular-nums leading-none"
+                    style={{ fontSize: 40, letterSpacing: '-0.04em', color: status.color }}
+                  >
+                    {formatSecondsAsClock(masterTimer.remaining)}
+                  </span>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold" style={{ color: status.color }}>
+                      <span className="w-[6px] h-[6px] rounded-full animate-pulse" style={{ backgroundColor: status.color }} />
+                      {status.label}
+                    </span>
+                    <span className="text-xs text-zinc-500">
+                      {activeGames.length} courts{pendingGames.length > 0 && ` · ${pendingGames.length} pending`}
+                    </span>
+                  </div>
+                  <div className="w-px h-8 bg-zinc-200" />
+                  {anyPaused ? (
+                    <button
+                      onClick={handleResumeAll}
+                      className="h-9 px-4 bg-emerald-600 text-white text-[13px] font-semibold rounded-lg hover:bg-emerald-700 active:scale-[0.97] transition-transform"
+                    >
+                      Resume all
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handlePauseAll}
+                      className="h-9 px-4 bg-amber-500 text-white text-[13px] font-semibold rounded-lg hover:bg-amber-600 active:scale-[0.97] transition-transform"
+                    >
+                      Pause all
+                    </button>
+                  )}
+                  <button
+                    onClick={handleFinishAll}
+                    className="h-9 px-4 bg-red-600 text-white text-[13px] font-semibold rounded-lg hover:bg-red-700 active:scale-[0.97] transition-transform"
+                  >
+                    End round
+                  </button>
+                </>
+              )}
+            </div>
+            <button
+              onClick={toggleFullscreen}
+              title="退出全屏 (Esc)"
+              className="p-2 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 rounded-lg transition-colors"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Courts grid */}
+          <div className="flex-1 min-h-0 p-4">
+            {activeGames.length > 0 ? (
+              <div
+                className="grid gap-4 h-full"
+                style={{
+                  gridTemplateColumns: activeGames.length === 1 ? '1fr' : '1fr 1fr',
+                  gridTemplateRows: activeGames.length <= 2 ? '1fr' : '1fr 1fr',
+                }}
+              >
+                {activeGames.map(g => (
+                  <GameCourtCard
+                    key={g.id}
+                    game={g}
+                    variant="active"
+                    timerPhase={timers.get(g.courtNumber)?.phase}
+                    nextUpGame={pendingByCourt.get(g.courtNumber)}
+                    pausedPlayerIds={pausedPlayerIds}
+                    checkedOutPlayerIds={checkedOutPlayerIds}
+                    onContextMenu={handlePlayerContextMenu}
+                    onDropPlayer={handleDropPlayer}
+                  />
+                ))}
+              </div>
+            ) : pendingGames.length > 0 ? (
+              <div
+                className="grid gap-4 h-full"
+                style={{
+                  gridTemplateColumns: pendingGames.length === 1 ? '1fr' : '1fr 1fr',
+                  gridTemplateRows: pendingGames.length <= 2 ? '1fr' : '1fr 1fr',
+                }}
+              >
+                {pendingGames.map(g => (
+                  <GameCourtCard
+                    key={g.id}
+                    game={g}
+                    variant="pending"
+                    pausedPlayerIds={pausedPlayerIds}
+                    checkedOutPlayerIds={checkedOutPlayerIds}
+                    onContextMenu={handlePlayerContextMenu}
+                    onDropPlayer={handleDropPlayer}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="flex items-center justify-center h-full text-zinc-400">
+                <p className="text-sm">暂无进行中的比赛</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

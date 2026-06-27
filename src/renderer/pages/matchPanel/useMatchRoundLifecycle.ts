@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import type { TimerState } from '../../contexts/GameContext';
 import { getPlayingTimerRecovery } from './time';
 import { usePendingRoundCountdown } from './usePendingRoundCountdown';
+import type { GenerateOptions } from './useMatchGeneration';
 import type { GameInfo } from './types';
 
 interface UseMatchRoundLifecycleParams {
@@ -15,7 +16,7 @@ interface UseMatchRoundLifecycleParams {
   resumeGame: (courtNumber: number) => void;
   earlyFinishGame: (courtNumber: number) => void;
   load: () => void | Promise<void>;
-  generatePendingRound: () => void | Promise<void>;
+  generatePendingRound: (opts?: GenerateOptions) => Promise<boolean> | void;
 }
 
 export function useMatchRoundLifecycle({
@@ -32,18 +33,24 @@ export function useMatchRoundLifecycle({
   generatePendingRound,
 }: UseMatchRoundLifecycleParams) {
   const nextRoundGeneratedRef = useRef(false);
+  const generatingRef = useRef(false);
   const recoveringGameIdsRef = useRef<Set<string>>(new Set());
 
+  // Pre-arrange the next round as soon as a round is live (kept populated all round).
+  // Runs silently; if there aren't enough players yet it will retry as the pool
+  // changes (generatePendingRound identity updates when attendance changes).
   useEffect(() => {
-    if (nextRoundGeneratedRef.current) return;
+    if (nextRoundGeneratedRef.current || generatingRef.current) return;
     if (activeGames.length === 0) return;
-    if (pendingGames.length > 0) return;
-    const hasWarning = activeGames.some(g => timers.get(g.courtNumber)?.phase === 'warning');
-    if (hasWarning) {
-      generatePendingRound();
+    if (pendingGames.length > 0) {
       nextRoundGeneratedRef.current = true;
+      return;
     }
-  }, [timers, activeGames, pendingGames.length, generatePendingRound]);
+    generatingRef.current = true;
+    Promise.resolve(generatePendingRound({ silent: true }))
+      .then(ok => { if (ok) nextRoundGeneratedRef.current = true; })
+      .finally(() => { generatingRef.current = false; });
+  }, [activeGames.length, pendingGames.length, generatePendingRound]);
 
   useEffect(() => {
     if (activeGames.length === 0) {
