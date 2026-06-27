@@ -25,7 +25,7 @@ const api = {
   sessionsEnd: (id: string) => ipcRenderer.invoke('sessions:end', id),
 
   // Attendance
-  attendanceCheckin: (playerId: string, sessionId: string, paymentMethod: string) =>
+  attendanceCheckin: (playerId: string, sessionId: string, paymentMethod: 'credit' | 'cash' | 'defer') =>
     ipcRenderer.invoke('attendance:checkin', playerId, sessionId, paymentMethod),
   attendanceListBySession: (sessionId: string) =>
     ipcRenderer.invoke('attendance:listBySession', sessionId),
@@ -52,7 +52,7 @@ const api = {
   // Payments
   paymentsListBySession: (sessionId: string) =>
     ipcRenderer.invoke('payments:listBySession', sessionId),
-  paymentsListUnpaid: () => ipcRenderer.invoke('payments:listUnpaid'),
+  paymentsListUnpaid: (sessionId?: string) => ipcRenderer.invoke('payments:listUnpaid', sessionId),
   paymentsMarkPaid: (id: string) => ipcRenderer.invoke('payments:markPaid', id),
   paymentsTopup: (playerId: string, amount: number) =>
     ipcRenderer.invoke('payments:topup', playerId, amount),
