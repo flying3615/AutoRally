@@ -473,6 +473,11 @@ export function Checkin() {
         next.delete(playerId);
         return next;
       });
+      setUnpaidIds(prev => {
+        const next = new Set(prev);
+        next.delete(playerId);
+        return next;
+      });
       load();
     } finally {
       removingRef.current.delete(playerId);

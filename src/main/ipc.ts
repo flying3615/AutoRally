@@ -215,7 +215,7 @@ export async function registerIpcHandlers() {
       const att = queryOne<{ playerId: string; sessionId: string }>('SELECT playerId, sessionId FROM attendance WHERE id = ?', [id]);
       if (att) {
         const payment = queryOne<{ id: string; paymentMethod: string; amount: number }>(
-          "SELECT id, paymentMethod, amount FROM payments WHERE playerId = ? AND sessionId = ? AND paymentType = 'session'",
+          "SELECT id, paymentMethod, amount FROM payments WHERE playerId = ? AND sessionId = ? AND paymentType = 'session' AND NOT (paymentMethod = 'defer' AND status = 'paid')",
           [att.playerId, att.sessionId]
         );
         if (payment) {
