@@ -41,12 +41,14 @@ interface SessionInfo {
 
 // ── Context Menu ──
 function ContextMenu({
-  x, y, player, onClose, onEdit, onDelete,
+  x, y, player, onClose, onEdit, onDelete, onDefer, isCheckedIn,
 }: {
   x: number; y: number; player: PlayerInfo;
   onClose: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  onDefer: () => void;
+  isCheckedIn: boolean;
 }) {
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -94,6 +96,17 @@ function ContextMenu({
         </svg>
         Edit Player
       </button>
+      {!isCheckedIn && (
+        <button
+          onClick={onDefer}
+          className="w-full text-left px-3 py-2 text-sm text-orange-600 hover:bg-orange-50 flex items-center gap-2.5 transition-colors"
+        >
+          <svg className="w-4 h-4 text-orange-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          Check In — Pay Later
+        </button>
+      )}
       <button
         onClick={onDelete}
         className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2.5 transition-colors"
@@ -411,15 +424,17 @@ export function Checkin() {
   const [sessionFee, setSessionFee] = useState('10');
   const [showAddPlayer, setShowAddPlayer] = useState(false);
   const [lastSessionPlayers, setLastSessionPlayers] = useState<PlayerInfo[]>([]);
+  const [unpaidIds, setUnpaidIds] = useState<Set<string>>(new Set());
 
   const load = async () => {
     if (!sessionId) return;
-    const [allPlayers, attendList, gameList, settings, sessionList] = await Promise.all([
+    const [allPlayers, attendList, gameList, settings, sessionList, unpaidList] = await Promise.all([
       window.api.playersList(),
       window.api.attendanceListBySession(sessionId),
       window.api.gamesListBySession(sessionId),
       window.api.settingsGetAll() as Promise<Record<string, string>>,
       window.api.sessionsList(),
+      window.api.paymentsListUnpaid(sessionId),
     ]);
     const typedPlayers = allPlayers as PlayerInfo[];
     const typedSessions = sessionList as SessionInfo[];
@@ -441,6 +456,7 @@ export function Checkin() {
     setCheckedInSet(new Set((attendList as AttendanceInfo[]).map(a => a.playerId)));
     setSessionFee(settings.sessionFee ?? '10');
     setLastSessionPlayers(previousPlayers);
+    setUnpaidIds(new Set((unpaidList as { playerId: string }[]).map(p => p.playerId)));
   };
 
   useEffect(() => { load(); }, [sessionId]);
@@ -512,7 +528,7 @@ export function Checkin() {
   const fee = Number(sessionFee) || 10;
   const lastSessionQuickPlayers = lastSessionPlayers.filter(p => !checkedInSet.has(p.id));
 
-  const doCheckin = async (playerId: string, method: 'credit' | 'cash') => {
+  const doCheckin = async (playerId: string, method: 'credit' | 'cash' | 'defer') => {
     if (!sessionId) return;
     try {
       await window.api.attendanceCheckin(playerId, sessionId, method);
@@ -537,6 +553,7 @@ export function Checkin() {
     const canCredit = p.balance >= fee;
 
     if (checked) {
+      const isIOU = unpaidIds.has(p.id);
       return (
         <button
           key={p.id}
@@ -545,11 +562,13 @@ export function Checkin() {
           className="relative flex items-center rounded-md text-left transition-all active:scale-[0.98] group/check"
           style={{
             padding: '3px 6px',
-            backgroundColor: '#ecfdf5',
-            borderColor: '#a7f3d0',
+            backgroundColor: isIOU ? '#fff7ed' : '#ecfdf5',
+            borderColor: isIOU ? '#fdba74' : '#a7f3d0',
             borderWidth: 1,
             borderStyle: 'solid',
-            boxShadow: '0 1px 3px -2px rgba(16,185,129,0.12)',
+            boxShadow: isIOU
+              ? '0 1px 3px -2px rgba(234,88,12,0.12)'
+              : '0 1px 3px -2px rgba(16,185,129,0.12)',
             cursor: 'pointer',
           }}
           onMouseEnter={(e) => {
@@ -557,15 +576,20 @@ export function Checkin() {
             e.currentTarget.style.borderColor = '#fecaca';
           }}
           onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = '#ecfdf5';
-            e.currentTarget.style.borderColor = '#a7f3d0';
+            e.currentTarget.style.backgroundColor = isIOU ? '#fff7ed' : '#ecfdf5';
+            e.currentTarget.style.borderColor = isIOU ? '#fdba74' : '#a7f3d0';
           }}
         >
-          <span className="text-sm font-bold truncate flex-1" style={{ color: '#047857' }}>
+          <span className="text-sm font-bold truncate flex-1" style={{ color: isIOU ? '#c2410c' : '#047857' }}>
             {p.name}
             <span className="text-[11px] text-zinc-400 ml-0.5">{p.level}</span>
           </span>
-          <span className="shrink-0 ml-0.5">
+          <span className="shrink-0 ml-0.5 flex items-center gap-1">
+            {isIOU && (
+              <span className="text-[9px] font-bold px-1 py-px rounded bg-orange-100 text-orange-600 leading-tight">
+                IOU
+              </span>
+            )}
             <svg className="w-3 h-3 text-emerald-500 block group-hover/check:hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
             </svg>
@@ -637,6 +661,8 @@ export function Checkin() {
           onClose={() => setCtxMenu(null)}
           onEdit={handleEdit}
           onDelete={handleDeletePlayer}
+          onDefer={() => { doCheckin(ctxMenu.player.id, 'defer'); setCtxMenu(null); }}
+          isCheckedIn={checkedInSet.has(ctxMenu.player.id)}
         />
       )}
 
