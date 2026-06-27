@@ -164,7 +164,7 @@ export async function registerIpcHandlers() {
   });
 
   // ── Attendance ──
-  ipcMain.handle('attendance:checkin', (_e, playerId: string, sessionId: string, paymentMethod: 'credit' | 'cash') => {
+  ipcMain.handle('attendance:checkin', (_e, playerId: string, sessionId: string, paymentMethod: 'credit' | 'cash' | 'defer') => {
     const id = uuid();
     const checkinTime = new Date().toISOString();
     const fee = queryOne<{ value: string }>("SELECT value FROM settings WHERE key = 'sessionFee'");
@@ -188,6 +188,9 @@ export async function registerIpcHandlers() {
           [sessionFee, checkinTime, playerId]);
         run('INSERT INTO payments (id, playerId, sessionId, amount, status, paidDate, paymentType, paymentMethod) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
           [uuid(), playerId, sessionId, sessionFee, 'paid', checkinTime, 'session', 'credit']);
+      } else if (paymentMethod === 'defer') {
+        run('INSERT INTO payments (id, playerId, sessionId, amount, status, paidDate, paymentType, paymentMethod) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+          [uuid(), playerId, sessionId, sessionFee, 'unpaid', checkinTime, 'session', 'cash']);
       } else {
         run('INSERT INTO payments (id, playerId, sessionId, amount, status, paidDate, paymentType, paymentMethod) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
           [uuid(), playerId, sessionId, sessionFee, 'paid', checkinTime, 'session', 'cash']);
