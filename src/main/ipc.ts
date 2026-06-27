@@ -299,7 +299,13 @@ export async function registerIpcHandlers() {
     );
   });
 
-  ipcMain.handle('payments:listUnpaid', () => {
+  ipcMain.handle('payments:listUnpaid', (_e, sessionId?: string) => {
+    if (sessionId) {
+      return queryAll(
+        "SELECT py.*, p.name as playerName, p.phone FROM payments py JOIN players p ON py.playerId = p.id WHERE py.status = 'unpaid' AND py.paymentType = 'session' AND py.sessionId = ? ORDER BY py.paidDate DESC",
+        [sessionId]
+      );
+    }
     return queryAll(
       "SELECT py.*, p.name as playerName, p.phone FROM payments py JOIN players p ON py.playerId = p.id WHERE py.status = 'unpaid' AND py.paymentType = 'session' ORDER BY py.paidDate DESC"
     );
