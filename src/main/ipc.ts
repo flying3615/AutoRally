@@ -190,7 +190,7 @@ export async function registerIpcHandlers() {
           [uuid(), playerId, sessionId, sessionFee, 'paid', checkinTime, 'session', 'credit']);
       } else if (paymentMethod === 'defer') {
         run('INSERT INTO payments (id, playerId, sessionId, amount, status, paidDate, paymentType, paymentMethod) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-          [uuid(), playerId, sessionId, sessionFee, 'unpaid', checkinTime, 'session', 'cash']);
+          [uuid(), playerId, sessionId, sessionFee, 'unpaid', checkinTime, 'session', 'defer']);
       } else {
         run('INSERT INTO payments (id, playerId, sessionId, amount, status, paidDate, paymentType, paymentMethod) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
           [uuid(), playerId, sessionId, sessionFee, 'paid', checkinTime, 'session', 'cash']);
