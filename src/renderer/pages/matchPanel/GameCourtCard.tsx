@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { genderColors, levelColors } from '../../theme';
+import { genderColors, levelTextColors } from '../../theme';
 import type { AttendanceInfo, GameInfo } from './types';
 
 type PlayerContextHandler = (e: React.MouseEvent, id: string) => void;
@@ -77,7 +77,7 @@ function PlayerTag({
 }) {
   const isMale = gender === 'male';
   const gc = isMale ? genderColors.male : genderColors.female;
-  const textClr = levelColors[level] ?? levelColors[3]!;
+  const textClr = levelTextColors[level] ?? levelTextColors[3]!;
 
   return (
     <div

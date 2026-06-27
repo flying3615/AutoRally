@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { useGameContext } from '../contexts/GameContext';
-import { genderColors } from '../theme';
+import { genderColors, levelColors } from '../theme';
 import { GameCourtCard } from './matchPanel/GameCourtCard';
 import { WaitingPoolSidebar } from './matchPanel/WaitingPoolSidebar';
 import { formatSecondsAsClock, pendingCountdownLabel } from './matchPanel/time';
@@ -207,11 +207,11 @@ function EditPlayerModal({
                   <button
                     key={l}
                     onClick={() => setLevel(l)}
-                    className={`flex-1 py-2 text-sm font-bold rounded-xl border transition-all active:scale-95 ${
-                      level === l
-                        ? 'bg-zinc-900 border-zinc-900 text-white'
-                        : 'bg-white border-zinc-200 text-zinc-500 hover:bg-zinc-50'
-                    }`}
+                    className="flex-1 py-2 text-sm font-bold rounded-xl transition-all active:scale-95"
+                    style={level === l
+                      ? { backgroundColor: levelColors[l], color: l === 1 ? '#065f46' : '#fff', boxShadow: '0 1px 4px rgba(0,0,0,0.18)' }
+                      : { backgroundColor: '#f4f4f5', color: '#71717a' }
+                    }
                   >
                     {l}
                   </button>
@@ -690,7 +690,7 @@ export function MatchPanel() {
       {isFullscreen && (
         <div className="fixed inset-0 z-50 bg-white flex flex-col">
           {/* Header bar */}
-          <div className="flex items-center justify-between px-6 shrink-0 border-b border-zinc-100" style={{ height: 64 }}>
+          <div className="flex items-center justify-between px-6 shrink-0 border-b border-zinc-100 relative" style={{ height: 64 }}>
             <div className="flex items-center gap-5">
               {masterTimer && (
                 <>
@@ -733,6 +733,34 @@ export function MatchPanel() {
                   </button>
                 </>
               )}
+              {!masterTimer && pendingGames.length > 0 && !isWarning && (
+                <>
+                  <span className="px-3 py-1.5 text-sm font-semibold text-blue-700 bg-blue-50 border border-blue-100 rounded-lg tabular-nums">
+                    {pendingCountdownLabel(pendingCountdown.remaining, pendingCountdown.paused)}
+                  </span>
+                  {pendingCountdown.paused ? (
+                    <button
+                      onClick={pendingCountdown.resume}
+                      className="h-9 px-4 bg-emerald-600 text-white text-[13px] font-semibold rounded-lg hover:bg-emerald-700 active:scale-[0.97] transition-transform"
+                    >
+                      Resume
+                    </button>
+                  ) : (
+                    <button
+                      onClick={pendingCountdown.pause}
+                      className="h-9 px-4 bg-amber-500 text-white text-[13px] font-semibold rounded-lg hover:bg-amber-600 active:scale-[0.97] transition-transform"
+                    >
+                      Pause
+                    </button>
+                  )}
+                  <button
+                    onClick={pendingCountdown.skip}
+                    className="h-9 px-4 bg-blue-600 text-white text-[13px] font-semibold rounded-lg hover:bg-blue-700 active:scale-[0.97] transition-transform"
+                  >
+                    Skip Wait
+                  </button>
+                </>
+              )}
             </div>
             <button
               onClick={toggleFullscreen}
@@ -743,6 +771,14 @@ export function MatchPanel() {
                 <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" />
               </svg>
             </button>
+            {masterTimer && (
+              <div className="absolute bottom-0 left-0 right-0 h-[3px]" style={{ backgroundColor: '#f4f4f5' }}>
+                <div
+                  className="h-full"
+                  style={{ width: `${roundPct}%`, backgroundColor: roundBarColor, transition: 'width 1s linear' }}
+                />
+              </div>
+            )}
           </div>
 
           {/* Courts grid */}

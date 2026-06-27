@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { levelColors, genderColors } from '../theme';
+import { levelColors, levelTextColors, genderColors } from '../theme';
 
 interface PlayerInfo {
   id: string;
@@ -592,7 +592,7 @@ export function Checkin() {
           cursor: 'pointer',
         }}
       >
-        <span className="text-sm font-bold truncate flex-1" style={{ color: levelColors[p.level] ?? '#6b7280' }}>
+        <span className="text-sm font-bold truncate flex-1" style={{ color: levelTextColors[p.level] ?? '#6b7280' }}>
           {p.name}
           <span className="text-[11px] text-zinc-400 ml-0.5">{p.level}</span>
         </span>

@@ -6,22 +6,31 @@
 // Single accent color — used for CTAs, active states, focus rings
 export const accentColor = '#059669'; // Emerald-600
 
-// Level colors — emerald scale, darker = higher skill
+// Level colors — distinct per tier so each level is immediately recognisable
 export const levelColors: Record<number, string> = {
-  5: '#022c22', // Emerald-950 — elite
-  4: '#064e3b', // Emerald-900 — advanced
-  3: '#047857', // Emerald-700 — intermediate
-  2: '#059669', // Emerald-600 — novice (same as accent)
-  1: '#34d399', // Emerald-400 — beginner
+  1: '#d1fae5', // Emerald-100 — beginner (light mint)
+  2: '#34d399', // Emerald-400 — novice  (bright green)
+  3: '#047857', // Emerald-700 — intermediate (forest green)
+  4: '#1d4ed8', // Blue-700    — advanced (clear hue break)
+  5: '#d97706', // Amber-600   — elite (gold / prestige)
+};
+
+// Level text colors — for use as foreground/text color on light backgrounds
+export const levelTextColors: Record<number, string> = {
+  1: '#10b981', // Emerald-500 — lightest readable green
+  2: '#047857', // Emerald-700
+  3: '#065f46', // Emerald-800
+  4: '#1e40af', // Blue-800
+  5: '#b45309', // Amber-700
 };
 
 // Level badge Tailwind classes (for AG Grid cells)
 export const levelBadgeClasses: Record<number, string> = {
-  5: 'bg-emerald-950 text-emerald-200',
-  4: 'bg-emerald-900 text-emerald-200',
-  3: 'bg-emerald-700 text-emerald-100',
-  2: 'bg-emerald-600 text-white',
-  1: 'bg-emerald-200 text-emerald-900',
+  1: 'bg-emerald-100 text-emerald-800',
+  2: 'bg-emerald-400 text-white',
+  3: 'bg-emerald-700 text-white',
+  4: 'bg-blue-700 text-white',
+  5: 'bg-amber-600 text-white',
 };
 
 // Gender colors — soft pastels for visual distinction, not loud

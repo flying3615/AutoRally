@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { AgGridReact } from 'ag-grid-react';
 import type { ColDef, ICellRendererParams } from 'ag-grid-community';
 import { AllCommunityModule, ModuleRegistry } from 'ag-grid-community';
-import { levelBadgeClasses, genderColors } from '../theme';
+import { levelBadgeClasses, levelColors, genderColors } from '../theme';
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -414,11 +414,11 @@ export function Players() {
                     <button
                       key={l}
                       onClick={() => setForm({ ...form, level: l })}
-                      className={`flex-1 h-9 text-sm rounded-lg transition-all duration-150 inline-flex items-center justify-center font-medium ${
-                        form.level === l
-                          ? 'bg-zinc-900 text-white shadow-[0_1px_3px_rgba(0,0,0,0.12)]'
-                          : 'bg-white border border-zinc-200 text-zinc-500 hover:border-zinc-300'
-                      }`}
+                      className="flex-1 h-9 text-sm rounded-lg transition-all duration-150 inline-flex items-center justify-center font-semibold"
+                      style={form.level === l
+                        ? { backgroundColor: levelColors[l], color: l === 1 ? '#065f46' : '#fff', boxShadow: '0 1px 4px rgba(0,0,0,0.18)' }
+                        : { backgroundColor: '#f4f4f5', color: '#71717a' }
+                      }
                     >
                       {l}
                     </button>
