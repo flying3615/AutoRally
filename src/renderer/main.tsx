@@ -17,6 +17,7 @@ const Settings = lazy(() => import('./pages/Settings').then(module => ({ default
 const Report = lazy(() => import('./pages/Report').then(module => ({ default: module.Report })));
 const Tournaments = lazy(() => import('./pages/Tournaments').then(module => ({ default: module.Tournaments })));
 const TournamentDetail = lazy(() => import('./pages/TournamentDetail').then(module => ({ default: module.TournamentDetail })));
+const TournamentLivePanel = lazy(() => import('./pages/TournamentLivePanel').then(module => ({ default: module.TournamentLivePanel })));
 
 function LegacyTournamentRoute() {
   const { id } = useParams<{ id: string }>();
@@ -39,6 +40,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
             <Route path="report/:sessionId" element={<Report />} />
             <Route path="tournaments" element={<Tournaments />} />
             <Route path="tournaments/:id" element={<TournamentDetail />} />
+            <Route path="tournaments/:id/live" element={<TournamentLivePanel />} />
             <Route path="tournament/:id" element={<LegacyTournamentRoute />} />
           </Route>
         </Routes>

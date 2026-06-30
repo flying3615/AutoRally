@@ -14,6 +14,7 @@ interface PlayerWithBalance {
   level: number;
   phone: string;
   email: string;
+  club: string;
   joinDate: string;
   balance: number;
 }
@@ -195,7 +196,7 @@ export function Players() {
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<{ imported: number; skipped: number; errors: string[] } | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState({ firstName: '', surname: '', gender: 'male', level: 3, phone: '', email: '' });
+  const [form, setForm] = useState({ firstName: '', surname: '', gender: 'male', level: 3, phone: '', email: '', club: '' });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [topupPlayer, setTopupPlayer] = useState<string | null>(null);
   const [topupAmount, setTopupAmount] = useState('');
@@ -207,7 +208,7 @@ export function Players() {
   useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
-    const handler = () => { setShowForm(true); setEditingId(null); setForm({ firstName: '', surname: '', gender: 'male', level: 3, phone: '', email: '' }); setFormErrors({}); };
+    const handler = () => { setShowForm(true); setEditingId(null); setForm({ firstName: '', surname: '', gender: 'male', level: 3, phone: '', email: '', club: '' }); setFormErrors({}); };
     window.addEventListener('menu:add-player', handler);
     return () => window.removeEventListener('menu:add-player', handler);
   }, []);
@@ -229,13 +230,13 @@ export function Players() {
     if (Object.keys(errors).length > 0) return;
 
     const name = [form.firstName.trim(), form.surname.trim()].filter(Boolean).join(' ');
-    const playerData = { name, gender: form.gender, level: form.level, phone: form.phone, email: form.email.trim() };
+    const playerData = { name, gender: form.gender, level: form.level, phone: form.phone, email: form.email.trim(), club: form.club.trim() };
     if (editingId) {
       await window.api.playersUpdate(editingId, playerData);
     } else {
       await window.api.playersCreate(playerData);
     }
-    setForm({ firstName: '', surname: '', gender: 'male', level: 3, phone: '', email: '' });
+    setForm({ firstName: '', surname: '', gender: 'male', level: 3, phone: '', email: '', club: '' });
     setFormErrors({});
     setEditingId(null);
     setShowForm(false);
@@ -246,7 +247,7 @@ export function Players() {
     const spaceIdx = p.name.indexOf(' ');
     const firstName = spaceIdx > 0 ? p.name.slice(0, spaceIdx) : p.name;
     const surname = spaceIdx > 0 ? p.name.slice(spaceIdx + 1) : '';
-    setForm({ firstName, surname, gender: p.gender, level: p.level, phone: p.phone, email: (p as any).email ?? '' });
+    setForm({ firstName, surname, gender: p.gender, level: p.level, phone: p.phone, email: (p as any).email ?? '', club: (p as any).club ?? '' });
     setEditingId(p.id);
     setShowForm(true);
   };
@@ -293,6 +294,7 @@ export function Players() {
     { field: 'level', headerName: 'Level', width: 130, cellRenderer: LevelCell, sortable: true },
     { field: 'phone', headerName: 'Phone', width: 140, cellRenderer: PhoneCell, sortable: true },
     { field: 'email', headerName: 'Email', flex: 1, minWidth: 160, sortable: true, valueFormatter: (p: any) => p.value || '—' },
+    { field: 'club', headerName: 'Club', width: 140, sortable: true, valueFormatter: (p: any) => p.value || '—' },
     { field: 'balance', headerName: 'Balance', width: 110, cellRenderer: BalanceCell, sortable: true },
     { headerName: '', width: 56, cellRenderer: ActionsCell, sortable: false, resizable: false, suppressMovable: true },
   ];
@@ -338,7 +340,7 @@ export function Players() {
               {importing ? 'Importing...' : 'Import CSV'}
             </button>
             <button
-              onClick={() => { setShowForm(true); setEditingId(null); setForm({ firstName: '', surname: '', gender: 'male', level: 3, phone: '', email: '' }); setFormErrors({}); }}
+              onClick={() => { setShowForm(true); setEditingId(null); setForm({ firstName: '', surname: '', gender: 'male', level: 3, phone: '', email: '', club: '' }); setFormErrors({}); }}
               className="h-8 px-4 text-sm font-medium bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 active:scale-[0.97] shadow-[0_2px_8px_-2px_rgba(0,0,0,0.2)] transition-all inline-flex items-center justify-center"
             >
               Add Player
@@ -446,6 +448,15 @@ export function Players() {
                   placeholder="player@example.com"
                 />
                 {formErrors.email && <p className="text-[11px] text-red-400 mt-1 font-medium">{formErrors.email}</p>}
+              </div>
+              <div>
+                <label className="block text-[11px] text-zinc-400 font-semibold uppercase tracking-wider mb-1.5">Club</label>
+                <input
+                  type="text" value={form.club}
+                  onChange={(e) => setForm({ ...form, club: e.target.value })}
+                  className="w-full h-9 px-3 text-sm bg-white border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-200/80 focus:border-zinc-300 transition-all"
+                  placeholder="Club name (optional)"
+                />
               </div>
             </div>
             <div className="flex gap-2 mt-5">
