@@ -1,6 +1,5 @@
 import { useCallback } from 'react';
 import { generateMatches } from '../../services/matching';
-import { toast } from '../../stores/toastStore';
 import type { AttendanceInfo, GameInfo, Settings } from './types';
 
 interface UseMatchGenerationParams {
@@ -12,6 +11,11 @@ interface UseMatchGenerationParams {
   load: () => void | Promise<void>;
 }
 
+export interface GenerateOptions {
+  /** When true, suppress user-facing alerts — used for silent background pre-scheduling. */
+  silent?: boolean;
+}
+
 export function useMatchGeneration({
   sessionId,
   settings,
@@ -20,8 +24,9 @@ export function useMatchGeneration({
   activeGames,
   load,
 }: UseMatchGenerationParams) {
-  return useCallback(async () => {
-    if (!sessionId) return;
+  return useCallback(async (opts?: GenerateOptions): Promise<boolean> => {
+    const silent = opts?.silent === true;
+    if (!sessionId) return false;
 
     try {
       const freshGames = await window.api.gamesListBySession(sessionId) as GameInfo[];
@@ -66,8 +71,10 @@ export function useMatchGeneration({
       const matches = generateMatches(pool, courtCount, nextRound, countedGames);
 
       if (matches.length === 0) {
-        toast.info(`Not enough players to generate matches (waiting pool has ${pool.length} players, need at least ${courtCount * 4})`);
-        return;
+        if (!silent) {
+          alert(`Not enough players to generate matches (waiting pool has ${pool.length} players, need at least ${courtCount * 4})`);
+        }
+        return false;
       }
 
       for (let i = 0; i < matches.length; i++) {
@@ -84,8 +91,12 @@ export function useMatchGeneration({
         });
       }
       load();
+      return true;
     } catch (err: unknown) {
-      toast.error('Failed to generate matches: ' + (err instanceof Error ? err.message : String(err)));
+      if (!silent) {
+        alert('Failed to generate matches: ' + (err instanceof Error ? err.message : String(err)));
+      }
+      return false;
     }
   }, [sessionId, settings, attendance, playingIds, activeGames, load]);
 }
