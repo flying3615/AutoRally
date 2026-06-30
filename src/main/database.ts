@@ -188,6 +188,39 @@ function migrate(db: Database, options: { seedIfEmpty?: boolean; saveDirty?: boo
       UNIQUE(tournamentId, player1Id, player2Id)
     );
   `);
+  // Team tournament tables
+  db.run(`
+    CREATE TABLE IF NOT EXISTS tournament_teams (
+      id TEXT PRIMARY KEY,
+      tournamentId TEXT NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      color TEXT NOT NULL DEFAULT '#6366f1',
+      createdAt TEXT NOT NULL
+    );
+  `);
+  db.run(`
+    CREATE TABLE IF NOT EXISTS tournament_team_players (
+      id TEXT PRIMARY KEY,
+      teamId TEXT NOT NULL REFERENCES tournament_teams(id) ON DELETE CASCADE,
+      playerId TEXT NOT NULL REFERENCES players(id),
+      position INTEGER NOT NULL DEFAULT 0,
+      UNIQUE(teamId, playerId)
+    );
+  `);
+  db.run(`
+    CREATE TABLE IF NOT EXISTS tournament_team_matches (
+      id TEXT PRIMARY KEY,
+      tournamentId TEXT NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+      round INTEGER NOT NULL,
+      team1Id TEXT NOT NULL REFERENCES tournament_teams(id),
+      team2Id TEXT NOT NULL REFERENCES tournament_teams(id),
+      gamesPerMatch INTEGER NOT NULL DEFAULT 3,
+      team1Wins INTEGER NOT NULL DEFAULT 0,
+      team2Wins INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'in_progress', 'completed')),
+      createdAt TEXT NOT NULL
+    );
+  `);
 
   db.run("INSERT OR IGNORE INTO settings (key, value) VALUES ('courtCount', '4')");
   db.run("INSERT OR IGNORE INTO settings (key, value) VALUES ('sessionFee', '10')");
@@ -198,6 +231,8 @@ function migrate(db: Database, options: { seedIfEmpty?: boolean; saveDirty?: boo
   try { db.run('ALTER TABLE players ADD COLUMN email TEXT NOT NULL DEFAULT \'\''); dirty = true; } catch (_) { /* already exists */ }
   try { db.run('ALTER TABLE attendance ADD COLUMN paused INTEGER NOT NULL DEFAULT 0'); dirty = true; } catch (_) { /* already exists */ }
   try { db.run('ALTER TABLE payments ADD COLUMN paymentMethod TEXT NOT NULL DEFAULT \'\''); dirty = true; } catch (_) { /* already exists */ }
+  try { db.run("ALTER TABLE players ADD COLUMN club TEXT NOT NULL DEFAULT ''"); dirty = true; } catch (_) { /* already exists */ }
+  try { db.run('ALTER TABLE tournament_matches ADD COLUMN teamMatchId TEXT REFERENCES tournament_team_matches(id)'); dirty = true; } catch (_) { /* already exists */ }
   if (migrateGameTypeConstraint(db)) dirty = true;
   if (migrateAttendanceAndBalancesCascade(db)) dirty = true;
 

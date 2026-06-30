@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { AgGridReact } from 'ag-grid-react';
 import { confirm } from '../stores/confirmStore';
 
@@ -115,11 +115,13 @@ function ScoreModal({ match, onClose, onSaved }: { match: any; onClose: () => vo
 
 export function TournamentDetail() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const [data, setData] = useState<TourData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<'overview' | 'registration' | 'bracket' | 'standings'>('overview');
+  const [tab, setTab] = useState<'overview' | 'registration' | 'teams' | 'bracket' | 'standings'>('overview');
   const [regs, setRegs] = useState<RegRow[]>([]);
   const [standings, setStandings] = useState<StandingRow[]>([]);
+  const [teamStandings, setTeamStandings] = useState<any[]>([]);
   const [players, setPlayers] = useState<any[]>([]);
   const [showAddReg, setShowAddReg] = useState(false);
   const [regPlayer1, setRegPlayer1] = useState('');
@@ -128,17 +130,29 @@ export function TournamentDetail() {
   const [scoreMatch, setScoreMatch] = useState<MatchRow | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [regError, setRegError] = useState<string | null>(null);
-  const [busyAction, setBusyAction] = useState<'generate' | 'advance' | null>(null);
+  const [busyAction, setBusyAction] = useState<'generate' | 'advance' | 'generateTeam' | null>(null);
+  // Team tournament state
+  const [teams, setTeams] = useState<any[]>([]);
+  const [teamPlayers, setTeamPlayers] = useState<Record<string, any[]>>({});
+  const [expandedTeam, setExpandedTeam] = useState<string | null>(null);
+  const [showAddTeam, setShowAddTeam] = useState(false);
+  const [newTeamName, setNewTeamName] = useState('');
+  const [showGenerateTeam, setShowGenerateTeam] = useState(false);
+  const [gamesPerMatch, setGamesPerMatch] = useState('3');
+  const [teamError, setTeamError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!id) return;
-    const [t, r, p, s] = await Promise.all([
+    const [t, r, p, s, tms, ts] = await Promise.all([
       window.api.tournamentsGet(id) as Promise<TourData>,
       window.api.tournamentsRegistrations(id) as Promise<RegRow[]>,
       window.api.playersList() as Promise<any[]>,
       window.api.tournamentsStandings(id) as Promise<StandingRow[]>,
+      (window.api as any).tournamentTeamsList(id) as Promise<any[]>,
+      (window.api as any).tournamentTeamsStandings(id) as Promise<any[]>,
     ]);
     setData(t); setRegs(r); setPlayers(p); setStandings(s);
+    setTeams(tms); setTeamStandings(ts);
     setLoading(false);
   }, [id]);
 
@@ -208,6 +222,63 @@ export function TournamentDetail() {
     } finally {
       setBusyAction(null);
     }
+  };
+
+  const loadTeamPlayers = useCallback(async (teamId: string) => {
+    const ps = await (window.api as any).tournamentTeamsListPlayers(teamId) as any[];
+    setTeamPlayers(prev => ({ ...prev, [teamId]: ps }));
+  }, []);
+
+  const handleAddTeam = async () => {
+    if (!id || !newTeamName.trim()) return;
+    setTeamError(null);
+    try {
+      await (window.api as any).tournamentTeamsCreate(id, newTeamName.trim());
+      setNewTeamName(''); setShowAddTeam(false);
+      await load();
+    } catch (err: any) { setTeamError(err?.message ?? 'Failed to create team'); }
+  };
+
+  const handleDeleteTeam = async (teamId: string) => {
+    const ok = await confirm({ title: 'Delete team?', message: 'This will remove all team members from this team.', confirmLabel: 'Delete', danger: true });
+    if (!ok) return;
+    await (window.api as any).tournamentTeamsDelete(teamId);
+    await load();
+  };
+
+  const handleAddPlayerToTeam = async (teamId: string, playerId: string) => {
+    setTeamError(null);
+    try {
+      await (window.api as any).tournamentTeamsAddPlayer(teamId, playerId);
+      await loadTeamPlayers(teamId);
+      await load();
+    } catch (err: any) { setTeamError(err?.message ?? 'Failed to add player'); }
+  };
+
+  const handleRemovePlayerFromTeam = async (teamId: string, playerId: string) => {
+    await (window.api as any).tournamentTeamsRemovePlayer(teamId, playerId);
+    await loadTeamPlayers(teamId);
+    await load();
+  };
+
+  const handleGenerateTeamMatches = async () => {
+    if (!id) return;
+    setTeamError(null);
+    const n = parseInt(gamesPerMatch) || 3;
+    setBusyAction('generateTeam');
+    try {
+      await (window.api as any).tournamentTeamMatchesGenerate(id, n);
+      setShowGenerateTeam(false);
+      setTab('bracket');
+      await load();
+    } catch (err: any) { setTeamError(err?.message ?? 'Failed to generate matches'); }
+    finally { setBusyAction(null); }
+  };
+
+  const handleExpandTeam = (teamId: string) => {
+    if (expandedTeam === teamId) { setExpandedTeam(null); return; }
+    setExpandedTeam(teamId);
+    loadTeamPlayers(teamId);
   };
 
   const regCols: any[] = useMemo(() => [
@@ -314,7 +385,7 @@ export function TournamentDetail() {
 
         {/* Tabs */}
         <div className="flex items-center gap-1 mb-6 mt-4">
-          {(['overview', 'registration', 'bracket', 'standings'] as const).map(t => (
+          {(['overview', 'registration', 'teams', 'bracket', 'standings'] as const).map(t => (
             <button key={t} onClick={() => setTab(t)}
               className={`text-sm font-medium px-3 py-1.5 rounded-lg transition-colors capitalize ${tab === t ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600'}`}
             >{t}</button>
@@ -325,7 +396,7 @@ export function TournamentDetail() {
         {tab === 'overview' && (
           <div className="max-w-lg">
             {data.description && <p className="text-sm text-zinc-500 mb-4">{data.description}</p>}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-4 mb-4">
               <div className="bg-white border border-zinc-200/60 rounded-2xl p-5">
                 <p className="text-xs text-zinc-400 font-semibold uppercase tracking-wider mb-1">Registrations</p>
                 <p className="text-3xl font-bold text-zinc-900 tabular-nums font-mono">{data.registrationCount}</p>
@@ -334,7 +405,19 @@ export function TournamentDetail() {
                 <p className="text-xs text-zinc-400 font-semibold uppercase tracking-wider mb-1">Rounds</p>
                 <p className="text-3xl font-bold text-zinc-900 tabular-nums font-mono">{data.rounds.length}</p>
               </div>
+              {teams.length > 0 && (
+                <div className="bg-white border border-zinc-200/60 rounded-2xl p-5">
+                  <p className="text-xs text-zinc-400 font-semibold uppercase tracking-wider mb-1">Teams</p>
+                  <p className="text-3xl font-bold text-zinc-900 tabular-nums font-mono">{teams.length}</p>
+                </div>
+              )}
             </div>
+            <a href={`#/tournaments/${id}/live`}
+              onClick={e => { e.preventDefault(); navigate(`/tournaments/${id}/live`); }}
+              className="inline-flex items-center gap-2 h-9 px-4 text-sm font-semibold bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 active:scale-[0.97] transition-all shadow-sm">
+              <span className="inline-block w-2 h-2 rounded-full bg-white animate-pulse" />
+              Live Control →
+            </a>
           </div>
         )}
 
@@ -380,6 +463,169 @@ export function TournamentDetail() {
                     <button onClick={() => setShowAddReg(false)} className="px-4 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-50 rounded-xl">Cancel</button>
                     <button onClick={handleRegister} disabled={!regPlayer1 || (regMode === 'pair' && !regPlayer2)} className="px-5 py-2 text-sm font-semibold bg-zinc-800 text-white rounded-xl hover:bg-zinc-700 active:scale-[0.97] transition-all disabled:opacity-40">Register</button>
                   </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Teams */}
+        {tab === 'teams' && (
+          <div>
+            {teamError && <p className="mb-4 text-xs font-medium text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{teamError}</p>}
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-sm text-zinc-400">{teams.length} teams</p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowGenerateTeam(true)}
+                  disabled={teams.length < 2 || busyAction === 'generateTeam'}
+                  className="h-8 px-3 text-sm font-semibold bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 active:scale-[0.97] transition-all disabled:opacity-40 inline-flex items-center gap-1.5"
+                >
+                  {busyAction === 'generateTeam' ? 'Generating...' : 'Generate Matches'}
+                </button>
+                <button onClick={() => { setShowAddTeam(true); setTeamError(null); }} className="h-8 px-3 text-sm font-medium bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 active:scale-[0.97] transition-all inline-flex items-center gap-1.5">
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+                  Add Team
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {teams.map((team: any) => {
+                const tp = teamPlayers[team.id] ?? [];
+                const isExpanded = expandedTeam === team.id;
+                const teamPlayerIds = new Set(tp.map((p: any) => p.playerId));
+                const availableToAdd = players.filter(p => !teamPlayerIds.has(p.id));
+                return (
+                  <div key={team.id} className="bg-white border border-zinc-200/60 rounded-xl overflow-hidden">
+                    <div className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-zinc-50 transition-colors" onClick={() => handleExpandTeam(team.id)}>
+                      <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: team.color }} />
+                      <span className="flex-1 text-sm font-bold text-zinc-900">{team.name}</span>
+                      <span className="text-xs text-zinc-400 font-medium">{team.playerCount} players</span>
+                      <button onClick={e => { e.stopPropagation(); handleDeleteTeam(team.id); }} className="text-zinc-300 hover:text-red-500 transition-colors ml-2">
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                      </button>
+                      <svg className={`w-4 h-4 text-zinc-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+                    </div>
+                    {isExpanded && (
+                      <div className="border-t border-zinc-100 px-4 py-3">
+                        <div className="space-y-1.5 mb-3">
+                          {tp.map((p: any, i: number) => (
+                            <div key={p.playerId} className="flex items-center gap-2 py-1">
+                              <span className="text-xs text-zinc-400 w-5 text-right font-mono">{i + 1}</span>
+                              <span className="flex-1 text-sm font-medium text-zinc-800">{p.name}</span>
+                              <span className="text-xs text-zinc-400">Lv{p.level} · {p.gender}</span>
+                              {p.club && <span className="text-xs text-zinc-400">{p.club}</span>}
+                              <button onClick={() => handleRemovePlayerFromTeam(team.id, p.playerId)} className="text-zinc-300 hover:text-red-500 transition-colors">
+                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                              </button>
+                            </div>
+                          ))}
+                          {tp.length === 0 && <p className="text-xs text-zinc-400 italic">No players yet</p>}
+                        </div>
+                        {availableToAdd.length > 0 && (
+                          <select
+                            className="w-full px-3 py-1.5 text-sm border border-zinc-200 rounded-lg focus:outline-none focus:border-zinc-400 text-zinc-600"
+                            value=""
+                            onChange={e => { if (e.target.value) handleAddPlayerToTeam(team.id, e.target.value); }}
+                          >
+                            <option value="">+ Add player to {team.name}</option>
+                            {availableToAdd.map((p: any) => (
+                              <option key={p.id} value={p.id}>{p.name} — Lv{p.level} · {p.gender}{p.club ? ` (${p.club})` : ''}</option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {teams.length === 0 && <p className="text-sm text-zinc-400">No teams yet. Add teams and assign players before generating matches.</p>}
+            </div>
+
+            {/* Add team modal */}
+            {showAddTeam && (
+              <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => setShowAddTeam(false)}>
+                <div className="bg-white rounded-2xl p-6 w-[360px]" onClick={e => e.stopPropagation()}
+                  style={{ boxShadow: '0 24px 48px -12px rgba(0,0,0,0.2)', animation: 'ctxFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)' }}>
+                  <h3 className="text-lg font-bold text-zinc-900 mb-4">Add Team</h3>
+                  <input autoFocus value={newTeamName} onChange={e => setNewTeamName(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') handleAddTeam(); if (e.key === 'Escape') setShowAddTeam(false); }}
+                    className="w-full px-3 py-2 text-sm border border-zinc-200 rounded-xl focus:outline-none focus:border-zinc-400 mb-4"
+                    placeholder="Team / club name" />
+                  {teamError && <p className="mb-3 text-xs text-red-600">{teamError}</p>}
+                  <div className="flex justify-end gap-2">
+                    <button onClick={() => setShowAddTeam(false)} className="px-4 py-2 text-sm text-zinc-600 hover:bg-zinc-50 rounded-xl">Cancel</button>
+                    <button onClick={handleAddTeam} disabled={!newTeamName.trim()} className="px-5 py-2 text-sm font-semibold bg-zinc-800 text-white rounded-xl hover:bg-zinc-700 disabled:opacity-40">Add</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Generate team matches modal */}
+            {showGenerateTeam && (
+              <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => setShowGenerateTeam(false)}>
+                <div className="bg-white rounded-2xl p-6 w-[380px]" onClick={e => e.stopPropagation()}
+                  style={{ boxShadow: '0 24px 48px -12px rgba(0,0,0,0.2)', animation: 'ctxFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)' }}>
+                  <h3 className="text-lg font-bold text-zinc-900 mb-1">Generate Team Matches</h3>
+                  <p className="text-sm text-zinc-500 mb-4">{teams.length} teams · {teams.length * (teams.length - 1) / 2} team matches</p>
+                  <label className="block text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">Games per team match</label>
+                  <div className="flex gap-2 mb-4">
+                    {['1', '3', '5'].map(n => (
+                      <button key={n} onClick={() => setGamesPerMatch(n)}
+                        className={`flex-1 py-2 text-sm font-medium rounded-xl border transition-all ${gamesPerMatch === n ? 'bg-zinc-800 border-zinc-900 text-white' : 'border-zinc-200 text-zinc-500 hover:bg-zinc-50'}`}>
+                        {n}
+                      </button>
+                    ))}
+                    <input type="number" min="1" max="9" value={gamesPerMatch} onChange={e => setGamesPerMatch(e.target.value)}
+                      className="w-16 px-2 text-sm text-center border border-zinc-200 rounded-xl focus:outline-none focus:border-zinc-400" />
+                  </div>
+                  {teamError && <p className="mb-3 text-xs text-red-600">{teamError}</p>}
+                  <div className="flex justify-end gap-2">
+                    <button onClick={() => setShowGenerateTeam(false)} className="px-4 py-2 text-sm text-zinc-600 hover:bg-zinc-50 rounded-xl">Cancel</button>
+                    <button onClick={handleGenerateTeamMatches} disabled={busyAction === 'generateTeam'}
+                      className="px-5 py-2 text-sm font-semibold bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 disabled:opacity-40">
+                      {busyAction === 'generateTeam' ? 'Generating...' : 'Generate'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Team standings (if any completed) */}
+            {teamStandings.length > 0 && (
+              <div className="mt-8">
+                <h3 className="text-sm font-bold text-zinc-700 mb-3">Team Standings</h3>
+                <div className="bg-white border border-zinc-200/60 rounded-xl overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-zinc-100">
+                        <th className="text-left px-4 py-2 text-xs font-semibold text-zinc-400 uppercase tracking-wider">Team</th>
+                        <th className="text-center px-3 py-2 text-xs font-semibold text-zinc-400 uppercase tracking-wider">MP</th>
+                        <th className="text-center px-3 py-2 text-xs font-semibold text-zinc-400 uppercase tracking-wider">W</th>
+                        <th className="text-center px-3 py-2 text-xs font-semibold text-zinc-400 uppercase tracking-wider">L</th>
+                        <th className="text-center px-3 py-2 text-xs font-semibold text-zinc-400 uppercase tracking-wider">GW</th>
+                        <th className="text-center px-3 py-2 text-xs font-semibold text-zinc-400 uppercase tracking-wider">GL</th>
+                        <th className="text-center px-3 py-2 text-xs font-semibold text-zinc-400 uppercase tracking-wider">Pts</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {teamStandings.map((s: any, i: number) => (
+                        <tr key={s.teamId} className={i % 2 === 0 ? 'bg-white' : 'bg-zinc-50/50'}>
+                          <td className="px-4 py-2 font-semibold text-zinc-800 flex items-center gap-2">
+                            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
+                            {s.name}
+                          </td>
+                          <td className="text-center px-3 py-2 text-zinc-500 tabular-nums">{s.mp}</td>
+                          <td className="text-center px-3 py-2 text-emerald-600 font-semibold tabular-nums">{s.w}</td>
+                          <td className="text-center px-3 py-2 text-red-500 tabular-nums">{s.l}</td>
+                          <td className="text-center px-3 py-2 text-zinc-500 tabular-nums">{s.gw}</td>
+                          <td className="text-center px-3 py-2 text-zinc-500 tabular-nums">{s.gl}</td>
+                          <td className="text-center px-3 py-2 font-bold text-zinc-900 tabular-nums">{s.pts}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             )}

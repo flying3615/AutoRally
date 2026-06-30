@@ -99,6 +99,19 @@ const api = {
   tournamentsSetScore: (matchId: string, team1Score: number, team2Score: number) => ipcRenderer.invoke('tournaments:setScore', matchId, team1Score, team2Score),
   tournamentsAdvanceWinners: (tournamentId: string, currentRound: string) => ipcRenderer.invoke('tournaments:advanceWinners', tournamentId, currentRound),
   tournamentsStandings: (tournamentId: string) => ipcRenderer.invoke('tournaments:standings', tournamentId),
+  // Team tournament
+  tournamentTeamsList: (tournamentId: string) => ipcRenderer.invoke('tournament:teams:list', tournamentId),
+  tournamentTeamsCreate: (tournamentId: string, name: string, color?: string) => ipcRenderer.invoke('tournament:teams:create', tournamentId, name, color),
+  tournamentTeamsDelete: (teamId: string) => ipcRenderer.invoke('tournament:teams:delete', teamId),
+  tournamentTeamsAddPlayer: (teamId: string, playerId: string) => ipcRenderer.invoke('tournament:teams:addPlayer', teamId, playerId),
+  tournamentTeamsRemovePlayer: (teamId: string, playerId: string) => ipcRenderer.invoke('tournament:teams:removePlayer', teamId, playerId),
+  tournamentTeamsListPlayers: (teamId: string) => ipcRenderer.invoke('tournament:teams:listPlayers', teamId),
+  tournamentTeamMatchesGenerate: (tournamentId: string, gamesPerMatch?: number) => ipcRenderer.invoke('tournament:teamMatches:generate', tournamentId, gamesPerMatch),
+  tournamentTeamMatchesList: (tournamentId: string) => ipcRenderer.invoke('tournament:teamMatches:list', tournamentId),
+  tournamentTeamMatchesListGames: (teamMatchId: string) => ipcRenderer.invoke('tournament:teamMatches:listGames', teamMatchId),
+  tournamentTeamMatchesAssignCourt: (gameId: string, courtNumber: number) => ipcRenderer.invoke('tournament:teamMatches:assignCourt', gameId, courtNumber),
+  tournamentTeamMatchesSetScore: (gameId: string, team1Score: number, team2Score: number) => ipcRenderer.invoke('tournament:teamMatches:setScore', gameId, team1Score, team2Score),
+  tournamentTeamsStandings: (tournamentId: string) => ipcRenderer.invoke('tournament:teams:standings', tournamentId),
 };
 
 export type ElectronAPI = typeof api;
