@@ -358,6 +358,51 @@ describe('generateMatches', () => {
     }
   });
 
+  it('does not rest a level-isolated player two rounds in a row', () => {
+    // 9 players, 2 courts → 1 rests each round. One lone Lv1 player can only be
+    // seated via a wide-level-gap court. Cumulative fairness alone would bench
+    // them every round; the consecutive-rest guarantee must force them back in.
+    const players: PlayerInPool[] = [
+      makePlayer('lone', 'Lone', 'male', 1, 100),
+      ...Array.from({ length: 4 }, (_, i) => makePlayer(`hi${i}`, `Hi${i}`, i % 2 === 0 ? 'male' : 'female', 4, i + 1)),
+      ...Array.from({ length: 4 }, (_, i) => makePlayer(`hj${i}`, `Hj${i}`, i % 2 === 0 ? 'male' : 'female', 5, i + 5)),
+    ];
+
+    const pastGames: Game[] = [];
+    const restStreak = new Map<string, number>();
+    const maxRestStreak = new Map<string, number>();
+    players.forEach(p => { restStreak.set(p.id, 0); maxRestStreak.set(p.id, 0); });
+
+    for (let round = 1; round <= 8; round++) {
+      const matches = generateMatches(players, 2, round, pastGames);
+      const playedThisRound = new Set<string>();
+      for (const m of matches) {
+        for (const id of [...m.team1, ...m.team2]) playedThisRound.add(id);
+        pastGames.push({
+          id: `g_r${round}_c${matches.indexOf(m) + 1}`, sessionId: 'sim',
+          courtNumber: matches.indexOf(m) + 1,
+          team1Player1Id: m.team1[0], team1Player2Id: m.team1[1],
+          team2Player1Id: m.team2[0], team2Player2Id: m.team2[1],
+          status: 'completed', roundNumber: round, gameType: m.gameType,
+          startedAt: null, endedAt: null,
+        });
+      }
+      for (const p of players) {
+        if (playedThisRound.has(p.id)) {
+          restStreak.set(p.id, 0);
+        } else {
+          const next = (restStreak.get(p.id) ?? 0) + 1;
+          restStreak.set(p.id, next);
+          if (next > (maxRestStreak.get(p.id) ?? 0)) maxRestStreak.set(p.id, next);
+        }
+      }
+    }
+
+    // No player — including the isolated Lv1 — sits two rounds running.
+    expect(Math.max(...maxRestStreak.values())).toBeLessThanOrEqual(1);
+    expect(maxRestStreak.get('lone')).toBeLessThanOrEqual(1);
+  });
+
   it('groups same-level players together: one game per level group', () => {
     const pool = [
       makePlayer('m1', 'Low1', 'male', 2, 60),
@@ -396,7 +441,7 @@ function runSim(
   playerCount: number,
   courtCount: number,
   rounds: number,
-): { spread: number; courtTypes: Set<string> } {
+): { spread: number; courtTypes: Set<string>; maxConsecutiveRest: number; consecutiveRestSpread: number } {
   const allNames = [
     'Alice', 'Bob', 'Carol', 'Dave', 'Eve', 'Frank', 'Grace', 'Hank',
     'Iris', 'Jack', 'Kate', 'Leo', 'Mia', 'Noah', 'Olivia', 'Paul',
@@ -414,6 +459,11 @@ function runSim(
   const gameCount = new Map<string, number>();
   players.forEach(p => gameCount.set(p.id, 0));
 
+  // Consecutive-rest tracking: current streak + worst streak ever seen per player.
+  const restStreak = new Map<string, number>();
+  const maxRestStreak = new Map<string, number>();
+  players.forEach(p => { restStreak.set(p.id, 0); maxRestStreak.set(p.id, 0); });
+
   const rows: string[] = ['Round,Court,GameType,Team1P1,Team1P2,Team2P1,Team2P2'];
   const pastGames: Game[] = [];
   const allCourtTypes = new Set<string>();
@@ -427,12 +477,14 @@ function runSim(
 
     const matches = generateMatches(pool, courtCount, round, pastGames);
 
+    const playedThisRound = new Set<string>();
     for (const m of matches) {
       allCourtTypes.add(m.gameType);
       const court = matches.indexOf(m) + 1;
       rows.push(`${round},${court},${m.gameType},${m.team1[0]}(${getLevel(m.team1[0], players)}),${m.team1[1]}(${getLevel(m.team1[1], players)}),${m.team2[0]}(${getLevel(m.team2[0], players)}),${m.team2[1]}(${getLevel(m.team2[1], players)})`);
       for (const id of [...m.team1, ...m.team2]) {
         gameCount.set(id, (gameCount.get(id) ?? 0) + 1);
+        playedThisRound.add(id);
       }
       pastGames.push({
         id: `g_r${round}_c${court}`, sessionId: 'sim', courtNumber: court,
@@ -442,12 +494,26 @@ function runSim(
         startedAt: new Date().toISOString(), endedAt: new Date().toISOString(),
       });
     }
+
+    // Update rest streaks: reset for players who played, increment for resters.
+    for (const p of players) {
+      if (playedThisRound.has(p.id)) {
+        restStreak.set(p.id, 0);
+      } else {
+        const next = (restStreak.get(p.id) ?? 0) + 1;
+        restStreak.set(p.id, next);
+        if (next > (maxRestStreak.get(p.id) ?? 0)) maxRestStreak.set(p.id, next);
+      }
+    }
   }
 
+  const maxConsecutiveRest = Math.max(...maxRestStreak.values());
+  const consecutiveRestSpread = maxConsecutiveRest - Math.min(...maxRestStreak.values());
+
   rows.push('');
-  rows.push('Player,Gender,Level,Games Played');
+  rows.push('Player,Gender,Level,Games Played,Max Consecutive Rest');
   players.forEach(p => {
-    rows.push(`${p.name},${p.gender},${p.level},${gameCount.get(p.id) ?? 0}`);
+    rows.push(`${p.name},${p.gender},${p.level},${gameCount.get(p.id) ?? 0},${maxRestStreak.get(p.id) ?? 0}`);
   });
 
   const counts = Array.from(gameCount.values());
@@ -461,20 +527,20 @@ function runSim(
   rows.push(`Min games,${min}`);
   rows.push(`Max games,${max}`);
   rows.push(`Spread,${spread}`);
+  rows.push(`Max consecutive rest,${maxConsecutiveRest}`);
 
   const csv = rows.join('\n');
   if (process.env.WRITE_SIM_CSV) {
     const outPath = path.join(__dirname, '..', '..', 'test-results', fileName);
     fs.mkdirSync(path.dirname(outPath), { recursive: true });
     fs.writeFileSync(outPath, csv);
-    console.log(`\n[${label}] CSV → ${outPath} | spread=${spread} | types=[${[...allCourtTypes].join(',')}]`);
+    console.log(`\n[${label}] CSV → ${outPath} | spread=${spread} | maxConsecRest=${maxConsecutiveRest} | types=[${[...allCourtTypes].join(',')}]`);
     console.log(csv);
   }
 
-  // Level-matching may leave rare-level players sitting more often than
-  // populous-level players.  This is an accepted trade-off for same-level courts.
+  // Play counts must stay within one game of each other across the session.
   expect(spread).toBeLessThanOrEqual(1);
-  return { spread, courtTypes: allCourtTypes };
+  return { spread, courtTypes: allCourtTypes, maxConsecutiveRest, consecutiveRestSpread };
 }
 
 function getLevel(id: string, players: SimPlayer[]): number {
@@ -487,22 +553,61 @@ function getLevel(id: string, players: SimPlayer[]): number {
 
 describe('4-court 10-round simulations', () => {
   it('12 players: not enough to fill 4 courts', () => {
-    const { spread } = runSim('under-filled', 'sim-12p-4c.csv', 12, 4, 10);
+    const { spread, maxConsecutiveRest } = runSim('under-filled', 'sim-12p-4c.csv', 12, 4, 10);
     expect(spread).toBeLessThanOrEqual(2); // 12p/4c is under-filled; perfect balance not guaranteed
+    expect(maxConsecutiveRest).toBeLessThanOrEqual(1);
   }, 30000);
 
   it('16 players: exactly fills 4 courts (no rotation buffer)', () => {
-    const { spread } = runSim('exact-fit', 'sim-16p-4c.csv', 16, 4, 10);
+    const { spread, maxConsecutiveRest } = runSim('exact-fit', 'sim-16p-4c.csv', 16, 4, 10);
     expect(spread).toBeLessThanOrEqual(1);
+    expect(maxConsecutiveRest).toBeLessThanOrEqual(1);
+  }, 30000);
+
+  it('18 players: small rotation buffer (2 rest each round)', () => {
+    const { spread, maxConsecutiveRest } = runSim('small-buffer', 'sim-18p-4c.csv', 18, 4, 10);
+    expect(spread).toBeLessThanOrEqual(1);
+    expect(maxConsecutiveRest).toBeLessThanOrEqual(1);
   }, 30000);
 
   it('20 players: slightly more than 4 courts (baseline)', () => {
-    const { spread } = runSim('baseline', 'sim-20p-4c.csv', 20, 4, 10);
+    const { spread, maxConsecutiveRest } = runSim('baseline', 'sim-20p-4c.csv', 20, 4, 10);
     expect(spread).toBeLessThanOrEqual(1);
+    expect(maxConsecutiveRest).toBeLessThanOrEqual(1);
   }, 30000);
 
   it('24 players: well above 4 courts', () => {
-    const { spread } = runSim('over-filled', 'sim-24p-4c.csv', 24, 4, 10);
+    const { spread, maxConsecutiveRest } = runSim('over-filled', 'sim-24p-4c.csv', 24, 4, 10);
     expect(spread).toBeLessThanOrEqual(1);
+    expect(maxConsecutiveRest).toBeLessThanOrEqual(1);
+  }, 30000);
+
+  it('28 players: large rotation buffer still within consecutive-rest bound', () => {
+    const { spread, maxConsecutiveRest } = runSim('large-buffer', 'sim-28p-4c.csv', 28, 4, 12);
+    expect(spread).toBeLessThanOrEqual(1);
+    expect(maxConsecutiveRest).toBeLessThanOrEqual(1);
+  }, 30000);
+});
+
+describe('severely over-subscribed: equalise forced consecutive rests', () => {
+  // When the bench exceeds the open slots, two-round rests are unavoidable.
+  // The scheduler must then share the burden: every player's worst consecutive
+  // rest streak should differ by at most 1.
+  it('36 players / 4 courts (20 rest each round)', () => {
+    const { spread, consecutiveRestSpread } = runSim('oversub-36p', 'sim-36p-4c.csv', 36, 4, 16);
+    expect(spread).toBeLessThanOrEqual(1);
+    expect(consecutiveRestSpread).toBeLessThanOrEqual(1);
+  }, 30000);
+
+  it('24 players / 2 courts (16 rest each round)', () => {
+    const { spread, consecutiveRestSpread } = runSim('oversub-24p-2c', 'sim-24p-2c.csv', 24, 2, 16);
+    expect(spread).toBeLessThanOrEqual(1);
+    expect(consecutiveRestSpread).toBeLessThanOrEqual(1);
+  }, 30000);
+
+  it('30 players / 2 courts (22 rest each round, streaks up to 3)', () => {
+    const { spread, consecutiveRestSpread } = runSim('oversub-30p-2c', 'sim-30p-2c.csv', 30, 2, 20);
+    expect(spread).toBeLessThanOrEqual(1);
+    expect(consecutiveRestSpread).toBeLessThanOrEqual(1);
   }, 30000);
 });

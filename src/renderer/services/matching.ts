@@ -26,6 +26,7 @@ const RELAXED_LEVEL_PENALTY_OFFSET = 100;
 interface CourtCandidate extends MatchResult {
   ids: string[];
   mask: bigint;
+  restUrgency: number;
   levelPenalty: number;
   fairnessPenalty: number;
   typePenalty: number;
@@ -39,6 +40,7 @@ interface SearchState {
   matches: MatchResult[];
   mask: bigint;
   count: number;
+  restUrgency: number;
   levelPenalty: number;
   fairnessPenalty: number;
   typePenalty: number;
@@ -59,8 +61,11 @@ function hashString(value: string, seed: number): number {
 
 function compareCandidate(a: CourtCandidate, b: CourtCandidate): number {
   return (
-    a.levelPenalty - b.levelPenalty ||
+    // Courts that re-seat the longest-resting players come first, so the beam
+    // search considers them before the candidate pool is truncated.
+    b.restUrgency - a.restUrgency ||
     a.fairnessPenalty - b.fairnessPenalty ||
+    a.levelPenalty - b.levelPenalty ||
     a.typePenalty - b.typePenalty ||
     a.teamBalancePenalty - b.teamBalancePenalty ||
     a.partnerPenalty - b.partnerPenalty ||
@@ -71,9 +76,17 @@ function compareCandidate(a: CourtCandidate, b: CourtCandidate): number {
 
 function compareState(a: SearchState, b: SearchState): number {
   return (
+    // 1. Fill as many courts as possible.
     b.count - a.count ||
-    a.levelPenalty - b.levelPenalty ||
+    // 2. Rest fairness: seat the longest-resting players first. When courts
+    //    suffice this means no one rests twice in a row; when they don't, it
+    //    equalises how long each player is forced to sit consecutively.
+    b.restUrgency - a.restUrgency ||
+    // 3. Equal play counts: prefer courts built from the fewest-played players,
+    //    even when that means a wider level gap.
     a.fairnessPenalty - b.fairnessPenalty ||
+    // 4. Among equally-fair arrangements, prefer the tightest level match.
+    a.levelPenalty - b.levelPenalty ||
     a.typePenalty - b.typePenalty ||
     a.teamBalancePenalty - b.teamBalancePenalty ||
     a.partnerPenalty - b.partnerPenalty ||
@@ -97,6 +110,7 @@ function selectBestMatches(
     matches: [],
     mask: 0n,
     count: 0,
+    restUrgency: 0,
     levelPenalty: 0,
     fairnessPenalty: 0,
     typePenalty: 0,
@@ -118,6 +132,7 @@ function selectBestMatches(
         }],
         mask: state.mask | candidate.mask,
         count: state.count + 1,
+        restUrgency: state.restUrgency + candidate.restUrgency,
         levelPenalty: state.levelPenalty + candidate.levelPenalty,
         fairnessPenalty: state.fairnessPenalty + candidate.fairnessPenalty,
         typePenalty: state.typePenalty + candidate.typePenalty,
@@ -162,6 +177,37 @@ export function generateMatches(
     }
   }
   for (const p of pool) gameCount.set(p.id, gameCount.get(p.id) ?? 0);
+
+  // Consecutive-rest streak per pool player: how many of the most-recent rounds
+  // they have sat out in a row. Drives two goals:
+  //   • no two consecutive rests when courts allow (streak ≤ 1 is the common case)
+  //   • when courts are too few to avoid it, equalise streaks so the forced
+  //     extra rests are shared, not dumped on the same unlucky players.
+  const roundsDesc = [...new Set(countedGames.map(g => g.roundNumber))].sort((a, b) => b - a);
+  const playedInRound = new Map<number, Set<string>>();
+  for (const g of countedGames) {
+    let set = playedInRound.get(g.roundNumber);
+    if (!set) { set = new Set(); playedInRound.set(g.roundNumber, set); }
+    set.add(g.team1Player1Id);
+    set.add(g.team1Player2Id);
+    set.add(g.team2Player1Id);
+    set.add(g.team2Player2Id);
+  }
+  const restStreak = new Map<string, number>();
+  for (const p of pool) {
+    let streak = 0;
+    for (const r of roundsDesc) {
+      if (playedInRound.get(r)?.has(p.id)) break;
+      streak++;
+    }
+    restStreak.set(p.id, streak);
+  }
+  // Players who rested last round (streak ≥ 1) must be re-seatable; used to
+  // widen level windows if one of them is otherwise un-pairable.
+  const restedLastRound = new Set<string>();
+  for (const p of pool) {
+    if ((restStreak.get(p.id) ?? 0) >= 1) restedLastRound.add(p.id);
+  }
 
   const playerIndex = new Map(pool.map((p, i) => [p.id, i]));
 
@@ -274,6 +320,14 @@ export function generateMatches(
 
     const fairnessPenalty = group.reduce((sum, p) => sum + (gameCount.get(p.id) ?? 0) - poolMin, 0);
     const waitPenalty = group.reduce((sum, p) => sum + (waitRank.get(p.id) ?? 0), 0);
+    // Convex (streak²) weighting: seating one long-streak player beats seating
+    // several streak-1 players, so the search shrinks the largest streaks first.
+    // For streak ≤ 1 this equals the count of last-round resters, preserving the
+    // no-two-consecutive-rests behaviour exactly.
+    const restUrgency = group.reduce((sum, p) => {
+      const s = restStreak.get(p.id) ?? 0;
+      return sum + s * s;
+    }, 0);
     const typePenalty = gameType === 'mixed' ? 0 : gameType === 'male-double' || gameType === 'female-double' ? 1 : 2;
     candidateByKey.set(key, {
       ids,
@@ -281,6 +335,7 @@ export function generateMatches(
       team1: bestTeams.team1,
       team2: bestTeams.team2,
       gameType,
+      restUrgency,
       levelPenalty,
       fairnessPenalty,
       typePenalty,
@@ -316,8 +371,22 @@ export function generateMatches(
     selectBestMatches([...candidateByKey.values()].sort(compareCandidate), pool.length, courtCount, candidateLimit);
 
   const targetCourtCount = Math.min(courtCount, Math.floor(pool.length / 4));
+
+  // A last-round rester who can only form a wide-level-gap court has no strict
+  // candidate covering them. Detect that so we widen the level windows below;
+  // otherwise the consecutive-rest guarantee silently fails for isolated levels.
+  const coveredIds = new Set<string>();
+  for (const c of candidateByKey.values()) {
+    for (const id of c.ids) coveredIds.add(id);
+  }
+  const restedUncovered = [...restedLastRound].some(id => !coveredIds.has(id));
+  // Also widen when the fewest-played player(s) cannot be seated within strict
+  // level windows — otherwise an isolated level drifts behind on play count.
+  const behindUncovered = pool.some(p =>
+    !coveredIds.has(p.id) && (gameCount.get(p.id) ?? 0) <= poolMin);
+
   const strictMatches = selectCurrentCandidates();
-  if (strictMatches.length >= targetCourtCount) return strictMatches;
+  if (strictMatches.length >= targetCourtCount && !restedUncovered && !behindUncovered) return strictMatches;
 
   let relaxedPlayers = [...sorted].sort((a, b) => playerRank(a) - playerRank(b));
   const relaxedLimit = Math.max(MAX_PLAYERS_PER_LEVEL_WINDOW, courtCount * 8);
