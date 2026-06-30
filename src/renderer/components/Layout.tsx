@@ -5,7 +5,7 @@ import { useSessionStore } from '../stores/sessionStore';
 import { ToastViewport } from './Toast';
 import { ConfirmDialog } from './ConfirmDialog';
 
-const navItems = [
+const clubNavItems = [
   {
     to: '/',
     label: 'Dashboard',
@@ -21,15 +21,6 @@ const navItems = [
     icon: (
       <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
-      </svg>
-    ),
-  },
-  {
-    to: '/tournaments',
-    label: 'Tournaments',
-    icon: (
-      <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 18.75h-9m9 0a3 3 0 013 3h-15a3 3 0 013-3m9 0v-3.375c0-.621-.503-1.125-1.125-1.125h-.871M7.5 18.75v-3.375c0-.621.504-1.125 1.125-1.125h.872m5.007 0H9.497m5.007 0a7.454 7.454 0 01-.982-3.172M9.497 14.25a7.454 7.454 0 00.981-3.172M5.25 4.236c-.982.143-1.954.317-2.916.52A6.003 6.003 0 007.73 9.728M5.25 4.236V4.5c0 2.108.966 3.99 2.48 5.228M5.25 4.236V2.721C7.456 2.41 9.71 2.25 12 2.25c2.291 0 4.545.16 6.75.47v1.516M18.75 4.236c.982.143 1.954.317 2.916.52A6.003 6.003 0 0016.27 9.728M18.75 4.236V4.5c0 2.108-.966 3.99-2.48 5.228m0-6.736V.97A49.269 49.269 0 0112 0a49.269 49.269 0 01-2.769.084" />
       </svg>
     ),
   },
@@ -63,12 +54,37 @@ const navItems = [
   },
 ];
 
+const tournamentNavItem = {
+  to: '/tournaments',
+  label: 'Tournaments',
+  icon: (
+    <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 18.75h-9m9 0a3 3 0 013 3h-15a3 3 0 013-3m9 0v-3.375c0-.621-.503-1.125-1.125-1.125h-.871M7.5 18.75v-3.375c0-.621.504-1.125 1.125-1.125h.872m5.007 0H9.497m5.007 0a7.454 7.454 0 01-.982-3.172M9.497 14.25a7.454 7.454 0 00.981-3.172M5.25 4.236c-.982.143-1.954.317-2.916.52A6.003 6.003 0 007.73 9.728M5.25 4.236V4.5c0 2.108.966 3.99 2.48 5.228M5.25 4.236V2.721C7.456 2.41 9.71 2.25 12 2.25c2.291 0 4.545.16 6.75.47v1.516M18.75 4.236c.982.143 1.954.317 2.916.52A6.003 6.003 0 0016.27 9.728M18.75 4.236V4.5c0 2.108-.966 3.99-2.48 5.228m0-6.736V.97A49.269 49.269 0 0112 0a49.269 49.269 0 01-2.769.084" />
+    </svg>
+  ),
+};
+
 function Sidebar() {
   const location = useLocation();
   const { activeSession } = useSessionStore();
   const [expanded, setExpanded] = useState(() => (
     window.localStorage.getItem('autorally-sidebar-expanded') === 'true'
   ));
+
+  const isTournamentMode = location.pathname.startsWith('/tournaments');
+
+  // Theme tokens — switch between club (zinc) and tournament (indigo)
+  const sidebarBg    = isTournamentMode ? 'bg-indigo-950 border-indigo-900/60'       : 'bg-white border-zinc-200/60';
+  const headerBorder = isTournamentMode ? 'border-indigo-900/50'                     : 'border-zinc-100';
+  const toggleCls    = isTournamentMode ? 'text-indigo-400 hover:bg-indigo-800/60 hover:text-indigo-100' : 'text-zinc-500 hover:bg-zinc-50 hover:text-zinc-800';
+  const logoBg       = isTournamentMode ? 'bg-indigo-500'                            : 'bg-zinc-900';
+  const appNameCls   = isTournamentMode ? 'text-indigo-100'                          : 'text-zinc-900';
+  const activeCls    = isTournamentMode ? 'bg-indigo-600 text-white shadow-[0_1px_4px_rgba(99,102,241,0.35)]' : 'bg-zinc-800 text-white shadow-[0_1px_3px_rgba(0,0,0,0.1)]';
+  const inactiveCls  = isTournamentMode ? 'text-indigo-400 hover:bg-indigo-800/50 hover:text-indigo-100' : 'text-zinc-400 hover:bg-zinc-50 hover:text-zinc-600';
+  const sectionLabelCls = isTournamentMode ? 'text-indigo-600'                       : 'text-zinc-300';
+  const dividerCls   = isTournamentMode ? 'border-indigo-900/50'                     : 'border-zinc-100';
+  const subActiveCls = isTournamentMode ? 'bg-indigo-800/60 text-indigo-100 font-medium' : 'bg-zinc-100 text-zinc-900 font-medium';
+  const subInactiveCls = isTournamentMode ? 'text-indigo-500 hover:bg-indigo-800/40 hover:text-indigo-200' : 'text-zinc-400 hover:bg-zinc-50 hover:text-zinc-600';
 
   const toggleExpanded = () => {
     setExpanded(current => {
@@ -88,17 +104,65 @@ function Sidebar() {
   const isMatchActive = location.pathname.startsWith('/match/');
   const isReportActive = location.pathname.startsWith('/report/');
 
+  const renderNavItem = (item: typeof clubNavItems[number]) => {
+    const active = item.to === '/sessions'
+      ? isActive('/sessions') || isSessionSubpage
+      : isActive(item.to);
+    return (
+      <div key={item.to}>
+        <Link
+          to={item.to}
+          aria-current={active ? 'page' : undefined}
+          title={!expanded ? item.label : undefined}
+          className={`flex items-center h-9 mx-1.5 px-2 rounded-lg transition-all duration-150 ${active ? activeCls : inactiveCls}`}
+        >
+          <span className="shrink-0">{item.icon}</span>
+          <span className={`ml-2.5 text-sm font-medium whitespace-nowrap transition-opacity duration-200 ${expanded ? 'opacity-100' : 'opacity-0'}`}>
+            {item.label}
+          </span>
+        </Link>
+
+        {/* Sub-items under Sessions when active */}
+        {item.to === '/sessions' && activeSession && (
+          <div className={`mt-0.5 space-y-0.5 overflow-hidden transition-all duration-200 ${expanded ? 'max-h-28' : 'max-h-0'}`}>
+            <Link to={`/checkin/${activeSession.id}`}
+              className={`flex items-center h-8 mx-1.5 pl-5 pr-2 rounded-lg text-[13px] transition-all duration-150 ${isCheckinActive ? subActiveCls : subInactiveCls}`}>
+              <svg className="w-[14px] h-[14px] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span className={`ml-1.5 whitespace-nowrap transition-opacity duration-200 ${expanded ? 'opacity-100' : 'opacity-0'}`}>Check-in</span>
+            </Link>
+            <Link to={`/match/${activeSession.id}`}
+              className={`flex items-center h-8 mx-1.5 pl-5 pr-2 rounded-lg text-[13px] transition-all duration-150 ${isMatchActive ? subActiveCls : subInactiveCls}`}>
+              <svg className="w-[14px] h-[14px] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.362 5.214A8.252 8.252 0 0112 21 8.25 8.25 0 016.038 7.048 8.287 8.287 0 009 9.6a8.983 8.983 0 013.361-6.867 8.21 8.21 0 003 2.48z" />
+              </svg>
+              <span className={`ml-1.5 whitespace-nowrap transition-opacity duration-200 ${expanded ? 'opacity-100' : 'opacity-0'}`}>Match Panel</span>
+            </Link>
+            <Link to={`/report/${activeSession.id}`}
+              className={`flex items-center h-8 mx-1.5 pl-5 pr-2 rounded-lg text-[13px] transition-all duration-150 ${isReportActive ? subActiveCls : subInactiveCls}`}>
+              <svg className="w-[14px] h-[14px] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
+              </svg>
+              <span className={`ml-1.5 whitespace-nowrap transition-opacity duration-200 ${expanded ? 'opacity-100' : 'opacity-0'}`}>Report</span>
+            </Link>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const tmActive = isActive('/tournaments');
+
   return (
     <nav
-      className="flex flex-col shrink-0 bg-white border-r border-zinc-200/60 overflow-hidden transition-all duration-200 ease-[cubic-bezier(0.25,0.1,0.25,1)]"
+      className={`flex flex-col shrink-0 border-r overflow-hidden transition-all duration-200 ease-[cubic-bezier(0.25,0.1,0.25,1)] ${sidebarBg}`}
       style={{ width: expanded ? 192 : 52, WebkitAppRegion: 'drag' } as any}
     >
       {/* Header */}
-      <div className="flex items-center h-11 px-2 shrink-0 border-b border-zinc-100" style={{ WebkitAppRegion: 'no-drag' } as any}>
-        <button
-          type="button"
-          onClick={toggleExpanded}
-          className="w-8 h-8 rounded-lg flex items-center justify-center text-zinc-500 hover:bg-zinc-50 hover:text-zinc-800 active:scale-90 transition-all"
+      <div className={`flex items-center h-11 px-2 shrink-0 border-b ${headerBorder}`} style={{ WebkitAppRegion: 'no-drag' } as any}>
+        <button type="button" onClick={toggleExpanded}
+          className={`w-8 h-8 rounded-lg flex items-center justify-center active:scale-90 transition-all ${toggleCls}`}
           aria-label={expanded ? 'Collapse sidebar' : 'Expand sidebar'}
           title={expanded ? 'Collapse sidebar' : 'Expand sidebar'}
         >
@@ -106,95 +170,43 @@ function Sidebar() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
           </svg>
         </button>
-        <Link
-          to="/"
-          className={`ml-1.5 w-8 h-8 rounded-lg bg-zinc-900 text-white text-[11px] font-bold tracking-tight flex items-center justify-center transition-opacity ${expanded ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+        <Link to="/"
+          className={`ml-1.5 w-8 h-8 rounded-lg ${logoBg} text-white text-[11px] font-bold tracking-tight flex items-center justify-center transition-opacity ${expanded ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
           aria-label="Go to AutoRally dashboard"
         >
           AR
         </Link>
-        <span className={`ml-2.5 text-[15px] font-semibold text-zinc-900 tracking-tight whitespace-nowrap transition-opacity duration-200 ${expanded ? 'opacity-100' : 'opacity-0'}`}>
+        <span className={`ml-2.5 text-[15px] font-semibold tracking-tight whitespace-nowrap transition-opacity duration-200 ${appNameCls} ${expanded ? 'opacity-100' : 'opacity-0'}`}>
           AutoRally
         </span>
       </div>
 
-      {/* Nav items */}
+      {/* Nav */}
       <div className="flex-1 py-2 space-y-0.5" style={{ WebkitAppRegion: 'no-drag' } as any}>
-        {navItems.map(item => {
-          const active = item.to === '/sessions'
-            ? isActive('/sessions') || isSessionSubpage
-            : isActive(item.to);
-          return (
-            <div key={item.to}>
-              <Link
-                to={item.to}
-                aria-current={active ? 'page' : undefined}
-                title={!expanded ? item.label : undefined}
-                className={`flex items-center h-9 mx-1.5 px-2 rounded-lg transition-all duration-150 ${
-                  active
-                    ? 'bg-zinc-800 text-white shadow-[0_1px_3px_rgba(0,0,0,0.1)]'
-                    : 'text-zinc-400 hover:bg-zinc-50 hover:text-zinc-600'
-                }`}
-              >
-                <span className="shrink-0">{item.icon}</span>
-                <span className={`ml-2.5 text-sm font-medium whitespace-nowrap transition-opacity duration-200 ${expanded ? 'opacity-100' : 'opacity-0'}`}>
-                  {item.label}
-                </span>
-              </Link>
+        {/* Club section label */}
+        {expanded && (
+          <p className={`px-3.5 pt-1 pb-0.5 text-[10px] font-bold uppercase tracking-widest ${sectionLabelCls}`}>Club</p>
+        )}
+        {clubNavItems.map(renderNavItem)}
 
-              {/* Sub-items under Sessions when active */}
-              {item.to === '/sessions' && activeSession && (
-                <div className={`mt-0.5 space-y-0.5 overflow-hidden transition-all duration-200 ${expanded ? 'max-h-28' : 'max-h-0'}`}>
-                  <Link
-                    to={`/checkin/${activeSession.id}`}
-                    className={`flex items-center h-8 mx-1.5 pl-5 pr-2 rounded-lg text-[13px] transition-all duration-150 ${
-                      isCheckinActive
-                        ? 'bg-zinc-100 text-zinc-900 font-medium'
-                        : 'text-zinc-400 hover:bg-zinc-50 hover:text-zinc-600'
-                    }`}
-                  >
-                    <svg className="w-[14px] h-[14px] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <span className={`ml-1.5 whitespace-nowrap transition-opacity duration-200 ${expanded ? 'opacity-100' : 'opacity-0'}`}>
-                      Check-in
-                    </span>
-                  </Link>
-                  <Link
-                    to={`/match/${activeSession.id}`}
-                    className={`flex items-center h-8 mx-1.5 pl-5 pr-2 rounded-lg text-[13px] transition-all duration-150 ${
-                      isMatchActive
-                        ? 'bg-zinc-100 text-zinc-900 font-medium'
-                        : 'text-zinc-400 hover:bg-zinc-50 hover:text-zinc-600'
-                    }`}
-                  >
-                    <svg className="w-[14px] h-[14px] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.362 5.214A8.252 8.252 0 0112 21 8.25 8.25 0 016.038 7.048 8.287 8.287 0 009 9.6a8.983 8.983 0 013.361-6.867 8.21 8.21 0 003 2.48z" />
-                    </svg>
-                    <span className={`ml-1.5 whitespace-nowrap transition-opacity duration-200 ${expanded ? 'opacity-100' : 'opacity-0'}`}>
-                      Match Panel
-                    </span>
-                  </Link>
-                  <Link
-                    to={`/report/${activeSession.id}`}
-                    className={`flex items-center h-8 mx-1.5 pl-5 pr-2 rounded-lg text-[13px] transition-all duration-150 ${
-                      isReportActive
-                        ? 'bg-zinc-100 text-zinc-900 font-medium'
-                        : 'text-zinc-400 hover:bg-zinc-50 hover:text-zinc-600'
-                    }`}
-                  >
-                    <svg className="w-[14px] h-[14px] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
-                    </svg>
-                    <span className={`ml-1.5 whitespace-nowrap transition-opacity duration-200 ${expanded ? 'opacity-100' : 'opacity-0'}`}>
-                      Report
-                    </span>
-                  </Link>
-                </div>
-              )}
-            </div>
-          );
-        })}
+        {/* Divider */}
+        <div className={`mx-3 my-2 border-t ${dividerCls}`} />
+
+        {/* Tournament section label */}
+        {expanded && (
+          <p className={`px-3.5 pb-0.5 text-[10px] font-bold uppercase tracking-widest ${sectionLabelCls}`}>Tournament</p>
+        )}
+        <Link
+          to={tournamentNavItem.to}
+          aria-current={tmActive ? 'page' : undefined}
+          title={!expanded ? tournamentNavItem.label : undefined}
+          className={`flex items-center h-9 mx-1.5 px-2 rounded-lg transition-all duration-150 ${tmActive ? activeCls : inactiveCls}`}
+        >
+          <span className="shrink-0">{tournamentNavItem.icon}</span>
+          <span className={`ml-2.5 text-sm font-medium whitespace-nowrap transition-opacity duration-200 ${expanded ? 'opacity-100' : 'opacity-0'}`}>
+            {tournamentNavItem.label}
+          </span>
+        </Link>
       </div>
     </nav>
   );
