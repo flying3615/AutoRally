@@ -9,3 +9,5 @@ out/
 .env.local
 .DS_Store
 *.log
+.claude/
+.idea/
