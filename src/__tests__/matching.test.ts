@@ -261,6 +261,69 @@ describe('generateMatches', () => {
     expect(result[0]!.gameType).toBe('open-double');
   });
 
+  it('forms a female-double for surplus same-level women that mixed cannot absorb', () => {
+    // 6 women + 2 men, 2 courts. Mixed can only use the 2 men (one mixed court);
+    // the 4 remaining women should form a women's double rather than two lopsided
+    // open courts.
+    const pool = [
+      ...Array.from({ length: 6 }, (_, i) => makePlayer(`f${i + 1}`, `F${i + 1}`, 'female', 3, i)),
+      makePlayer('m1', 'M1', 'male', 3, 6),
+      makePlayer('m2', 'M2', 'male', 3, 7),
+    ];
+
+    const result = generateMatches(pool, 2, 1, []);
+
+    expect(result).toHaveLength(2);
+    expect(result.some(m => m.gameType === 'mixed')).toBe(true);
+    expect(result.some(m => m.gameType === 'female-double')).toBe(true);
+    // The women's double must be four women.
+    const fd = result.find(m => m.gameType === 'female-double')!;
+    for (const id of [...fd.team1, ...fd.team2]) {
+      expect(pool.find(p => p.id === id)!.gender).toBe('female');
+    }
+  });
+
+  it('keeps mixed as the default in a gender-balanced same-level pool (no segregation)', () => {
+    // 4 women + 4 men, 2 courts. Mixed can absorb everyone, so the result should be
+    // two mixed courts — not a women's double + men's double.
+    const pool = [
+      ...Array.from({ length: 4 }, (_, i) => makePlayer(`f${i + 1}`, `F${i + 1}`, 'female', 3, i)),
+      ...Array.from({ length: 4 }, (_, i) => makePlayer(`m${i + 1}`, `M${i + 1}`, 'male', 3, i + 4)),
+    ];
+
+    const result = generateMatches(pool, 2, 1, []);
+
+    expect(result).toHaveLength(2);
+    expect(result.every(m => m.gameType === 'mixed')).toBe(true);
+  });
+
+  it('forms a female-double only for the waiting women, without hurting play-count fairness', () => {
+    // 6 women + 2 men. Two women have already played a game; the four fresh women
+    // (fewest games) must be the ones seated in the women's double, and the two
+    // played women rest — play counts stay within one game of each other.
+    const pool = [
+      ...Array.from({ length: 6 }, (_, i) => makePlayer(`f${i + 1}`, `F${i + 1}`, 'female', 3, i)),
+      makePlayer('m1', 'M1', 'male', 3, 6),
+      makePlayer('m2', 'M2', 'male', 3, 7),
+    ];
+    // f1 & f2 already played one game together with the two men.
+    const pastGames: Game[] = [{
+      id: 'g1', sessionId: 's', courtNumber: 1,
+      team1Player1Id: 'f1', team1Player2Id: 'm1',
+      team2Player1Id: 'f2', team2Player2Id: 'm2',
+      status: 'completed', roundNumber: 1, gameType: 'mixed',
+      startedAt: null, endedAt: null,
+    }];
+
+    const result = generateMatches(pool, 1, 2, pastGames);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]!.gameType).toBe('female-double');
+    const seated = [...result[0]!.team1, ...result[0]!.team2];
+    // The four fresh women (f3..f6) are the fair choice; f1/f2 already played.
+    expect(seated.sort()).toEqual(['f3', 'f4', 'f5', 'f6']);
+  });
+
   it('does not count pending games as played history when selecting players', () => {
     // All have game count 0 because pending games are excluded.  The algorithm
     // selects 4 of the 5 eligible players.  Which four is non-deterministic due
