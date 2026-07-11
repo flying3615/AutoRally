@@ -106,11 +106,12 @@ const api = {
   tournamentTeamsAddPlayer: (teamId: string, playerId: string) => ipcRenderer.invoke('tournament:teams:addPlayer', teamId, playerId),
   tournamentTeamsRemovePlayer: (teamId: string, playerId: string) => ipcRenderer.invoke('tournament:teams:removePlayer', teamId, playerId),
   tournamentTeamsListPlayers: (teamId: string) => ipcRenderer.invoke('tournament:teams:listPlayers', teamId),
-  tournamentTeamMatchesGenerate: (tournamentId: string, gamesPerMatch?: number) => ipcRenderer.invoke('tournament:teamMatches:generate', tournamentId, gamesPerMatch),
+  tournamentTeamMatchesGenerate: (tournamentId: string, composition: { ms: number; ws: number; md: number; xd: number; wd: number }) => ipcRenderer.invoke('tournament:teamMatches:generate', tournamentId, composition),
   tournamentTeamMatchesList: (tournamentId: string) => ipcRenderer.invoke('tournament:teamMatches:list', tournamentId),
   tournamentTeamMatchesListGames: (teamMatchId: string) => ipcRenderer.invoke('tournament:teamMatches:listGames', teamMatchId),
   tournamentTeamMatchesAssignCourt: (gameId: string, courtNumber: number) => ipcRenderer.invoke('tournament:teamMatches:assignCourt', gameId, courtNumber),
   tournamentTeamMatchesSetScore: (gameId: string, team1Score: number, team2Score: number) => ipcRenderer.invoke('tournament:teamMatches:setScore', gameId, team1Score, team2Score),
+  tournamentTeamMatchesReassignPlayers: (gameId: string, assignment: { team1Player1Id: string; team1Player2Id: string | null; team2Player1Id: string; team2Player2Id: string | null }) => ipcRenderer.invoke('tournament:teamMatches:reassignPlayers', gameId, assignment),
   tournamentTeamsStandings: (tournamentId: string) => ipcRenderer.invoke('tournament:teams:standings', tournamentId),
 };
 
