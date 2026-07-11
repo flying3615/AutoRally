@@ -297,3 +297,191 @@ export function validateTournamentRegistration(
     throw new Error('Player is already registered in this tournament');
   }
 }
+
+export interface TeamMatchComposition {
+  ms: number;
+  ws: number;
+  md: number;
+  xd: number;
+  wd: number;
+}
+
+export interface TeamRosterPlayer {
+  playerId: string;
+  gender: 'male' | 'female';
+  level: number;
+}
+
+export type TeamMatchCategory = 'MS' | 'WS' | 'MD' | 'XD' | 'WD';
+
+export interface TeamMatchGameSpec {
+  category: TeamMatchCategory;
+  slotNumber: number;
+  team1Player1Id: string;
+  team1Player2Id: string | null;
+  team2Player1Id: string;
+  team2Player2Id: string | null;
+}
+
+export interface BuildTeamMatchGamesResult {
+  games: TeamMatchGameSpec[];
+  skipped: TeamMatchCategory[];
+}
+
+function byGender(roster: TeamRosterPlayer[], gender: 'male' | 'female'): TeamRosterPlayer[] {
+  return roster.filter(p => p.gender === gender);
+}
+
+function pickCycled(pool: TeamRosterPlayer[], count: number): string[] {
+  if (pool.length === 0) return [];
+  return Array.from({ length: count }, (_, i) => pool[i % pool.length]!.playerId);
+}
+
+function pairAdjacentByLevel(pool: TeamRosterPlayer[], count: number): Array<[string, string]> {
+  if (pool.length < 2) return [];
+  const sorted = [...pool].sort((a, b) => a.level - b.level);
+  const n = sorted.length;
+  return Array.from({ length: count }, (_, i) => {
+    const idxA = (2 * i) % n;
+    const idxB = (2 * i + 1) % n;
+    return [sorted[idxA]!.playerId, sorted[idxB]!.playerId] as [string, string];
+  });
+}
+
+function pairMixedByLevel(malePool: TeamRosterPlayer[], femalePool: TeamRosterPlayer[], count: number): Array<[string, string]> {
+  if (malePool.length === 0 || femalePool.length === 0) return [];
+  const sortedMale = [...malePool].sort((a, b) => a.level - b.level);
+  const sortedFemale = [...femalePool].sort((a, b) => a.level - b.level);
+  return Array.from({ length: count }, (_, i) => [
+    sortedMale[i % sortedMale.length]!.playerId,
+    sortedFemale[i % sortedFemale.length]!.playerId,
+  ] as [string, string]);
+}
+
+export function buildTeamMatchGames(
+  team1Roster: TeamRosterPlayer[],
+  team2Roster: TeamRosterPlayer[],
+  composition: TeamMatchComposition,
+): BuildTeamMatchGamesResult {
+  const games: TeamMatchGameSpec[] = [];
+  const skipped: TeamMatchCategory[] = [];
+
+  const singlesSpecs: Array<{ category: TeamMatchCategory; gender: 'male' | 'female'; count: number }> = [
+    { category: 'MS', gender: 'male', count: composition.ms },
+    { category: 'WS', gender: 'female', count: composition.ws },
+  ];
+  for (const spec of singlesSpecs) {
+    if (spec.count <= 0) continue;
+    const pool1 = byGender(team1Roster, spec.gender);
+    const pool2 = byGender(team2Roster, spec.gender);
+    if (pool1.length === 0 || pool2.length === 0) { skipped.push(spec.category); continue; }
+    const picks1 = pickCycled(pool1, spec.count);
+    const picks2 = pickCycled(pool2, spec.count);
+    for (let i = 0; i < spec.count; i++) {
+      games.push({
+        category: spec.category,
+        slotNumber: i + 1,
+        team1Player1Id: picks1[i]!,
+        team1Player2Id: null,
+        team2Player1Id: picks2[i]!,
+        team2Player2Id: null,
+      });
+    }
+  }
+
+  const doublesSpecs: Array<{ category: TeamMatchCategory; gender: 'male' | 'female'; count: number }> = [
+    { category: 'MD', gender: 'male', count: composition.md },
+    { category: 'WD', gender: 'female', count: composition.wd },
+  ];
+  for (const spec of doublesSpecs) {
+    if (spec.count <= 0) continue;
+    const pool1 = byGender(team1Roster, spec.gender);
+    const pool2 = byGender(team2Roster, spec.gender);
+    const pairs1 = pairAdjacentByLevel(pool1, spec.count);
+    const pairs2 = pairAdjacentByLevel(pool2, spec.count);
+    if (pairs1.length === 0 || pairs2.length === 0) { skipped.push(spec.category); continue; }
+    for (let i = 0; i < spec.count; i++) {
+      games.push({
+        category: spec.category,
+        slotNumber: i + 1,
+        team1Player1Id: pairs1[i]![0],
+        team1Player2Id: pairs1[i]![1],
+        team2Player1Id: pairs2[i]![0],
+        team2Player2Id: pairs2[i]![1],
+      });
+    }
+  }
+
+  if (composition.xd > 0) {
+    const male1 = byGender(team1Roster, 'male');
+    const female1 = byGender(team1Roster, 'female');
+    const male2 = byGender(team2Roster, 'male');
+    const female2 = byGender(team2Roster, 'female');
+    const pairs1 = pairMixedByLevel(male1, female1, composition.xd);
+    const pairs2 = pairMixedByLevel(male2, female2, composition.xd);
+    if (pairs1.length === 0 || pairs2.length === 0) {
+      skipped.push('XD');
+    } else {
+      for (let i = 0; i < composition.xd; i++) {
+        games.push({
+          category: 'XD',
+          slotNumber: i + 1,
+          team1Player1Id: pairs1[i]![0],
+          team1Player2Id: pairs1[i]![1],
+          team2Player1Id: pairs2[i]![0],
+          team2Player2Id: pairs2[i]![1],
+        });
+      }
+    }
+  }
+
+  return { games, skipped };
+}
+
+export interface TeamReassignmentInput {
+  team1Player1Id: string;
+  team1Player2Id: string | null;
+  team2Player1Id: string;
+  team2Player2Id: string | null;
+}
+
+export function validateTeamReassignment(
+  category: TeamMatchCategory,
+  team1Roster: TeamRosterPlayer[],
+  team2Roster: TeamRosterPlayer[],
+  assignment: TeamReassignmentInput,
+): void {
+  const needsDoubles = category === 'MD' || category === 'WD' || category === 'XD';
+  if (needsDoubles) {
+    if (!assignment.team1Player2Id || !assignment.team2Player2Id) throw new Error(`${category} requires two players per side`);
+    if (assignment.team1Player1Id === assignment.team1Player2Id) throw new Error('Team 1 pair must be two different players');
+    if (assignment.team2Player1Id === assignment.team2Player2Id) throw new Error('Team 2 pair must be two different players');
+  } else if (assignment.team1Player2Id || assignment.team2Player2Id) {
+    throw new Error(`${category} is a singles category and cannot have a second player`);
+  }
+
+  const findPlayer = (roster: TeamRosterPlayer[], playerId: string) => roster.find(p => p.playerId === playerId);
+
+  const checkSlot = (roster: TeamRosterPlayer[], playerId: string, requiredGender: 'male' | 'female') => {
+    const player = findPlayer(roster, playerId);
+    if (!player) throw new Error('Selected player is not on this team');
+    if (player.gender !== requiredGender) throw new Error(`${category} requires a ${requiredGender} player in this slot`);
+  };
+
+  if (category === 'MS' || category === 'MD') {
+    checkSlot(team1Roster, assignment.team1Player1Id, 'male');
+    checkSlot(team2Roster, assignment.team2Player1Id, 'male');
+    if (assignment.team1Player2Id) checkSlot(team1Roster, assignment.team1Player2Id, 'male');
+    if (assignment.team2Player2Id) checkSlot(team2Roster, assignment.team2Player2Id, 'male');
+  } else if (category === 'WS' || category === 'WD') {
+    checkSlot(team1Roster, assignment.team1Player1Id, 'female');
+    checkSlot(team2Roster, assignment.team2Player1Id, 'female');
+    if (assignment.team1Player2Id) checkSlot(team1Roster, assignment.team1Player2Id, 'female');
+    if (assignment.team2Player2Id) checkSlot(team2Roster, assignment.team2Player2Id, 'female');
+  } else if (category === 'XD') {
+    checkSlot(team1Roster, assignment.team1Player1Id, 'male');
+    checkSlot(team2Roster, assignment.team2Player1Id, 'male');
+    checkSlot(team1Roster, assignment.team1Player2Id!, 'female');
+    checkSlot(team2Roster, assignment.team2Player2Id!, 'female');
+  }
+}
