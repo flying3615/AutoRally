@@ -498,9 +498,9 @@ export function Settings() {
 
         {/* About */}
         <div className="border-t border-zinc-200 pt-10">
-          <p className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider mb-3">About</p>
+          <h3 className="text-lg font-bold text-zinc-900 tracking-tight mb-3">About</h3>
           <div className="bg-white border border-zinc-200/60 rounded-2xl p-4 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-emerald-600 text-white flex items-center justify-center text-sm font-bold shrink-0">
+            <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-sm font-bold shrink-0">
               GL
             </div>
             <div>
