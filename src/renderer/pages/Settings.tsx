@@ -425,7 +425,7 @@ export function Settings() {
         </div>
 
         {/* Upcoming Sessions */}
-        <div className="border-t border-zinc-200 pt-10">
+        <div className="border-t border-zinc-200 pt-10 mb-10">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="text-lg font-bold text-zinc-900 tracking-tight">Upcoming Sessions</h3>
@@ -494,6 +494,30 @@ export function Settings() {
               </table>
             </div>
           )}
+        </div>
+
+        {/* About */}
+        <div className="border-t border-zinc-200 pt-10">
+          <p className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider mb-3">About</p>
+          <div className="bg-white border border-zinc-200/60 rounded-2xl p-4 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-emerald-600 text-white flex items-center justify-center text-sm font-bold shrink-0">
+              GL
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-zinc-900">Gabriel Liu</p>
+              <a
+                href="https://github.com/flying3615"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-sm text-emerald-600 hover:text-emerald-700 transition-colors"
+              >
+                github.com/flying3615
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                </svg>
+              </a>
+            </div>
+          </div>
         </div>
 
         {/* Modal */}
