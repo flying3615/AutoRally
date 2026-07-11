@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-07-12-team-match-composition-design.md`
 
-**Known follow-up (not in this plan):** `src/renderer/pages/TournamentLivePanel.tsx` (route `/tournaments/:id/live`) also renders individual team-match rubbers for live court assignment/scoring, and was not covered by the approved spec. It will keep working unchanged (the two new fields are optional additions to existing data), but it won't show category badges — that's a small separate follow-up if wanted later.
+**Note on `TournamentLivePanel.tsx`:** this file (route `/tournaments/:id/live`, the screen organizers actually run live court assignment/scoring from) was not covered by the original spec review. An advisor pass on this plan found that it's not just missing category badges — its `Game` interface and backing query have no second-player fields at all, so once doubles rubbers exist, this screen would silently show only one player per side for MD/WD/XD ties, hiding the partner. Task 9 (below) fixes this as part of this plan rather than deferring it, since it's the primary live-ops surface for the whole feature.
 
 ---
 
@@ -72,6 +72,7 @@ import {
   computeTournamentStandings,
   generateKnockoutMatches,
   generateRoundRobinMatches,
+  validateTeamReassignment,
   validateTournamentRegistration,
   type TournamentMatchRecord,
   type TournamentRegistration,
@@ -149,6 +150,53 @@ describe('buildTeamMatchGames', () => {
 
     expect(result.games).toEqual([]);
     expect(result.skipped).toEqual([]);
+  });
+});
+
+describe('validateTeamReassignment', () => {
+  const team1 = [rosterPlayer('t1-m1', 'male', 3), rosterPlayer('t1-m2', 'male', 4), rosterPlayer('t1-f1', 'female', 3)];
+  const team2 = [rosterPlayer('t2-m1', 'male', 3), rosterPlayer('t2-f1', 'female', 3), rosterPlayer('t2-f2', 'female', 4)];
+
+  it('accepts a valid singles reassignment', () => {
+    expect(() => validateTeamReassignment('MS', team1, team2, {
+      team1Player1Id: 't1-m2', team1Player2Id: null, team2Player1Id: 't2-m1', team2Player2Id: null,
+    })).not.toThrow();
+  });
+
+  it('rejects a singles category given a second player', () => {
+    expect(() => validateTeamReassignment('MS', team1, team2, {
+      team1Player1Id: 't1-m1', team1Player2Id: 't1-m2', team2Player1Id: 't2-m1', team2Player2Id: null,
+    })).toThrow('singles category');
+  });
+
+  it('rejects a doubles category missing a second player', () => {
+    expect(() => validateTeamReassignment('MD', team1, team2, {
+      team1Player1Id: 't1-m1', team1Player2Id: null, team2Player1Id: 't2-m1', team2Player2Id: null,
+    })).toThrow('requires two players');
+  });
+
+  it('rejects a player not on the roster for that side', () => {
+    expect(() => validateTeamReassignment('MS', team1, team2, {
+      team1Player1Id: 'not-on-any-team', team1Player2Id: null, team2Player1Id: 't2-m1', team2Player2Id: null,
+    })).toThrow('not on this team');
+  });
+
+  it('rejects a gender mismatch for the category', () => {
+    expect(() => validateTeamReassignment('MS', team1, team2, {
+      team1Player1Id: 't1-f1', team1Player2Id: null, team2Player1Id: 't2-m1', team2Player2Id: null,
+    })).toThrow('requires a male player');
+  });
+
+  it('rejects a mixed-doubles pair with two players of the same gender', () => {
+    expect(() => validateTeamReassignment('XD', team1, team2, {
+      team1Player1Id: 't1-m1', team1Player2Id: 't1-m2', team2Player1Id: 't2-m1', team2Player2Id: 't2-f1',
+    })).toThrow('requires a female player');
+  });
+
+  it('accepts a valid mixed-doubles reassignment', () => {
+    expect(() => validateTeamReassignment('XD', team1, team2, {
+      team1Player1Id: 't1-m1', team1Player2Id: 't1-f1', team2Player1Id: 't2-m1', team2Player2Id: 't2-f1',
+    })).not.toThrow();
   });
 });
 ```
@@ -302,18 +350,66 @@ export function buildTeamMatchGames(
 
   return { games, skipped };
 }
+
+export interface TeamReassignmentInput {
+  team1Player1Id: string;
+  team1Player2Id: string | null;
+  team2Player1Id: string;
+  team2Player2Id: string | null;
+}
+
+export function validateTeamReassignment(
+  category: TeamMatchCategory,
+  team1Roster: TeamRosterPlayer[],
+  team2Roster: TeamRosterPlayer[],
+  assignment: TeamReassignmentInput,
+): void {
+  const needsDoubles = category === 'MD' || category === 'WD' || category === 'XD';
+  if (needsDoubles) {
+    if (!assignment.team1Player2Id || !assignment.team2Player2Id) throw new Error(`${category} requires two players per side`);
+    if (assignment.team1Player1Id === assignment.team1Player2Id) throw new Error('Team 1 pair must be two different players');
+    if (assignment.team2Player1Id === assignment.team2Player2Id) throw new Error('Team 2 pair must be two different players');
+  } else if (assignment.team1Player2Id || assignment.team2Player2Id) {
+    throw new Error(`${category} is a singles category and cannot have a second player`);
+  }
+
+  const findPlayer = (roster: TeamRosterPlayer[], playerId: string) => roster.find(p => p.playerId === playerId);
+
+  const checkSlot = (roster: TeamRosterPlayer[], playerId: string, requiredGender: 'male' | 'female') => {
+    const player = findPlayer(roster, playerId);
+    if (!player) throw new Error('Selected player is not on this team');
+    if (player.gender !== requiredGender) throw new Error(`${category} requires a ${requiredGender} player in this slot`);
+  };
+
+  if (category === 'MS' || category === 'MD') {
+    checkSlot(team1Roster, assignment.team1Player1Id, 'male');
+    checkSlot(team2Roster, assignment.team2Player1Id, 'male');
+    if (assignment.team1Player2Id) checkSlot(team1Roster, assignment.team1Player2Id, 'male');
+    if (assignment.team2Player2Id) checkSlot(team2Roster, assignment.team2Player2Id, 'male');
+  } else if (category === 'WS' || category === 'WD') {
+    checkSlot(team1Roster, assignment.team1Player1Id, 'female');
+    checkSlot(team2Roster, assignment.team2Player1Id, 'female');
+    if (assignment.team1Player2Id) checkSlot(team1Roster, assignment.team1Player2Id, 'female');
+    if (assignment.team2Player2Id) checkSlot(team2Roster, assignment.team2Player2Id, 'female');
+  } else if (category === 'XD') {
+    checkSlot(team1Roster, assignment.team1Player1Id, 'male');
+    checkSlot(team2Roster, assignment.team2Player1Id, 'male');
+    checkSlot(team1Roster, assignment.team1Player2Id!, 'female');
+    checkSlot(team2Roster, assignment.team2Player2Id!, 'female');
+  }
+}
 ```
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `npx vitest run src/__tests__/tournament.test.ts`
-Expected: PASS — all tests in the file, including the new `buildTeamMatchGames` block, pass.
+Expected: PASS — all tests in the file, including the new `buildTeamMatchGames` and `validateTeamReassignment` blocks, pass.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add src/main/tournament.ts src/__tests__/tournament.test.ts
-git commit -m "feat(tournament): add buildTeamMatchGames for gender/level-aware rubber assignment"
+git commit -m "feat(tournament): add buildTeamMatchGames and validateTeamReassignment"
 ```
 
 ---
@@ -540,63 +636,55 @@ git commit -m "feat(ipc): generate team-match rubbers from a 5-category composit
 
 ### Task 4: Add the player-reassignment ("fine-tuning") IPC handler
 
+`validateTeamReassignment` was already implemented and unit-tested as a pure function in Task 2 (it takes pre-fetched rosters rather than querying the database itself, matching the existing `validateTournamentRegistration` pattern in this codebase). This task is just the thin IO wrapper: fetch the two rosters, call the already-tested validator, write the update.
+
 **Files:**
-- Modify: `src/main/ipc.ts` (add a new handler after `tournament:teamMatches:generate`, before `tournament:teamMatches:list`)
+- Modify: `src/main/ipc.ts` (imports; add a new handler after `tournament:teamMatches:generate`, before `tournament:teamMatches:list`)
 
-- [ ] **Step 1: Add the handler and its validation helper**
+- [ ] **Step 1: Import the new symbols**
 
-In `src/main/ipc.ts`, insert this new handler and helper function immediately after the closing `});` of `tournament:teamMatches:generate` (added in Task 3) and before `ipcMain.handle('tournament:teamMatches:list', ...)`:
+In `src/main/ipc.ts`, change the import block left by Task 3:
 
 ```ts
-  function validateTeamReassignment(
-    category: string,
-    team1Id: string,
-    team2Id: string,
-    assignment: { team1Player1Id: string; team1Player2Id: string | null; team2Player1Id: string; team2Player2Id: string | null },
-  ) {
-    const needsDoubles = category === 'MD' || category === 'WD' || category === 'XD';
-    if (needsDoubles) {
-      if (!assignment.team1Player2Id || !assignment.team2Player2Id) throw new Error(`${category} requires two players per side`);
-      if (assignment.team1Player1Id === assignment.team1Player2Id) throw new Error('Team 1 pair must be two different players');
-      if (assignment.team2Player1Id === assignment.team2Player2Id) throw new Error('Team 2 pair must be two different players');
-    } else if (assignment.team1Player2Id || assignment.team2Player2Id) {
-      throw new Error(`${category} is a singles category and cannot have a second player`);
-    }
+import {
+  buildNextKnockoutMatches,
+  buildTeamMatchGames,
+  computeTournamentStandings,
+  generateKnockoutMatches,
+  generateRoundRobinMatches,
+  validateTournamentRegistration,
+  type TeamMatchComposition,
+  type TournamentMatchRecord,
+  type TournamentRegistration,
+} from './tournament';
+```
 
-    const genderOf = (playerId: string): string | undefined =>
-      queryOne<{ gender: string }>('SELECT gender FROM players WHERE id = ?', [playerId])?.gender;
-    const isTeamMember = (teamId: string, playerId: string): boolean =>
-      Boolean(queryOne('SELECT 1 FROM tournament_team_players WHERE teamId = ? AND playerId = ?', [teamId, playerId]));
+to:
 
-    const checkSlot = (teamId: string, playerId: string, requiredGender: 'male' | 'female') => {
-      if (!isTeamMember(teamId, playerId)) throw new Error('Selected player is not on this team');
-      if (genderOf(playerId) !== requiredGender) throw new Error(`${category} requires a ${requiredGender} player in this slot`);
-    };
+```ts
+import {
+  buildNextKnockoutMatches,
+  buildTeamMatchGames,
+  computeTournamentStandings,
+  generateKnockoutMatches,
+  generateRoundRobinMatches,
+  validateTeamReassignment,
+  validateTournamentRegistration,
+  type TeamMatchCategory,
+  type TeamMatchComposition,
+  type TeamReassignmentInput,
+  type TeamRosterPlayer,
+  type TournamentMatchRecord,
+  type TournamentRegistration,
+} from './tournament';
+```
 
-    if (category === 'MS' || category === 'MD') {
-      checkSlot(team1Id, assignment.team1Player1Id, 'male');
-      checkSlot(team2Id, assignment.team2Player1Id, 'male');
-      if (assignment.team1Player2Id) checkSlot(team1Id, assignment.team1Player2Id, 'male');
-      if (assignment.team2Player2Id) checkSlot(team2Id, assignment.team2Player2Id, 'male');
-    } else if (category === 'WS' || category === 'WD') {
-      checkSlot(team1Id, assignment.team1Player1Id, 'female');
-      checkSlot(team2Id, assignment.team2Player1Id, 'female');
-      if (assignment.team1Player2Id) checkSlot(team1Id, assignment.team1Player2Id, 'female');
-      if (assignment.team2Player2Id) checkSlot(team2Id, assignment.team2Player2Id, 'female');
-    } else if (category === 'XD') {
-      checkSlot(team1Id, assignment.team1Player1Id, 'male');
-      checkSlot(team2Id, assignment.team2Player1Id, 'male');
-      checkSlot(team1Id, assignment.team1Player2Id!, 'female');
-      checkSlot(team2Id, assignment.team2Player2Id!, 'female');
-    }
-  }
+- [ ] **Step 2: Add the handler**
 
-  ipcMain.handle('tournament:teamMatches:reassignPlayers', (_e, gameId: string, assignment: {
-    team1Player1Id: string;
-    team1Player2Id: string | null;
-    team2Player1Id: string;
-    team2Player2Id: string | null;
-  }) => {
+In `src/main/ipc.ts`, insert this new handler immediately after the closing `});` of `tournament:teamMatches:generate` (added in Task 3) and before `ipcMain.handle('tournament:teamMatches:list', ...)`:
+
+```ts
+  ipcMain.handle('tournament:teamMatches:reassignPlayers', (_e, gameId: string, assignment: TeamReassignmentInput) => {
     const game = queryOne<{ status: string; category: string | null; teamMatchId: string | null }>(
       'SELECT status, category, teamMatchId FROM tournament_matches WHERE id = ?', [gameId]
     );
@@ -609,7 +697,16 @@ In `src/main/ipc.ts`, insert this new handler and helper function immediately af
     );
     if (!teamMatch) throw new Error('Team match not found');
 
-    validateTeamReassignment(game.category, teamMatch.team1Id, teamMatch.team2Id, assignment);
+    const team1Roster = queryAll<TeamRosterPlayer>(
+      `SELECT tp.playerId, p.gender, p.level FROM tournament_team_players tp JOIN players p ON tp.playerId = p.id WHERE tp.teamId = ?`,
+      [teamMatch.team1Id]
+    );
+    const team2Roster = queryAll<TeamRosterPlayer>(
+      `SELECT tp.playerId, p.gender, p.level FROM tournament_team_players tp JOIN players p ON tp.playerId = p.id WHERE tp.teamId = ?`,
+      [teamMatch.team2Id]
+    );
+
+    validateTeamReassignment(game.category as TeamMatchCategory, team1Roster, team2Roster, assignment);
 
     run(
       'UPDATE tournament_matches SET team1Player1Id = ?, team1Player2Id = ?, team2Player1Id = ?, team2Player2Id = ? WHERE id = ?',
@@ -618,12 +715,12 @@ In `src/main/ipc.ts`, insert this new handler and helper function immediately af
   });
 ```
 
-- [ ] **Step 2: Typecheck**
+- [ ] **Step 3: Typecheck**
 
 Run: `npx tsc -p tsconfig.node.json --noEmit`
 Expected: no errors.
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
 git add src/main/ipc.ts
@@ -1117,7 +1214,269 @@ git commit -m "feat(tournament-detail): add rubber category badges and an Edit P
 
 ---
 
-### Task 9: e2e regression test for the full flow
+### Task 9: Render doubles partners and category badges in the live court panel
+
+`TournamentLivePanel.tsx` (route `/tournaments/:id/live`) is the screen organizers use to assign rubbers to courts and record scores live. It currently only reads/renders `team1Player1`/`team2Player1` — once doubles rubbers exist (Task 3 onward), this screen would silently hide each doubles pair's second player. This task fixes that.
+
+**Files:**
+- Modify: `src/main/ipc.ts` (the `tournament:teamMatches:listGames` query)
+- Modify: `src/renderer/pages/TournamentLivePanel.tsx` (the `Game` interface, a new `formatGameSide` helper, and every place a player name/level is rendered)
+
+- [ ] **Step 1: Extend the `listGames` query to include the second player on each side**
+
+In `src/main/ipc.ts`, change:
+
+```ts
+  ipcMain.handle('tournament:teamMatches:listGames', (_e, teamMatchId: string) => {
+    return queryAll(
+      `SELECT tm.*,
+         p1.name as team1Player1Name, p1.gender as team1Player1Gender, p1.level as team1Player1Level,
+         p2.name as team2Player1Name, p2.gender as team2Player1Gender, p2.level as team2Player1Level
+       FROM tournament_matches tm
+       JOIN players p1 ON tm.team1Player1Id = p1.id
+       JOIN players p2 ON tm.team2Player1Id = p2.id
+       WHERE tm.teamMatchId = ?
+       ORDER BY tm.matchNumber`,
+      [teamMatchId]
+    );
+  });
+```
+
+to:
+
+```ts
+  ipcMain.handle('tournament:teamMatches:listGames', (_e, teamMatchId: string) => {
+    return queryAll(
+      `SELECT tm.*,
+         p1.name as team1Player1Name, p1.gender as team1Player1Gender, p1.level as team1Player1Level,
+         p1b.name as team1Player2Name, p1b.gender as team1Player2Gender, p1b.level as team1Player2Level,
+         p2.name as team2Player1Name, p2.gender as team2Player1Gender, p2.level as team2Player1Level,
+         p2b.name as team2Player2Name, p2b.gender as team2Player2Gender, p2b.level as team2Player2Level
+       FROM tournament_matches tm
+       JOIN players p1 ON tm.team1Player1Id = p1.id
+       LEFT JOIN players p1b ON tm.team1Player2Id = p1b.id
+       JOIN players p2 ON tm.team2Player1Id = p2.id
+       LEFT JOIN players p2b ON tm.team2Player2Id = p2b.id
+       WHERE tm.teamMatchId = ?
+       ORDER BY tm.matchNumber`,
+      [teamMatchId]
+    );
+  });
+```
+
+(`p1b`/`p2b` are `LEFT JOIN` because `team1Player2Id`/`team2Player2Id` are `NULL` for singles rubbers — `tm.*` already carries the raw id columns, including the new `category`/`slotNumber` from Task 1.)
+
+- [ ] **Step 2: Typecheck the main process**
+
+Run: `npx tsc -p tsconfig.node.json --noEmit`
+Expected: no errors.
+
+- [ ] **Step 3: Commit the backend half**
+
+```bash
+git add src/main/ipc.ts
+git commit -m "feat(ipc): include doubles partners in team-match game listing"
+```
+
+- [ ] **Step 4: Extend the `Game` interface and add a `formatGameSide` helper**
+
+In `src/renderer/pages/TournamentLivePanel.tsx`, change:
+
+```tsx
+interface Game {
+  id: string;
+  teamMatchId: string;
+  matchNumber: number;
+  courtNumber: number | null;
+  status: string;
+  team1Player1Id: string; team1Player1Name: string; team1Player1Level: number;
+  team2Player1Id: string; team2Player1Name: string; team2Player1Level: number;
+  team1Score: number | null; team2Score: number | null;
+  winner: string | null;
+}
+```
+
+to:
+
+```tsx
+interface Game {
+  id: string;
+  teamMatchId: string;
+  matchNumber: number;
+  courtNumber: number | null;
+  status: string;
+  team1Player1Id: string; team1Player1Name: string; team1Player1Level: number;
+  team1Player2Id: string | null; team1Player2Name: string | null; team1Player2Level: number | null;
+  team2Player1Id: string; team2Player1Name: string; team2Player1Level: number;
+  team2Player2Id: string | null; team2Player2Name: string | null; team2Player2Level: number | null;
+  team1Score: number | null; team2Score: number | null;
+  winner: string | null;
+  category: 'MS' | 'WS' | 'MD' | 'XD' | 'WD' | null;
+  slotNumber: number | null;
+}
+
+function formatGameSide(game: Game, side: 'team1' | 'team2'): string {
+  if (side === 'team1') {
+    return game.team1Player2Name ? `${game.team1Player1Name} / ${game.team1Player2Name}` : game.team1Player1Name;
+  }
+  return game.team2Player2Name ? `${game.team2Player1Name} / ${game.team2Player2Name}` : game.team2Player1Name;
+}
+```
+
+- [ ] **Step 5: Use `formatGameSide` in `ScoreModal`**
+
+Change:
+
+```tsx
+          <div className="text-center">
+            <p className="text-xs font-semibold text-zinc-500 mb-1 truncate">{game.team1Player1Name}</p>
+            <input autoFocus type="number" min="0" value={sc1} onChange={e => setSc1(e.target.value)}
+              className="w-full text-center text-2xl font-bold px-3 py-2 border border-zinc-200 rounded-xl focus:outline-none focus:border-zinc-400" />
+          </div>
+          <div className="text-center text-sm font-bold text-zinc-400">vs</div>
+          <div className="text-center">
+            <p className="text-xs font-semibold text-zinc-500 mb-1 truncate">{game.team2Player1Name}</p>
+            <input type="number" min="0" value={sc2} onChange={e => setSc2(e.target.value)}
+              className="w-full text-center text-2xl font-bold px-3 py-2 border border-zinc-200 rounded-xl focus:outline-none focus:border-zinc-400" />
+          </div>
+```
+
+to:
+
+```tsx
+          <div className="text-center">
+            <p className="text-xs font-semibold text-zinc-500 mb-1 truncate">{formatGameSide(game, 'team1')}</p>
+            <input autoFocus type="number" min="0" value={sc1} onChange={e => setSc1(e.target.value)}
+              className="w-full text-center text-2xl font-bold px-3 py-2 border border-zinc-200 rounded-xl focus:outline-none focus:border-zinc-400" />
+          </div>
+          <div className="text-center text-sm font-bold text-zinc-400">vs</div>
+          <div className="text-center">
+            <p className="text-xs font-semibold text-zinc-500 mb-1 truncate">{formatGameSide(game, 'team2')}</p>
+            <input type="number" min="0" value={sc2} onChange={e => setSc2(e.target.value)}
+              className="w-full text-center text-2xl font-bold px-3 py-2 border border-zinc-200 rounded-xl focus:outline-none focus:border-zinc-400" />
+          </div>
+```
+
+- [ ] **Step 6: Use `formatGameSide` in `AssignModal`**
+
+Change:
+
+```tsx
+              <p className="text-sm font-semibold text-zinc-800">
+                {game.team1Player1Name} <span className="font-normal text-zinc-400">vs</span> {game.team2Player1Name}
+              </p>
+```
+
+to:
+
+```tsx
+              <p className="text-sm font-semibold text-zinc-800">
+                {formatGameSide(game, 'team1')} <span className="font-normal text-zinc-400">vs</span> {formatGameSide(game, 'team2')}
+              </p>
+```
+
+- [ ] **Step 7: Use `formatGameSide` in the pending queue list**
+
+Change:
+
+```tsx
+                  <p className="text-sm font-medium text-zinc-700">
+                    {game.team1Player1Name} <span className="text-zinc-400">vs</span> {game.team2Player1Name}
+                  </p>
+```
+
+to:
+
+```tsx
+                  <p className="text-sm font-medium text-zinc-700">
+                    {formatGameSide(game, 'team1')} <span className="text-zinc-400">vs</span> {formatGameSide(game, 'team2')}
+                  </p>
+```
+
+- [ ] **Step 8: Update `CourtCard` to show both players per side, levels for both, and a category badge**
+
+Change:
+
+```tsx
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-sm font-bold tabular-nums" style={{ color: isActive ? courtPhase.running.text : '#a1a1aa' }}>
+          Court {courtNumber}
+        </span>
+        {isActive && (
+          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">Playing</span>
+        )}
+      </div>
+```
+
+to:
+
+```tsx
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-bold tabular-nums" style={{ color: isActive ? courtPhase.running.text : '#a1a1aa' }}>
+            Court {courtNumber}
+          </span>
+          {game?.category && (
+            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-600">{game.category}{game.slotNumber}</span>
+          )}
+        </div>
+        {isActive && (
+          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">Playing</span>
+        )}
+      </div>
+```
+
+Then change:
+
+```tsx
+          <div className="flex-1 flex flex-col justify-center gap-2">
+            <div className="text-center">
+              <p className="text-lg font-bold text-zinc-900 truncate">{game.team1Player1Name}</p>
+              <p className="text-xs text-zinc-400 mt-0.5">Lv{game.team1Player1Level}</p>
+            </div>
+            <div className="text-center text-sm font-bold text-zinc-400">vs</div>
+            <div className="text-center">
+              <p className="text-lg font-bold text-zinc-900 truncate">{game.team2Player1Name}</p>
+              <p className="text-xs text-zinc-400 mt-0.5">Lv{game.team2Player1Level}</p>
+            </div>
+          </div>
+```
+
+to:
+
+```tsx
+          <div className="flex-1 flex flex-col justify-center gap-2">
+            <div className="text-center">
+              <p className="text-lg font-bold text-zinc-900 truncate">{formatGameSide(game, 'team1')}</p>
+              <p className="text-xs text-zinc-400 mt-0.5">
+                {game.team1Player2Level != null ? `Lv${game.team1Player1Level}/${game.team1Player2Level}` : `Lv${game.team1Player1Level}`}
+              </p>
+            </div>
+            <div className="text-center text-sm font-bold text-zinc-400">vs</div>
+            <div className="text-center">
+              <p className="text-lg font-bold text-zinc-900 truncate">{formatGameSide(game, 'team2')}</p>
+              <p className="text-xs text-zinc-400 mt-0.5">
+                {game.team2Player2Level != null ? `Lv${game.team2Player1Level}/${game.team2Player2Level}` : `Lv${game.team2Player1Level}`}
+              </p>
+            </div>
+          </div>
+```
+
+- [ ] **Step 9: Typecheck the renderer**
+
+Run: `npm run typecheck`
+Expected: no errors.
+
+- [ ] **Step 10: Commit the renderer half**
+
+```bash
+git add src/renderer/pages/TournamentLivePanel.tsx
+git commit -m "feat(live-panel): render doubles partners and category badges on the live court screen"
+```
+
+---
+
+### Task 10: e2e regression test for the full flow
 
 **Files:**
 - Create: `e2e/teamTournamentComposition.spec.ts`
@@ -1199,6 +1558,14 @@ test.describe('Team match composition', () => {
     await page.getByRole('button', { name: 'teams', exact: true }).click();
     await page.getByRole('button', { name: 'bracket', exact: true }).click();
     await expect(page.getByText('MS1', { exact: true }).first()).toBeVisible({ timeout: 10000 });
+
+    // UI: the live court panel must show both players of a doubles pair, not just one
+    const wdGame = detail.matches.find((m: any) => m.category === 'WD');
+    const wdTeam1Names = [wdGame.team1Player1Id, wdGame.team1Player2Id].map(
+      (pid: string) => aWomen.find((p: any) => p.id === pid)!.name
+    );
+    await navigateTo(page, `/tournaments/${t.id}/live`);
+    await expect(page.getByText(`${wdTeam1Names[0]} / ${wdTeam1Names[1]}`, { exact: false }).first()).toBeVisible({ timeout: 10000 });
   });
 
   test('skips a category and reports a warning when a team lacks eligible players', async ({ page }) => {
@@ -1244,7 +1611,7 @@ git commit -m "test(e2e): cover team-match composition generation and player rea
 
 ---
 
-### Task 10: Full regression pass
+### Task 11: Full regression pass
 
 **Files:** none (verification only)
 
@@ -1271,6 +1638,8 @@ Reuse the pattern from prior demo/verification scripts in this repo (`_electron.
 
 ## Self-Review Notes
 
-- **Spec coverage:** composition input (Task 6) ✓, gender+level-aware auto-assignment (Task 2) ✓, per-tie skip + warnings (Task 2 + 3) ✓, category/slot labeling (Task 7) ✓, fine-tune reassignment with gender validation (Task 4 + 8) ✓, schema changes (Task 1) ✓, unit + e2e testing (Task 2 + 9) ✓, out-of-scope `TournamentLivePanel.tsx` explicitly called out rather than silently ignored ✓.
-- **No placeholders:** every step has literal code; the one deliberately-deferred item (`TournamentLivePanel.tsx` category badges) is explicitly named as a follow-up, not glossed over.
-- **Type/name consistency:** `TeamMatchComposition`, `TeamMatchGameSpec`, `TeamMatchCategory`, `BuildTeamMatchGamesResult` are defined once in Task 2 and reused with identical names/shapes in Tasks 3, 4, 5, 6, 7, 8. `buildTeamMatchGames`'s return shape (`{ games, skipped }`) matches what Task 3's handler destructures. The renderer's `composition` state field names (`ms`/`ws`/`md`/`xd`/`wd`) match `TeamMatchComposition`'s fields exactly, so `parseInt(composition.ms)` etc. line up with what `tournamentTeamMatchesGenerate` expects.
+- **Spec coverage:** composition input (Task 6) ✓, gender+level-aware auto-assignment (Task 2) ✓, per-tie skip + warnings (Task 2 + 3) ✓, category/slot labeling (Task 7) ✓, fine-tune reassignment with gender validation (Task 2 + 4 + 8) ✓, schema changes (Task 1) ✓, unit + e2e testing (Task 2 + 10) ✓.
+- **Advisor pass incorporated:** an independent review of the first draft of this plan found that `TournamentLivePanel.tsx` (the live court-assignment/scoring screen) would silently hide doubles partners since its `Game` interface and query never carried a second player — this was originally left as a "follow-up," but is now Task 9, fully implemented in this plan rather than deferred. The review also flagged that `validateTeamReassignment`'s rejection branches (gender mismatch, non-team-member, singles/doubles shape mismatches) had no unit test — Task 2 now defines and tests it as a pure function (mirroring the existing `validateTournamentRegistration` pattern) instead of an untested closure inside the IPC handler.
+- **Known accepted edge case (documented, not fixed):** under forced reuse (a doubles pool smaller than needed for the requested count), `pairAdjacentByLevel`'s modulo wraparound can occasionally pair the lowest- and highest-level remaining players instead of two adjacent levels. This only happens when the roster is too small to give everyone a fresh partner every rubber — the spec already accepts reuse in that situation — and the "fine-tune" reassignment feature (Task 4 + 8) is the escape hatch if an organizer notices a bad pairing.
+- **No placeholders:** every step has literal code.
+- **Type/name consistency:** `TeamMatchComposition`, `TeamMatchGameSpec`, `TeamMatchCategory`, `BuildTeamMatchGamesResult`, `TeamReassignmentInput`, `TeamRosterPlayer` are defined once in Task 2 and reused with identical names/shapes in Tasks 3, 4, 5, 6, 7, 8, 9. `buildTeamMatchGames`'s return shape (`{ games, skipped }`) matches what Task 3's handler destructures. The renderer's `composition` state field names (`ms`/`ws`/`md`/`xd`/`wd`) match `TeamMatchComposition`'s fields exactly, so `parseInt(composition.ms)` etc. line up with what `tournamentTeamMatchesGenerate` expects. Task 4's import edit is written as a diff against Task 3's exact resulting import block, so the two apply cleanly in sequence.
