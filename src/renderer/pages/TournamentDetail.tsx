@@ -265,19 +265,22 @@ export function TournamentDetail() {
     if (!id) return;
     setTeamError(null);
     const parsed = {
-      ms: parseInt(composition.ms) || 0,
-      ws: parseInt(composition.ws) || 0,
-      md: parseInt(composition.md) || 0,
-      xd: parseInt(composition.xd) || 0,
-      wd: parseInt(composition.wd) || 0,
+      ms: Math.max(0, parseInt(composition.ms) || 0),
+      ws: Math.max(0, parseInt(composition.ws) || 0),
+      md: Math.max(0, parseInt(composition.md) || 0),
+      xd: Math.max(0, parseInt(composition.xd) || 0),
+      wd: Math.max(0, parseInt(composition.wd) || 0),
     };
     setBusyAction('generateTeam');
     try {
       const result = await (window.api as any).tournamentTeamMatchesGenerate(id, parsed) as { warnings: string[] };
-      setShowGenerateTeam(false);
-      setTab('bracket');
       await load();
-      if (result.warnings.length > 0) setTeamError(result.warnings.join(' | '));
+      if (result.warnings.length > 0) {
+        setTeamError(result.warnings.join(' | '));
+      } else {
+        setShowGenerateTeam(false);
+        setTab('bracket');
+      }
     } catch (err: any) { setTeamError(err?.message ?? 'Failed to generate matches'); }
     finally { setBusyAction(null); }
   };
@@ -484,7 +487,7 @@ export function TournamentDetail() {
               <p className="text-sm text-zinc-400">{teams.length} teams</p>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => setShowGenerateTeam(true)}
+                  onClick={() => { setShowGenerateTeam(true); setTeamError(null); }}
                   disabled={teams.length < 2 || busyAction === 'generateTeam'}
                   className="h-8 px-3 text-sm font-semibold bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 active:scale-[0.97] transition-all disabled:opacity-40 inline-flex items-center gap-1.5"
                 >
