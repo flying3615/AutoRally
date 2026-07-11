@@ -1016,7 +1016,7 @@ export async function registerIpcHandlers() {
             teamMatchId: tm.id,
             category: game.category,
             slotNumber: game.slotNumber,
-          } as any);
+          });
         });
       }
 
