@@ -39,6 +39,9 @@ interface MatchRow {
   t2p1Level: number;
   t2p2Name: string | null;
   t2p2Level: number | null;
+  teamMatchId: string | null;
+  category: 'MS' | 'WS' | 'MD' | 'XD' | 'WD' | null;
+  slotNumber: number | null;
 }
 
 const isByeMatch = (match: MatchRow) => (
@@ -113,6 +116,98 @@ function ScoreModal({ match, onClose, onSaved }: { match: any; onClose: () => vo
   );
 }
 
+function EditPlayersModal({ match, team1Id, team2Id, onClose, onSaved }: {
+  match: MatchRow;
+  team1Id: string;
+  team2Id: string;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const isDoubles = match.category === 'MD' || match.category === 'WD' || match.category === 'XD';
+  const [team1Players, setTeam1Players] = useState<any[]>([]);
+  const [team2Players, setTeam2Players] = useState<any[]>([]);
+  const [t1p1, setT1p1] = useState(match.team1Player1Id);
+  const [t1p2, setT1p2] = useState(match.team1Player2Id ?? '');
+  const [t2p1, setT2p1] = useState(match.team2Player1Id);
+  const [t2p2, setT2p2] = useState(match.team2Player2Id ?? '');
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    (window.api as any).tournamentTeamsListPlayers(team1Id).then(setTeam1Players);
+    (window.api as any).tournamentTeamsListPlayers(team2Id).then(setTeam2Players);
+  }, [team1Id, team2Id]);
+
+  const genderFor = (category: string, slot: 1 | 2): 'male' | 'female' => {
+    if (category === 'MS' || category === 'MD') return 'male';
+    if (category === 'WS' || category === 'WD') return 'female';
+    return slot === 1 ? 'male' : 'female'; // XD
+  };
+
+  const optionsFor = (players: any[], category: string, slot: 1 | 2) =>
+    players.filter(p => p.gender === genderFor(category, slot));
+
+  const handleSave = async () => {
+    setError(null);
+    setSaving(true);
+    try {
+      await (window.api as any).tournamentTeamMatchesReassignPlayers(match.id, {
+        team1Player1Id: t1p1,
+        team1Player2Id: isDoubles ? (t1p2 || null) : null,
+        team2Player1Id: t2p1,
+        team2Player2Id: isDoubles ? (t2p2 || null) : null,
+      });
+      onSaved();
+    } catch (err: any) {
+      setError(err?.message ?? 'Failed to reassign players');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50" onClick={onClose}>
+      <div className="bg-white rounded-2xl p-6 w-[420px] max-w-[90vw]" onClick={e => e.stopPropagation()}
+        style={{ boxShadow: '0 24px 48px -12px rgba(0,0,0,0.2)', animation: 'ctxFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)' }}>
+        <h3 className="text-lg font-bold text-zinc-900 mb-4">Edit Players — {match.category}{match.slotNumber}</h3>
+        <div className="space-y-3 mb-4">
+          <div>
+            <label className="block text-xs font-semibold text-zinc-500 mb-1">Team 1</label>
+            <select value={t1p1} onChange={e => setT1p1(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-zinc-200 rounded-xl mb-2">
+              {optionsFor(team1Players, match.category!, 1).map(p => <option key={p.playerId} value={p.playerId}>{p.name}</option>)}
+            </select>
+            {isDoubles && (
+              <select value={t1p2} onChange={e => setT1p2(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-zinc-200 rounded-xl">
+                {optionsFor(team1Players, match.category!, 2).map(p => <option key={p.playerId} value={p.playerId}>{p.name}</option>)}
+              </select>
+            )}
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-zinc-500 mb-1">Team 2</label>
+            <select value={t2p1} onChange={e => setT2p1(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-zinc-200 rounded-xl mb-2">
+              {optionsFor(team2Players, match.category!, 1).map(p => <option key={p.playerId} value={p.playerId}>{p.name}</option>)}
+            </select>
+            {isDoubles && (
+              <select value={t2p2} onChange={e => setT2p2(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-zinc-200 rounded-xl">
+                {optionsFor(team2Players, match.category!, 2).map(p => <option key={p.playerId} value={p.playerId}>{p.name}</option>)}
+              </select>
+            )}
+          </div>
+        </div>
+        {error && <p className="mb-3 text-xs font-medium text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>}
+        <div className="flex justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-50 rounded-xl">Cancel</button>
+          <button onClick={handleSave} disabled={saving} className="px-5 py-2 text-sm font-semibold bg-zinc-800 text-white rounded-xl hover:bg-zinc-700 active:scale-[0.97] transition-all disabled:opacity-40">Save</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function TournamentDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -128,11 +223,13 @@ export function TournamentDetail() {
   const [regPlayer2, setRegPlayer2] = useState('');
   const [regMode, setRegMode] = useState<'individual' | 'pair'>('individual');
   const [scoreMatch, setScoreMatch] = useState<MatchRow | null>(null);
+  const [editPlayersMatch, setEditPlayersMatch] = useState<MatchRow | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [regError, setRegError] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<'generate' | 'advance' | 'generateTeam' | null>(null);
   // Team tournament state
   const [teams, setTeams] = useState<any[]>([]);
+  const [teamMatches, setTeamMatches] = useState<any[]>([]);
   const [teamPlayers, setTeamPlayers] = useState<Record<string, any[]>>({});
   const [expandedTeam, setExpandedTeam] = useState<string | null>(null);
   const [showAddTeam, setShowAddTeam] = useState(false);
@@ -143,16 +240,17 @@ export function TournamentDetail() {
 
   const load = useCallback(async () => {
     if (!id) return;
-    const [t, r, p, s, tms, ts] = await Promise.all([
+    const [t, r, p, s, tms, ts, tmatches] = await Promise.all([
       window.api.tournamentsGet(id) as Promise<TourData>,
       window.api.tournamentsRegistrations(id) as Promise<RegRow[]>,
       window.api.playersList() as Promise<any[]>,
       window.api.tournamentsStandings(id) as Promise<StandingRow[]>,
       (window.api as any).tournamentTeamsList(id) as Promise<any[]>,
       (window.api as any).tournamentTeamsStandings(id) as Promise<any[]>,
+      (window.api as any).tournamentTeamMatchesList(id) as Promise<any[]>,
     ]);
     setData(t); setRegs(r); setPlayers(p); setStandings(s);
-    setTeams(tms); setTeamStandings(ts);
+    setTeams(tms); setTeamStandings(ts); setTeamMatches(tmatches);
     setLoading(false);
   }, [id]);
 
@@ -666,9 +764,22 @@ export function TournamentDetail() {
                       <div key={m.id}
                         className={`bg-white border border-zinc-200/60 rounded-xl p-4 transition-all ${bye ? 'opacity-80' : 'hover:border-zinc-300'}`}>
                         <div className="flex items-center justify-between mb-2">
-                          <span className="text-[11px] font-semibold text-zinc-400 uppercase">{bye ? 'Auto-advance' : `Court ${m.courtNumber ?? '—'}`}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[11px] font-semibold text-zinc-400 uppercase">{bye ? 'Auto-advance' : `Court ${m.courtNumber ?? '—'}`}</span>
+                            {m.category && (
+                              <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-zinc-100 text-zinc-600">
+                                {m.category}{m.slotNumber}
+                              </span>
+                            )}
+                          </div>
                           <div className="flex items-center gap-2">
                             <span className={`text-[11px] font-semibold px-2 py-0.5 rounded ${m.status === 'completed' ? 'bg-emerald-50 text-emerald-700' : m.status === 'in_progress' ? 'bg-amber-50 text-amber-700' : 'bg-zinc-100 text-zinc-500'}`}>{m.status}</span>
+                            {!bye && m.category && m.status === 'pending' && (
+                              <button onClick={() => setEditPlayersMatch(m)}
+                                className="h-6 px-2 text-[11px] font-semibold text-zinc-700 border border-zinc-200 rounded-md hover:bg-zinc-50 active:scale-[0.97] transition-all">
+                                Edit Players
+                              </button>
+                            )}
                             {!bye && (
                               <button onClick={() => setScoreMatch(m)}
                                 className="h-6 px-2 text-[11px] font-semibold text-zinc-700 border border-zinc-200 rounded-md hover:bg-zinc-50 active:scale-[0.97] transition-all">
@@ -713,6 +824,19 @@ export function TournamentDetail() {
       </div>
 
       {scoreMatch && <ScoreModal match={scoreMatch} onClose={() => setScoreMatch(null)} onSaved={() => { setScoreMatch(null); load(); }} />}
+      {editPlayersMatch && (() => {
+        const tm = teamMatches.find((t: any) => t.id === editPlayersMatch.teamMatchId);
+        if (!tm) return null;
+        return (
+          <EditPlayersModal
+            match={editPlayersMatch}
+            team1Id={tm.team1Id}
+            team2Id={tm.team2Id}
+            onClose={() => setEditPlayersMatch(null)}
+            onSaved={() => { setEditPlayersMatch(null); load(); }}
+          />
+        );
+      })()}
     </div>
   );
 }
