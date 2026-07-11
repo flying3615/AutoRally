@@ -226,10 +226,24 @@ describe('buildTeamMatchGames', () => {
     expect(result.games).toEqual([]);
     expect(result.skipped).toEqual([]);
   });
+
+  it('locks in the documented forced-reuse wraparound: scarce pools can wrap lowest-to-highest', () => {
+    // Design spec (docs/superpowers/specs/2026-07-12-team-match-composition-design.md, Edge Cases):
+    // a 3-player pool at levels [1,3,5] asked for 2 pairs produces [1,3] then wraps to [5,1].
+    const team1 = [rosterPlayer('lvl1', 'male', 1), rosterPlayer('lvl3', 'male', 3), rosterPlayer('lvl5', 'male', 5)];
+    const team2 = [rosterPlayer('a', 'male', 2), rosterPlayer('b', 'male', 2)];
+    const result = buildTeamMatchGames(team1, team2, { ms: 0, ws: 0, md: 2, xd: 0, wd: 0 });
+
+    expect(result.skipped).toEqual([]);
+    expect(result.games[0]).toMatchObject({ slotNumber: 1, team1Player1Id: 'lvl1', team1Player2Id: 'lvl3' });
+    expect(result.games[1]).toMatchObject({ slotNumber: 2, team1Player1Id: 'lvl5', team1Player2Id: 'lvl1' });
+  });
 });
 
 describe('validateTeamReassignment', () => {
-  const team1 = [rosterPlayer('t1-m1', 'male', 3), rosterPlayer('t1-m2', 'male', 4), rosterPlayer('t1-f1', 'female', 3)];
+  // t1-f2 added so team1 has two eligible women, making a genuine (non-throwing) WD
+  // accept-case possible on both sides without disturbing any existing assertion below.
+  const team1 = [rosterPlayer('t1-m1', 'male', 3), rosterPlayer('t1-m2', 'male', 4), rosterPlayer('t1-f1', 'female', 3), rosterPlayer('t1-f2', 'female', 5)];
   const team2 = [rosterPlayer('t2-m1', 'male', 3), rosterPlayer('t2-f1', 'female', 3), rosterPlayer('t2-f2', 'female', 4)];
 
   it('accepts a valid singles reassignment', () => {
@@ -266,6 +280,22 @@ describe('validateTeamReassignment', () => {
     expect(() => validateTeamReassignment('XD', team1, team2, {
       team1Player1Id: 't1-m1', team1Player2Id: 't1-m2', team2Player1Id: 't2-m1', team2Player2Id: 't2-f1',
     })).toThrow('requires a female player');
+  });
+
+  it('rejects a doubles pair where both slots are the same player', () => {
+    // The duplicate-player check runs before any gender/roster-membership check, so
+    // team2Player2Id only needs to be non-null for this branch to fire on team1's side.
+    expect(() => validateTeamReassignment('MD', team1, team2, {
+      team1Player1Id: 't1-m1', team1Player2Id: 't1-m1', team2Player1Id: 't2-m1', team2Player2Id: 't2-f1',
+    })).toThrow('two different players');
+  });
+
+  it('accepts a valid doubles reassignment', () => {
+    // WD with team1's t1-f1/t1-f2 and team2's t2-f1/t2-f2 - a genuine non-throwing case
+    // on both sides (team1 was extended with t1-f2 above specifically to make this possible).
+    expect(() => validateTeamReassignment('WD', team1, team2, {
+      team1Player1Id: 't1-f1', team1Player2Id: 't1-f2', team2Player1Id: 't2-f1', team2Player2Id: 't2-f2',
+    })).not.toThrow();
   });
 
   it('accepts a valid mixed-doubles reassignment', () => {
