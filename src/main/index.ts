@@ -22,7 +22,9 @@ function createWindow() {
   mainWindow.setAutoHideMenuBar(true);
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    if (/^https?:\/\//i.test(url)) {
+      shell.openExternal(url).catch(err => console.error('Failed to open external link:', err));
+    }
     return { action: 'deny' };
   });
 
