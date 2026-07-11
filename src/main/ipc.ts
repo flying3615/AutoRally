@@ -9,8 +9,12 @@ import {
   computeTournamentStandings,
   generateKnockoutMatches,
   generateRoundRobinMatches,
+  validateTeamReassignment,
   validateTournamentRegistration,
+  type TeamMatchCategory,
   type TeamMatchComposition,
+  type TeamReassignmentInput,
+  type TeamRosterPlayer,
   type TournamentMatchRecord,
   type TournamentRegistration,
 } from './tournament';
@@ -1022,6 +1026,36 @@ export async function registerIpcHandlers() {
 
       return { teamMatches, warnings };
     });
+  });
+
+  ipcMain.handle('tournament:teamMatches:reassignPlayers', (_e, gameId: string, assignment: TeamReassignmentInput) => {
+    const game = queryOne<{ status: string; category: string | null; teamMatchId: string | null }>(
+      'SELECT status, category, teamMatchId FROM tournament_matches WHERE id = ?', [gameId]
+    );
+    if (!game) throw new Error('Match not found');
+    if (game.status !== 'pending') throw new Error('Cannot reassign players on a match that has already started');
+    if (!game.teamMatchId || !game.category) throw new Error('Not a team match rubber');
+
+    const teamMatch = queryOne<{ team1Id: string; team2Id: string }>(
+      'SELECT team1Id, team2Id FROM tournament_team_matches WHERE id = ?', [game.teamMatchId]
+    );
+    if (!teamMatch) throw new Error('Team match not found');
+
+    const team1Roster = queryAll<TeamRosterPlayer>(
+      `SELECT tp.playerId, p.gender, p.level FROM tournament_team_players tp JOIN players p ON tp.playerId = p.id WHERE tp.teamId = ?`,
+      [teamMatch.team1Id]
+    );
+    const team2Roster = queryAll<TeamRosterPlayer>(
+      `SELECT tp.playerId, p.gender, p.level FROM tournament_team_players tp JOIN players p ON tp.playerId = p.id WHERE tp.teamId = ?`,
+      [teamMatch.team2Id]
+    );
+
+    validateTeamReassignment(game.category as TeamMatchCategory, team1Roster, team2Roster, assignment);
+
+    run(
+      'UPDATE tournament_matches SET team1Player1Id = ?, team1Player2Id = ?, team2Player1Id = ?, team2Player2Id = ? WHERE id = ?',
+      [assignment.team1Player1Id, assignment.team1Player2Id, assignment.team2Player1Id, assignment.team2Player2Id, gameId]
+    );
   });
 
   ipcMain.handle('tournament:teamMatches:list', (_e, tournamentId: string) => {
