@@ -31,9 +31,9 @@ interface Game {
 
 function formatGameSide(game: Game, side: 'team1' | 'team2'): string {
   if (side === 'team1') {
-    return game.team1Player2Name ? `${game.team1Player1Name} / ${game.team1Player2Name}` : game.team1Player1Name;
+    return game.team1Player2Id ? `${game.team1Player1Name} / ${game.team1Player2Name}` : game.team1Player1Name;
   }
-  return game.team2Player2Name ? `${game.team2Player1Name} / ${game.team2Player2Name}` : game.team2Player1Name;
+  return game.team2Player2Id ? `${game.team2Player1Name} / ${game.team2Player2Name}` : game.team2Player1Name;
 }
 
 interface CourtSlot {
@@ -338,14 +338,14 @@ function CourtCard({ slot, hasPending, onAssign, onScore }: {
             <div className="text-center">
               <p className="text-lg font-bold text-zinc-900 truncate">{formatGameSide(game, 'team1')}</p>
               <p className="text-xs text-zinc-400 mt-0.5">
-                {game.team1Player2Level != null ? `Lv${game.team1Player1Level}/${game.team1Player2Level}` : `Lv${game.team1Player1Level}`}
+                {game.team1Player2Id != null ? `Lv${game.team1Player1Level}/${game.team1Player2Level}` : `Lv${game.team1Player1Level}`}
               </p>
             </div>
             <div className="text-center text-sm font-bold text-zinc-400">vs</div>
             <div className="text-center">
               <p className="text-lg font-bold text-zinc-900 truncate">{formatGameSide(game, 'team2')}</p>
               <p className="text-xs text-zinc-400 mt-0.5">
-                {game.team2Player2Level != null ? `Lv${game.team2Player1Level}/${game.team2Player2Level}` : `Lv${game.team2Player1Level}`}
+                {game.team2Player2Id != null ? `Lv${game.team2Player1Level}/${game.team2Player2Level}` : `Lv${game.team2Player1Level}`}
               </p>
             </div>
           </div>
