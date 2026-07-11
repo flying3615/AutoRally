@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-07-12-author-about-card-design.md`
 
+**Amendments:** Task 1 and Task 2's code-quality reviews found two small deviations worth making, applied as follow-up commits rather than by editing the task text below: (a) `d96ac8e` added an `https?://` scheme guard and a `.catch()` on `shell.openExternal` to the Task 1 handler; (b) `c792a91` changed the Task 2 avatar from `w-10 h-10 rounded-full` to `w-8 h-8 rounded-lg` and the "About" label from a small uppercase `<p>` to an `<h3>`, to match `DESIGN.md`'s documented Avatars convention and the file's existing section-header pattern. The task text below is left as originally planned for historical accuracy; final shipped code reflects these amendments.
+
 ---
 
 ### Task 1: Wire up external-link handling in the main process

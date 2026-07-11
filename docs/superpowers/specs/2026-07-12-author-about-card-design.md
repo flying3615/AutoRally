@@ -1,5 +1,14 @@
 # App 内作者标识（About 卡片）— Design Spec
 
+## Amendments（实现过程中的修订）
+
+代码审查阶段发现并修复了两处跟本 spec 文字描述不完全一致的地方，最终代码以 commit 为准：
+
+- **外链 handler**（`src/main/index.ts`）：在下面 Design 部分给出的最小版本基础上，实现时加了 `https?://` scheme 校验（拒绝非 http(s) 协议）和 `shell.openExternal` 的 `.catch()`（避免 unhandled promise rejection）。见 commit `d96ac8e`。
+- **头像样式**：Design 部分原写的是"纯色圆形头像"，但 `DESIGN.md` 明确规定头像应为 `rounded-lg` 圆角方形（squircle）而非圆形，卡片场景下尺寸 32px。实现时改为 `w-8 h-8 rounded-lg`（不是下面写的 `rounded-full`），颜色仍是纯色 emerald。标题也从小号大写 label 改成了跟 "Data Backup" / "Upcoming Sessions" 一致的 `<h3>` 大标题，保持同一文件里 bordered section 的视觉一致性。见 commit `c792a91`。
+
+以下 Design 部分保留原始设计过程的文字，不做回溯修改；实际实现细节以上述 commit 和最终代码为准。
+
 ## Context
 
 应用作者希望在 AutoRally 里加上个人署名，展示姓名和 GitHub 链接，让打开这个应用的人知道是谁开发/维护的。
