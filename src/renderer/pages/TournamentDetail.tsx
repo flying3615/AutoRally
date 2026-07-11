@@ -138,7 +138,7 @@ export function TournamentDetail() {
   const [showAddTeam, setShowAddTeam] = useState(false);
   const [newTeamName, setNewTeamName] = useState('');
   const [showGenerateTeam, setShowGenerateTeam] = useState(false);
-  const [gamesPerMatch, setGamesPerMatch] = useState('3');
+  const [composition, setComposition] = useState({ ms: '2', ws: '2', md: '2', xd: '2', wd: '1' });
   const [teamError, setTeamError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -264,13 +264,20 @@ export function TournamentDetail() {
   const handleGenerateTeamMatches = async () => {
     if (!id) return;
     setTeamError(null);
-    const n = parseInt(gamesPerMatch) || 3;
+    const parsed = {
+      ms: parseInt(composition.ms) || 0,
+      ws: parseInt(composition.ws) || 0,
+      md: parseInt(composition.md) || 0,
+      xd: parseInt(composition.xd) || 0,
+      wd: parseInt(composition.wd) || 0,
+    };
     setBusyAction('generateTeam');
     try {
-      await (window.api as any).tournamentTeamMatchesGenerate(id, n);
+      const result = await (window.api as any).tournamentTeamMatchesGenerate(id, parsed) as { warnings: string[] };
       setShowGenerateTeam(false);
       setTab('bracket');
       await load();
+      if (result.warnings.length > 0) setTeamError(result.warnings.join(' | '));
     } catch (err: any) { setTeamError(err?.message ?? 'Failed to generate matches'); }
     finally { setBusyAction(null); }
   };
@@ -569,16 +576,22 @@ export function TournamentDetail() {
                   style={{ boxShadow: '0 24px 48px -12px rgba(0,0,0,0.2)', animation: 'ctxFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)' }}>
                   <h3 className="text-lg font-bold text-zinc-900 mb-1">Generate Team Matches</h3>
                   <p className="text-sm text-zinc-500 mb-4">{teams.length} teams · {teams.length * (teams.length - 1) / 2} team matches</p>
-                  <label className="block text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">Games per team match</label>
-                  <div className="flex gap-2 mb-4">
-                    {['1', '3', '5'].map(n => (
-                      <button key={n} onClick={() => setGamesPerMatch(n)}
-                        className={`flex-1 py-2 text-sm font-medium rounded-xl border transition-all ${gamesPerMatch === n ? 'bg-zinc-800 border-zinc-900 text-white' : 'border-zinc-200 text-zinc-500 hover:bg-zinc-50'}`}>
-                        {n}
-                      </button>
+                  <label className="block text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">Rubber composition</label>
+                  <div className="space-y-2 mb-4">
+                    {([
+                      ['ms', "Men's Singles"],
+                      ['ws', "Women's Singles"],
+                      ['md', "Men's Doubles"],
+                      ['xd', 'Mixed Doubles'],
+                      ['wd', "Women's Doubles"],
+                    ] as const).map(([key, label]) => (
+                      <div key={key} className="flex items-center justify-between gap-3">
+                        <span className="text-sm text-zinc-600">{label}</span>
+                        <input type="number" min="0" max="9" value={composition[key]}
+                          onChange={e => setComposition({ ...composition, [key]: e.target.value })}
+                          className="w-16 px-2 py-1 text-sm text-center border border-zinc-200 rounded-xl focus:outline-none focus:border-zinc-400" />
+                      </div>
                     ))}
-                    <input type="number" min="1" max="9" value={gamesPerMatch} onChange={e => setGamesPerMatch(e.target.value)}
-                      className="w-16 px-2 text-sm text-center border border-zinc-200 rounded-xl focus:outline-none focus:border-zinc-400" />
                   </div>
                   {teamError && <p className="mb-3 text-xs text-red-600">{teamError}</p>}
                   <div className="flex justify-end gap-2">
