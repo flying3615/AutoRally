@@ -1080,10 +1080,14 @@ export async function registerIpcHandlers() {
     return queryAll(
       `SELECT tm.*,
          p1.name as team1Player1Name, p1.gender as team1Player1Gender, p1.level as team1Player1Level,
-         p2.name as team2Player1Name, p2.gender as team2Player1Gender, p2.level as team2Player1Level
+         p1b.name as team1Player2Name, p1b.gender as team1Player2Gender, p1b.level as team1Player2Level,
+         p2.name as team2Player1Name, p2.gender as team2Player1Gender, p2.level as team2Player1Level,
+         p2b.name as team2Player2Name, p2b.gender as team2Player2Gender, p2b.level as team2Player2Level
        FROM tournament_matches tm
        JOIN players p1 ON tm.team1Player1Id = p1.id
+       LEFT JOIN players p1b ON tm.team1Player2Id = p1b.id
        JOIN players p2 ON tm.team2Player1Id = p2.id
+       LEFT JOIN players p2b ON tm.team2Player2Id = p2b.id
        WHERE tm.teamMatchId = ?
        ORDER BY tm.matchNumber`,
       [teamMatchId]
