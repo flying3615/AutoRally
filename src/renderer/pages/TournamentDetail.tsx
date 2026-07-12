@@ -144,8 +144,8 @@ function EditPlayersModal({ match, team1Id, team2Id, onClose, onSaved }: {
     return slot === 1 ? 'male' : 'female'; // XD
   };
 
-  const optionsFor = (players: any[], category: string, slot: 1 | 2) =>
-    players.filter(p => p.gender === genderFor(category, slot));
+  const optionsFor = (players: any[], category: string, slot: 1 | 2, excludeId?: string) =>
+    players.filter(p => p.gender === genderFor(category, slot) && p.playerId !== excludeId);
 
   const handleSave = async () => {
     setError(null);
@@ -175,12 +175,12 @@ function EditPlayersModal({ match, team1Id, team2Id, onClose, onSaved }: {
             <label className="block text-xs font-semibold text-zinc-500 mb-1">Team 1</label>
             <select value={t1p1} onChange={e => setT1p1(e.target.value)}
               className="w-full px-3 py-2 text-sm border border-zinc-200 rounded-xl mb-2">
-              {optionsFor(team1Players, match.category!, 1).map(p => <option key={p.playerId} value={p.playerId}>{p.name}</option>)}
+              {optionsFor(team1Players, match.category!, 1, isDoubles ? t1p2 : undefined).map(p => <option key={p.playerId} value={p.playerId}>{p.name}</option>)}
             </select>
             {isDoubles && (
               <select value={t1p2} onChange={e => setT1p2(e.target.value)}
                 className="w-full px-3 py-2 text-sm border border-zinc-200 rounded-xl">
-                {optionsFor(team1Players, match.category!, 2).map(p => <option key={p.playerId} value={p.playerId}>{p.name}</option>)}
+                {optionsFor(team1Players, match.category!, 2, t1p1).map(p => <option key={p.playerId} value={p.playerId}>{p.name}</option>)}
               </select>
             )}
           </div>
@@ -188,12 +188,12 @@ function EditPlayersModal({ match, team1Id, team2Id, onClose, onSaved }: {
             <label className="block text-xs font-semibold text-zinc-500 mb-1">Team 2</label>
             <select value={t2p1} onChange={e => setT2p1(e.target.value)}
               className="w-full px-3 py-2 text-sm border border-zinc-200 rounded-xl mb-2">
-              {optionsFor(team2Players, match.category!, 1).map(p => <option key={p.playerId} value={p.playerId}>{p.name}</option>)}
+              {optionsFor(team2Players, match.category!, 1, isDoubles ? t2p2 : undefined).map(p => <option key={p.playerId} value={p.playerId}>{p.name}</option>)}
             </select>
             {isDoubles && (
               <select value={t2p2} onChange={e => setT2p2(e.target.value)}
                 className="w-full px-3 py-2 text-sm border border-zinc-200 rounded-xl">
-                {optionsFor(team2Players, match.category!, 2).map(p => <option key={p.playerId} value={p.playerId}>{p.name}</option>)}
+                {optionsFor(team2Players, match.category!, 2, t2p1).map(p => <option key={p.playerId} value={p.playerId}>{p.name}</option>)}
               </select>
             )}
           </div>
