@@ -20,9 +20,20 @@ interface Game {
   courtNumber: number | null;
   status: string;
   team1Player1Id: string; team1Player1Name: string; team1Player1Level: number;
+  team1Player2Id: string | null; team1Player2Name: string | null; team1Player2Level: number | null;
   team2Player1Id: string; team2Player1Name: string; team2Player1Level: number;
+  team2Player2Id: string | null; team2Player2Name: string | null; team2Player2Level: number | null;
   team1Score: number | null; team2Score: number | null;
   winner: string | null;
+  category: 'MS' | 'WS' | 'MD' | 'XD' | 'WD' | null;
+  slotNumber: number | null;
+}
+
+function formatGameSide(game: Game, side: 'team1' | 'team2'): string {
+  if (side === 'team1') {
+    return game.team1Player2Id ? `${game.team1Player1Name} / ${game.team1Player2Name}` : game.team1Player1Name;
+  }
+  return game.team2Player2Id ? `${game.team2Player1Name} / ${game.team2Player2Name}` : game.team2Player1Name;
 }
 
 interface CourtSlot {
@@ -72,13 +83,13 @@ function ScoreModal({ game, teamMatch, onClose, onSaved }: {
         </p>
         <div className="grid grid-cols-3 gap-3 items-center mb-5">
           <div className="text-center">
-            <p className="text-xs font-semibold text-zinc-500 mb-1 truncate">{game.team1Player1Name}</p>
+            <p className="text-xs font-semibold text-zinc-500 mb-1 truncate">{formatGameSide(game, 'team1')}</p>
             <input autoFocus type="number" min="0" value={sc1} onChange={e => setSc1(e.target.value)}
               className="w-full text-center text-2xl font-bold px-3 py-2 border border-zinc-200 rounded-xl focus:outline-none focus:border-zinc-400" />
           </div>
           <div className="text-center text-sm font-bold text-zinc-400">vs</div>
           <div className="text-center">
-            <p className="text-xs font-semibold text-zinc-500 mb-1 truncate">{game.team2Player1Name}</p>
+            <p className="text-xs font-semibold text-zinc-500 mb-1 truncate">{formatGameSide(game, 'team2')}</p>
             <input type="number" min="0" value={sc2} onChange={e => setSc2(e.target.value)}
               className="w-full text-center text-2xl font-bold px-3 py-2 border border-zinc-200 rounded-xl focus:outline-none focus:border-zinc-400" />
           </div>
@@ -123,7 +134,7 @@ function AssignModal({ pending, onAssign, onClose }: {
                 )}
               </div>
               <p className="text-sm font-semibold text-zinc-800">
-                {game.team1Player1Name} <span className="font-normal text-zinc-400">vs</span> {game.team2Player1Name}
+                {formatGameSide(game, 'team1')} <span className="font-normal text-zinc-400">vs</span> {formatGameSide(game, 'team2')}
               </p>
             </button>
           ))}
@@ -246,7 +257,7 @@ export function TournamentLivePanel() {
                     </div>
                   )}
                   <p className="text-sm font-medium text-zinc-700">
-                    {game.team1Player1Name} <span className="text-zinc-400">vs</span> {game.team2Player1Name}
+                    {formatGameSide(game, 'team1')} <span className="text-zinc-400">vs</span> {formatGameSide(game, 'team2')}
                   </p>
                 </div>
               ))}
@@ -298,9 +309,14 @@ function CourtCard({ slot, hasPending, onAssign, onScore }: {
   return (
     <div className="rounded-2xl border p-5 min-h-[180px] flex flex-col" style={cardStyle}>
       <div className="flex items-center justify-between mb-3">
-        <span className="text-sm font-bold tabular-nums" style={{ color: isActive ? courtPhase.running.text : '#a1a1aa' }}>
-          Court {courtNumber}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-bold tabular-nums" style={{ color: isActive ? courtPhase.running.text : '#a1a1aa' }}>
+            Court {courtNumber}
+          </span>
+          {game?.category && (
+            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-600">{game.category}{game.slotNumber}</span>
+          )}
+        </div>
         {isActive && (
           <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">Playing</span>
         )}
@@ -320,13 +336,17 @@ function CourtCard({ slot, hasPending, onAssign, onScore }: {
           )}
           <div className="flex-1 flex flex-col justify-center gap-2">
             <div className="text-center">
-              <p className="text-lg font-bold text-zinc-900 truncate">{game.team1Player1Name}</p>
-              <p className="text-xs text-zinc-400 mt-0.5">Lv{game.team1Player1Level}</p>
+              <p className="text-lg font-bold text-zinc-900 truncate">{formatGameSide(game, 'team1')}</p>
+              <p className="text-xs text-zinc-400 mt-0.5">
+                {game.team1Player2Id != null ? `Lv${game.team1Player1Level}/${game.team1Player2Level}` : `Lv${game.team1Player1Level}`}
+              </p>
             </div>
             <div className="text-center text-sm font-bold text-zinc-400">vs</div>
             <div className="text-center">
-              <p className="text-lg font-bold text-zinc-900 truncate">{game.team2Player1Name}</p>
-              <p className="text-xs text-zinc-400 mt-0.5">Lv{game.team2Player1Level}</p>
+              <p className="text-lg font-bold text-zinc-900 truncate">{formatGameSide(game, 'team2')}</p>
+              <p className="text-xs text-zinc-400 mt-0.5">
+                {game.team2Player2Id != null ? `Lv${game.team2Player1Level}/${game.team2Player2Level}` : `Lv${game.team2Player1Level}`}
+              </p>
             </div>
           </div>
           <button onClick={onScore}
