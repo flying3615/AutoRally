@@ -315,7 +315,8 @@ export function TournamentDetail() {
     && lastRound !== 'F'
     && lastRoundMatches.length > 0
     && lastRoundMatches.every(m => m.status === 'completed');
-  const nextAction = regs.length < 2
+  const isRegistered = regs.length >= 2 || teams.length >= 2;
+  const nextAction = !isRegistered
     ? 'Register at least two teams'
     : matches.length === 0
       ? 'Generate the schedule'
@@ -326,7 +327,7 @@ export function TournamentDetail() {
           : 'Review standings';
   const steps = [
     { label: 'Setup', done: true },
-    { label: 'Register', done: regs.length >= 2 },
+    { label: 'Register', done: isRegistered },
     { label: 'Schedule', done: matches.length > 0 },
     { label: 'Play', done: matches.length > 0 && pendingRealMatches.length === 0 },
     { label: 'Standings', done: completedRealMatches.length > 0 },
