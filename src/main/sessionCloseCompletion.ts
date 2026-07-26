@@ -21,10 +21,10 @@ export interface SessionCloseCompletionPersistenceDependencies {
 
 export class SessionCloseCompletionRestoreError extends Error {
   constructor(
-    readonly persistenceError: unknown,
+    readonly completionError: unknown,
     readonly restorationError: unknown,
   ) {
-    super('Unable to persist session completion and restore the active session');
+    super('Unable to complete sessions and restore active sessions');
     this.name = 'SessionCloseCompletionRestoreError';
   }
 }
@@ -52,21 +52,54 @@ export function createSessionCloseCompletionDependencies({
   };
 }
 
-export function completeSessionForClose(
-  session: SessionForCloseCompletion,
+function restoreActiveSessions(
+  sessions: readonly SessionForCloseCompletion[],
+  restoreActive: (session: SessionForCloseCompletion) => void,
+): unknown {
+  let restorationError: unknown;
+
+  for (const session of sessions) {
+    try {
+      restoreActive(session);
+    } catch (error) {
+      restorationError ??= error;
+    }
+  }
+
+  return restorationError;
+}
+
+function rethrowAfterRestoring(
+  completionError: unknown,
+  completedSessions: readonly SessionForCloseCompletion[],
+  restoreActive: (session: SessionForCloseCompletion) => void,
+): never {
+  const restorationError = restoreActiveSessions(completedSessions, restoreActive);
+  if (restorationError !== undefined) {
+    throw new SessionCloseCompletionRestoreError(completionError, restorationError);
+  }
+
+  throw completionError;
+}
+
+export function completeSessionsForClose(
+  sessions: readonly SessionForCloseCompletion[],
   { markCompleted, persist, restoreActive }: SessionCloseCompletionDependencies,
 ): void {
-  markCompleted(session);
+  const completedSessions: SessionForCloseCompletion[] = [];
+
+  try {
+    for (const session of sessions) {
+      markCompleted(session);
+      completedSessions.push(session);
+    }
+  } catch (error) {
+    rethrowAfterRestoring(error, completedSessions, restoreActive);
+  }
 
   try {
     persist();
-  } catch (persistenceError) {
-    try {
-      restoreActive(session);
-    } catch (restorationError) {
-      throw new SessionCloseCompletionRestoreError(persistenceError, restorationError);
-    }
-
-    throw persistenceError;
+  } catch (error) {
+    rethrowAfterRestoring(error, completedSessions, restoreActive);
   }
 }

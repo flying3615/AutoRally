@@ -1,9 +1,9 @@
 import { app, BrowserWindow, dialog, globalShortcut, shell } from 'electron';
 import path from 'path';
 import { registerIpcHandlers } from './ipc';
-import { closeDb, queryOne, run, runWithoutAutosave, saveDb } from './database';
+import { closeDb, queryAll, run, runWithoutAutosave, saveDb } from './database';
 import {
-  completeSessionForClose,
+  completeSessionsForClose,
   createSessionCloseCompletionDependencies,
 } from './sessionCloseCompletion';
 import { sessionCloseErrorMessage } from './sessionCloseErrorMessage';
@@ -26,7 +26,9 @@ function createWindow() {
   });
 
   const sessionCloseGuard = new SessionCloseGuard(
-    () => queryOne<{ id: string; startTime: string | null }>("SELECT id, startTime FROM sessions WHERE status = 'active'"),
+    () => queryAll<{ id: string; startTime: string | null }>(
+      "SELECT id, startTime FROM sessions WHERE status = 'active'",
+    ),
     () => dialog.showMessageBoxSync(mainWindow!, {
       type: 'warning',
       buttons: ['取消关闭', '结束并关闭'],
@@ -35,8 +37,8 @@ function createWindow() {
       message: '当前 session 正在进行中',
       detail: '结束 session 后将关闭程序。',
     }) === 1,
-    session => completeSessionForClose(
-      session,
+    sessions => completeSessionsForClose(
+      sessions,
       createSessionCloseCompletionDependencies({
         run,
         runWithoutAutosave,

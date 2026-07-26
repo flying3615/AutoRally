@@ -12,7 +12,11 @@ export function handleSessionCloseEvent(
     if (!guard.canClose()) event.preventDefault();
   } catch (error) {
     event.preventDefault();
-    reportError(error);
+    try {
+      reportError(error);
+    } catch (reportingError) {
+      console.error('Failed to report session close error:', reportingError);
+    }
   }
 }
 
@@ -20,25 +24,22 @@ export class SessionCloseGuard {
   private approved = false;
 
   constructor(
-    private readonly getActiveSession: () => ActiveSessionForClose | undefined,
+    private readonly getActiveSessions: () => ActiveSessionForClose[],
     private readonly confirmEndSession: () => boolean,
-    private readonly endSession: (session: ActiveSessionForClose) => void,
+    private readonly endSessions: (sessions: ActiveSessionForClose[]) => void,
   ) {}
 
   canClose(): boolean {
     if (this.approved) return true;
 
-    const session = this.getActiveSession();
-    if (!session) {
-      this.approved = true;
-      return true;
-    }
+    const sessions = this.getActiveSessions();
+    if (sessions.length === 0) return true;
 
     if (!this.confirmEndSession()) {
       return false;
     }
 
-    this.endSession(session);
+    this.endSessions(sessions);
     this.approved = true;
     return true;
   }

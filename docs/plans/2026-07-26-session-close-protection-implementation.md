@@ -1,7 +1,5 @@
 # Session close protection implementation plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
-
 **Goal:** Prevent AutoRally from closing while an active session is open unless
 the user explicitly chooses to end that session.
 
