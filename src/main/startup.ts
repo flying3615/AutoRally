@@ -10,6 +10,60 @@ export interface ReadyToShowEventSource {
   once(event: 'ready-to-show' | 'closed', listener: () => void): unknown;
 }
 
+export type StartupTask = () => void | Promise<void>;
+
+export type StartupFailureHandler = (error: unknown) => void;
+
+export interface StartupFailureDependencies {
+  report(error: unknown): void;
+  exit(): void;
+}
+
+export interface StartupSequenceDependencies {
+  createSplashWindow: StartupTask;
+  initializeIpc: StartupTask;
+  createMainWindow: StartupTask;
+  registerShortcuts: StartupTask;
+  onFailure: StartupFailureHandler;
+}
+
+export function createStartupFailureHandler({
+  report,
+  exit,
+}: StartupFailureDependencies): StartupFailureHandler {
+  let handled = false;
+
+  return error => {
+    if (handled) return;
+
+    handled = true;
+    try {
+      report(error);
+    } finally {
+      exit();
+    }
+  };
+}
+
+export async function runStartupSequence({
+  createSplashWindow,
+  initializeIpc,
+  createMainWindow,
+  registerShortcuts,
+  onFailure,
+}: StartupSequenceDependencies): Promise<boolean> {
+  try {
+    await createSplashWindow();
+    await initializeIpc();
+    await createMainWindow();
+    await registerShortcuts();
+    return true;
+  } catch (error) {
+    onFailure(error);
+    return false;
+  }
+}
+
 export function waitForReadyToShow(window: ReadyToShowEventSource): Promise<void> {
   return new Promise((resolve, reject) => {
     window.once('ready-to-show', resolve);

@@ -2,16 +2,23 @@ import { app, BrowserWindow, dialog, globalShortcut, shell } from 'electron';
 import path from 'path';
 import { registerIpcHandlers } from './ipc';
 import { closeDb } from './database';
-import { navigateWithReadyToShowListener, StartupCoordinator } from './startup';
+import {
+  createStartupFailureHandler,
+  navigateWithReadyToShowListener,
+  runStartupSequence,
+  StartupCoordinator,
+} from './startup';
 
 let mainWindow: BrowserWindow | null = null;
 const startup = new StartupCoordinator();
 
-function handleStartupFailure(error: unknown) {
-  console.error('AutoRally startup failed:', error);
-  dialog.showErrorBox('AutoRally 启动失败', 'AutoRally 未能正常启动。请重启应用后重试。');
-  app.quit();
-}
+const handleStartupFailure = createStartupFailureHandler({
+  report: error => {
+    console.error('AutoRally startup failed:', error);
+    dialog.showErrorBox('AutoRally 启动失败', 'AutoRally 未能正常启动。请重启应用后重试。');
+  },
+  exit: () => app.quit(),
+});
 
 async function createSplashWindow() {
   const splashWindow = new BrowserWindow({
@@ -158,11 +165,17 @@ if (!app.requestSingleInstanceLock()) {
 
   app
     .whenReady()
-    .then(async () => {
-      await createSplashWindow();
-      await registerIpcHandlers();
-      await createWindow();
-      registerShortcuts();
+    .then(() => {
+      return runStartupSequence({
+        createSplashWindow,
+        initializeIpc: registerIpcHandlers,
+        createMainWindow: createWindow,
+        registerShortcuts,
+        onFailure: handleStartupFailure,
+      });
+    })
+    .then(started => {
+      if (!started) return;
 
       app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) {

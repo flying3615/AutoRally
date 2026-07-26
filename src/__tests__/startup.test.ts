@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  createStartupFailureHandler,
   navigateWithReadyToShowListener,
+  runStartupSequence,
   StartupCoordinator,
   waitForReadyToShow,
 } from '../main/startup';
@@ -201,5 +203,126 @@ describe('StartupCoordinator', () => {
     startup.setMainWindow(main);
     expect(() => startup.showMainWindow()).not.toThrow();
     expect(main.show).toHaveBeenCalledOnce();
+  });
+});
+
+describe('startup orchestration', () => {
+  it('reports the original splash startup failure and skips remaining work', async () => {
+    const splashFailure = new Error('splash navigation failed');
+    const reports: unknown[] = [];
+    const exit = vi.fn();
+    const initializeIpc = vi.fn();
+    const createMainWindow = vi.fn();
+    const registerShortcuts = vi.fn();
+
+    await runStartupSequence({
+      createSplashWindow: async () => {
+        throw splashFailure;
+      },
+      initializeIpc,
+      createMainWindow,
+      registerShortcuts,
+      onFailure: createStartupFailureHandler({
+        report: error => reports.push(error),
+        exit,
+      }),
+    });
+
+    expect(reports).toHaveLength(1);
+    expect(reports[0]).toBe(splashFailure);
+    expect(exit).toHaveBeenCalledOnce();
+    expect(initializeIpc).not.toHaveBeenCalled();
+    expect(createMainWindow).not.toHaveBeenCalled();
+    expect(registerShortcuts).not.toHaveBeenCalled();
+  });
+
+  it('reports the original IPC initialization failure and skips main startup work', async () => {
+    const ipcFailure = new Error('IPC initialization failed');
+    const reports: unknown[] = [];
+    const exit = vi.fn();
+    const createMainWindow = vi.fn();
+    const registerShortcuts = vi.fn();
+
+    await runStartupSequence({
+      createSplashWindow: vi.fn(async () => {}),
+      initializeIpc: async () => {
+        throw ipcFailure;
+      },
+      createMainWindow,
+      registerShortcuts,
+      onFailure: createStartupFailureHandler({
+        report: error => reports.push(error),
+        exit,
+      }),
+    });
+
+    expect(reports).toHaveLength(1);
+    expect(reports[0]).toBe(ipcFailure);
+    expect(exit).toHaveBeenCalledOnce();
+    expect(createMainWindow).not.toHaveBeenCalled();
+    expect(registerShortcuts).not.toHaveBeenCalled();
+  });
+
+  it('reports a main readiness failure once and exits', async () => {
+    const mainWindow = new SplashWindowEventSource();
+    const reports: unknown[] = [];
+    const exit = vi.fn();
+    const registerShortcuts = vi.fn();
+    let signalMainStartup!: () => void;
+    const mainStartupBegun = new Promise<void>(resolve => {
+      signalMainStartup = resolve;
+    });
+
+    const startup = runStartupSequence({
+      createSplashWindow: async () => {},
+      initializeIpc: async () => {},
+      createMainWindow: () => {
+        const ready = waitForReadyToShow(mainWindow);
+        signalMainStartup();
+        return ready;
+      },
+      registerShortcuts,
+      onFailure: createStartupFailureHandler({
+        report: error => reports.push(error),
+        exit,
+      }),
+    });
+
+    await mainStartupBegun;
+    mainWindow.emitClosed();
+    await startup;
+
+    expect(reports).toHaveLength(1);
+    expect(reports[0]).toBeInstanceOf(Error);
+    expect((reports[0] as Error).message).toBe('Window closed before it was ready to show');
+    expect(exit).toHaveBeenCalledOnce();
+    expect(registerShortcuts).not.toHaveBeenCalled();
+  });
+
+  it('does not report a successful startup or a normal post-startup main close', async () => {
+    const mainWindow = new SplashWindowEventSource();
+    const reports: unknown[] = [];
+    const exit = vi.fn();
+    const registerShortcuts = vi.fn();
+
+    await runStartupSequence({
+      createSplashWindow: async () => {},
+      initializeIpc: async () => {},
+      createMainWindow: () => {
+        const ready = waitForReadyToShow(mainWindow);
+        mainWindow.emitReadyToShow();
+        return ready;
+      },
+      registerShortcuts,
+      onFailure: createStartupFailureHandler({
+        report: error => reports.push(error),
+        exit,
+      }),
+    });
+    mainWindow.emitClosed();
+
+    expect(registerShortcuts).toHaveBeenCalledOnce();
+    expect(reports).toEqual([]);
+    expect(exit).not.toHaveBeenCalled();
   });
 });
