@@ -7,11 +7,14 @@ export interface AppWindow {
 }
 
 export interface ReadyToShowEventSource {
-  once(event: 'ready-to-show', listener: () => void): unknown;
+  once(event: 'ready-to-show' | 'closed', listener: () => void): unknown;
 }
 
 export function waitForReadyToShow(window: ReadyToShowEventSource): Promise<void> {
-  return new Promise(resolve => window.once('ready-to-show', resolve));
+  return new Promise((resolve, reject) => {
+    window.once('ready-to-show', resolve);
+    window.once('closed', () => reject(new Error('Window closed before it was ready to show')));
+  });
 }
 
 export function navigateWithReadyToShowListener<T>(

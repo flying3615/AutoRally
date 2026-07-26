@@ -1,4 +1,4 @@
-import { app, BrowserWindow, globalShortcut, shell } from 'electron';
+import { app, BrowserWindow, dialog, globalShortcut, shell } from 'electron';
 import path from 'path';
 import { registerIpcHandlers } from './ipc';
 import { closeDb } from './database';
@@ -6,6 +6,12 @@ import { navigateWithReadyToShowListener, StartupCoordinator } from './startup';
 
 let mainWindow: BrowserWindow | null = null;
 const startup = new StartupCoordinator();
+
+function handleStartupFailure(error: unknown) {
+  console.error('AutoRally startup failed:', error);
+  dialog.showErrorBox('AutoRally 启动失败', 'AutoRally 未能正常启动。请重启应用后重试。');
+  app.quit();
+}
 
 async function createSplashWindow() {
   const splashWindow = new BrowserWindow({
@@ -35,12 +41,11 @@ async function createSplashWindow() {
       return splashWindow.loadFile(path.join(__dirname, '../renderer/splash.html'));
     });
 
-  await splashNavigation;
-  await splashReadyToShow;
+  await Promise.all([splashNavigation, splashReadyToShow]);
   startup.showSplashWindow();
 }
 
-function createWindow() {
+async function createWindow() {
   const window = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -66,7 +71,7 @@ function createWindow() {
     return { action: 'deny' };
   });
 
-  const { readyToShow } = navigateWithReadyToShowListener(window, () => {
+  const { navigation: mainNavigation, readyToShow } = navigateWithReadyToShowListener(window, () => {
     if (process.env.VITE_DEV_SERVER_URL) {
       return window.loadURL(process.env.VITE_DEV_SERVER_URL);
     }
@@ -85,16 +90,15 @@ function createWindow() {
     }
   });
 
-  void readyToShow.then(() => {
-    startup.showMainWindow();
-  });
-
   window.on('closed', () => {
     if (mainWindow === window) mainWindow = null;
     startup.setPendingMainWindow(null);
     startup.setMainWindow(null);
     startup.closeSplashWindow();
   });
+
+  await Promise.all([mainNavigation, readyToShow]);
+  startup.showMainWindow();
 }
 
 function registerShortcuts() {
@@ -152,16 +156,21 @@ if (!app.requestSingleInstanceLock()) {
 } else {
   app.on('second-instance', () => startup.focusActiveWindow());
 
-  app.whenReady().then(async () => {
-    await createSplashWindow();
-    await registerIpcHandlers();
-    createWindow();
-    registerShortcuts();
+  app
+    .whenReady()
+    .then(async () => {
+      await createSplashWindow();
+      await registerIpcHandlers();
+      await createWindow();
+      registerShortcuts();
 
-    app.on('activate', () => {
-      if (BrowserWindow.getAllWindows().length === 0) createWindow();
-    });
-  });
+      app.on('activate', () => {
+        if (BrowserWindow.getAllWindows().length === 0) {
+          void createWindow().catch(handleStartupFailure);
+        }
+      });
+    })
+    .catch(handleStartupFailure);
 }
 
 app.on('window-all-closed', () => {

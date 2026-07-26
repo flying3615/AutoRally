@@ -7,15 +7,24 @@ import {
 
 class SplashWindowEventSource {
   private readyToShowListener: (() => void) | undefined;
+  private closedListener: (() => void) | undefined;
   readonly events: string[] = [];
 
-  once(event: 'ready-to-show', listener: () => void) {
+  once(event: 'ready-to-show' | 'closed', listener: () => void) {
     this.events.push(event);
-    this.readyToShowListener = listener;
+    if (event === 'ready-to-show') {
+      this.readyToShowListener = listener;
+    } else {
+      this.closedListener = listener;
+    }
   }
 
   emitReadyToShow() {
     this.readyToShowListener?.();
+  }
+
+  emitClosed() {
+    this.closedListener?.();
   }
 }
 
@@ -46,7 +55,7 @@ describe('StartupCoordinator', () => {
       proceeded = true;
     });
 
-    expect(window.events).toEqual(['ready-to-show', 'navigate']);
+    expect(window.events).toEqual(['ready-to-show', 'closed', 'navigate']);
     expect(proceeded).toBe(true);
   });
 
@@ -59,13 +68,32 @@ describe('StartupCoordinator', () => {
 
     await Promise.resolve();
 
-    expect(splashWindow.events).toEqual(['ready-to-show']);
+    expect(splashWindow.events).toEqual(['ready-to-show', 'closed']);
     expect(proceeded).toBe(false);
 
     splashWindow.emitReadyToShow();
     await ready;
 
     expect(proceeded).toBe(true);
+  });
+
+  it('rejects when the window closes before it is ready to show', async () => {
+    const window = new SplashWindowEventSource();
+    const ready = waitForReadyToShow(window);
+
+    window.emitClosed();
+
+    await expect(ready).rejects.toThrow('closed before it was ready to show');
+  });
+
+  it('resolves when the window is ready before it closes', async () => {
+    const window = new SplashWindowEventSource();
+    const ready = waitForReadyToShow(window);
+
+    window.emitReadyToShow();
+    window.emitClosed();
+
+    await expect(ready).resolves.toBeUndefined();
   });
 
   it('defers splash focus until the registered splash becomes visible', () => {
