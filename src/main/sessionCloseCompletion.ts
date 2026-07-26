@@ -30,14 +30,13 @@ export class SessionCloseCompletionRestoreError extends Error {
 }
 
 export function createSessionCloseCompletionDependencies({
-  run,
   runWithoutAutosave,
   saveDb,
   now,
 }: SessionCloseCompletionPersistenceDependencies): SessionCloseCompletionDependencies {
   return {
     markCompleted: session => {
-      run("UPDATE sessions SET endTime = ?, status = 'completed' WHERE id = ?", [
+      runWithoutAutosave("UPDATE sessions SET endTime = ?, status = 'completed' WHERE id = ?", [
         safeSessionEndTime(session.startTime, now()),
         session.id,
       ]);

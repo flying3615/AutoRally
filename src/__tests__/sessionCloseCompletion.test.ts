@@ -24,6 +24,28 @@ describe('completeSessionsForClose', () => {
     expect(calls).toEqual(['mark:session-1', 'mark:session-2', 'persist']);
   });
 
+  it('marks a completed session without scheduling autosave', () => {
+    const autosaveWrites: string[] = [];
+    const writesWithoutAutosave: string[] = [];
+    const dependencies = createSessionCloseCompletionDependencies({
+      run: sql => {
+        autosaveWrites.push(sql);
+      },
+      runWithoutAutosave: sql => {
+        writesWithoutAutosave.push(sql);
+      },
+      saveDb: () => undefined,
+      now: () => '2026-07-26T10:00:00.000Z',
+    });
+
+    dependencies.markCompleted(sessions[0]!);
+
+    expect(autosaveWrites).toEqual([]);
+    expect(writesWithoutAutosave).toEqual([
+      "UPDATE sessions SET endTime = ?, status = 'completed' WHERE id = ?",
+    ]);
+  });
+
   it('does not schedule another save when restoring every session after persistence fails', () => {
     const persistenceError = new Error('save failed');
     const autosaveWrites: string[] = [];
@@ -40,13 +62,11 @@ describe('completeSessionsForClose', () => {
       },
       now: () => '2026-07-26T10:00:00.000Z',
     });
-
     expect(() => completeSessionsForClose(sessions, dependencies)).toThrow(persistenceError);
-    expect(autosaveWrites).toEqual([
-      "UPDATE sessions SET endTime = ?, status = 'completed' WHERE id = ?",
-      "UPDATE sessions SET endTime = ?, status = 'completed' WHERE id = ?",
-    ]);
+    expect(autosaveWrites).toEqual([]);
     expect(recoveryWrites).toEqual([
+      "UPDATE sessions SET endTime = ?, status = 'completed' WHERE id = ?",
+      "UPDATE sessions SET endTime = ?, status = 'completed' WHERE id = ?",
       "UPDATE sessions SET endTime = NULL, status = 'active' WHERE id = ?",
       "UPDATE sessions SET endTime = NULL, status = 'active' WHERE id = ?",
     ]);
