@@ -4,20 +4,30 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   createStartupFailureHandler,
   navigateWithReadyToShowListener,
+  presentStartupFailureDialog,
   runStartupSequence,
   StartupCoordinator,
   waitForReadyToShow,
 } from '../main/startup';
 
 describe('startup UI copy', () => {
-  it('uses the approved English splash and startup failure copy', () => {
+  it('uses the approved English splash copy', () => {
     const splashSource = readFileSync(resolve(process.cwd(), 'public/splash.html'), 'utf8');
-    const startupFailureSource = readFileSync(resolve(process.cwd(), 'src/main/index.ts'), 'utf8');
 
     expect(splashSource).toContain('Preparing AutoRally...');
     expect(splashSource).not.toContain('正在准备应用');
-    expect(startupFailureSource).toContain('AutoRally Failed to Start');
-    expect(startupFailureSource).toContain(
+  });
+});
+
+describe('startup failure dialog', () => {
+  it('presents the approved English startup failure copy', () => {
+    const showErrorBox = vi.fn();
+
+    presentStartupFailureDialog({ showErrorBox });
+
+    expect(showErrorBox).toHaveBeenCalledOnce();
+    expect(showErrorBox).toHaveBeenCalledWith(
+      'AutoRally Failed to Start',
       'AutoRally could not start. Please restart the application and try again.',
     );
   });

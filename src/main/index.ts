@@ -5,6 +5,7 @@ import { closeDb } from './database';
 import {
   createStartupFailureHandler,
   navigateWithReadyToShowListener,
+  presentStartupFailureDialog,
   runStartupSequence,
   StartupCoordinator,
 } from './startup';
@@ -15,10 +16,7 @@ const startup = new StartupCoordinator();
 const handleStartupFailure = createStartupFailureHandler({
   report: error => {
     console.error('AutoRally startup failed:', error);
-    dialog.showErrorBox(
-      'AutoRally Failed to Start',
-      'AutoRally could not start. Please restart the application and try again.',
-    );
+    presentStartupFailureDialog({ showErrorBox: dialog.showErrorBox });
   },
   exit: () => app.quit(),
 });

@@ -19,12 +19,25 @@ export interface StartupFailureDependencies {
   exit(): void;
 }
 
+export interface StartupFailureDialogDependencies {
+  showErrorBox(title: string, content: string): void;
+}
+
 export interface StartupSequenceDependencies {
   createSplashWindow: StartupTask;
   initializeIpc: StartupTask;
   createMainWindow: StartupTask;
   registerShortcuts: StartupTask;
   onFailure: StartupFailureHandler;
+}
+
+export function presentStartupFailureDialog({
+  showErrorBox,
+}: StartupFailureDialogDependencies): void {
+  showErrorBox(
+    'AutoRally Failed to Start',
+    'AutoRally could not start. Please restart the application and try again.',
+  );
 }
 
 export function createStartupFailureHandler({
