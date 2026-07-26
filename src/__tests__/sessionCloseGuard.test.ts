@@ -81,7 +81,7 @@ describe('SessionCloseGuard', () => {
     expect(endSession).toHaveBeenNthCalledWith(2, fresh);
   });
 
-  it('prevents the close event and rethrows when ending a confirmed active session fails', () => {
+  it('prevents the close event and reports without throwing when ending a confirmed active session fails', () => {
     const active = { id: 'session-1', startTime: '2026-07-26T08:00:00.000Z' };
     const writeError = new Error('write failed');
     const guard = new SessionCloseGuard(
@@ -91,15 +91,11 @@ describe('SessionCloseGuard', () => {
     );
     const preventDefault = vi.fn();
     const event = { preventDefault };
+    const reportError = vi.fn();
 
-    let thrownError: unknown;
-    try {
-      handleSessionCloseEvent(guard, event);
-    } catch (error) {
-      thrownError = error;
-    }
-
-    expect(thrownError).toBe(writeError);
+    expect(() => handleSessionCloseEvent(guard, event, reportError)).not.toThrow();
     expect(preventDefault).toHaveBeenCalledTimes(1);
+    expect(reportError).toHaveBeenCalledTimes(1);
+    expect(reportError).toHaveBeenCalledWith(writeError);
   });
 });

@@ -125,8 +125,9 @@ export class SessionCloseGuard {
 }
 ```
 
-Do not catch errors from `endSession`; a failed persistence operation must leave
-the close blocked and surface through Electron's normal error handling.
+The close-event adapter catches errors from `endSession`: it leaves the close
+blocked and reports the failure through a native error dialog rather than
+allowing Electron to treat it as an uncaught main-process exception.
 
 **Step 4: Run test to verify it passes**
 
