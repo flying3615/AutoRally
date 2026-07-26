@@ -23,6 +23,31 @@ const MAX_EXACT_CANDIDATES = 900;
 const BEAM_WIDTH = 160;
 const RELAXED_LEVEL_PENALTY_OFFSET = 100;
 
+// Game-type preference, used only as a tiebreak: in compareState/compareCandidate
+// it sits *below* court count, rest fairness, play-count fairness and level match,
+// so it can never override any of them.
+//
+// Historically 'female-double' shared 'male-double''s penalty of 1, one worse than
+// 'mixed'. Because men usually outnumber women, four same-level women can almost
+// always be split into mixed courts, and "two mixed" (0 + 0) always beat
+// "women's double + men's double" (1 + 1) — so a women's double effectively never
+// formed even when a natural group of women was waiting.
+//
+// Making 'female-double' as preferred as 'mixed' (both 0) keeps mixed the default:
+// in a gender-balanced pool "two mixed" (0) still beats "women's double + men's
+// double" (0 + 1), so no wholesale gender segregation. But when women are a surplus
+// — more same-level women than the mixed courts can absorb — mixed cannot use them
+// all, and the leftover women now form a women's double instead of an unbalanced
+// open court. Fairness, ranked higher, still decides *which* women are seated.
+// 'male-double' keeps its mild penalty: men's doubles already form naturally from
+// the male majority, and this keeps 'mixed' the default over segregation.
+const TYPE_PREFERENCE: Record<GameType, number> = {
+  mixed: 0,
+  'female-double': 0,
+  'male-double': 1,
+  'open-double': 2,
+};
+
 interface CourtCandidate extends MatchResult {
   ids: string[];
   mask: bigint;
@@ -367,7 +392,7 @@ export function generateMatches(
       const s = restStreak.get(p.id) ?? 0;
       return sum + s * s;
     }, 0);
-    const typePenalty = gameType === 'mixed' ? 0 : gameType === 'male-double' || gameType === 'female-double' ? 1 : 2;
+    const typePenalty = TYPE_PREFERENCE[gameType];
     candidateByKey.set(key, {
       ids,
       mask,

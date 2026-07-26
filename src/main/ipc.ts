@@ -5,10 +5,16 @@ import { exportDatabaseBackup, importDatabaseBackup, initDb, run, queryAll, quer
 import { backupFileName } from './databaseBackup';
 import {
   buildNextKnockoutMatches,
+  buildTeamMatchGames,
   computeTournamentStandings,
   generateKnockoutMatches,
   generateRoundRobinMatches,
+  validateTeamReassignment,
   validateTournamentRegistration,
+  type TeamMatchCategory,
+  type TeamMatchComposition,
+  type TeamReassignmentInput,
+  type TeamRosterPlayer,
   type TournamentMatchRecord,
   type TournamentRegistration,
 } from './tournament';
@@ -769,13 +775,13 @@ export async function registerIpcHandlers() {
     run('DELETE FROM tournament_registrations WHERE id = ?', [id]);
   });
 
-  function insertTournamentMatch(match: TournamentMatchRecord & { teamMatchId?: string | null }) {
+  function insertTournamentMatch(match: TournamentMatchRecord & { teamMatchId?: string | null; category?: string | null; slotNumber?: number | null }) {
     run(
       `INSERT INTO tournament_matches (
         id, tournamentId, round, matchNumber, courtNumber, status,
         team1Player1Id, team1Player2Id, team2Player1Id, team2Player2Id,
-        team1Score, team2Score, winner, completedAt, teamMatchId
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        team1Score, team2Score, winner, completedAt, teamMatchId, category, slotNumber
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         match.id,
         match.tournamentId,
@@ -792,6 +798,8 @@ export async function registerIpcHandlers() {
         match.winner,
         match.completedAt,
         match.teamMatchId ?? null,
+        match.category ?? null,
+        match.slotNumber ?? null,
       ],
     );
   }
@@ -927,7 +935,7 @@ export async function registerIpcHandlers() {
     );
   });
 
-  ipcMain.handle('tournament:teamMatches:generate', (_e, tournamentId: string, gamesPerMatch = 3) => {
+  ipcMain.handle('tournament:teamMatches:generate', (_e, tournamentId: string, composition: TeamMatchComposition) => {
     return transaction(() => {
       // Clear existing team matches and their linked individual games
       run('DELETE FROM tournament_matches WHERE tournamentId = ? AND teamMatchId IS NOT NULL', [tournamentId]);
@@ -937,7 +945,11 @@ export async function registerIpcHandlers() {
         'SELECT id, name FROM tournament_teams WHERE tournamentId = ? ORDER BY createdAt',
         [tournamentId]
       );
-      if (teams.length < 2) return [];
+      if (teams.length < 2) return { teamMatches: [], warnings: [] };
+
+      const teamNameById = new Map(teams.map(t => [t.id, t.name]));
+      const totalCount = composition.ms + composition.ws + composition.md + composition.xd + composition.wd;
+      const warnings: string[] = [];
 
       // Berger round-robin schedule
       const n = teams.length % 2 === 0 ? teams.length : teams.length + 1;
@@ -954,8 +966,11 @@ export async function registerIpcHandlers() {
           if (a !== 'BYE' && b !== 'BYE') {
             const tmId = uuid();
             run(
-              'INSERT INTO tournament_team_matches (id, tournamentId, round, team1Id, team2Id, gamesPerMatch, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)',
-              [tmId, tournamentId, r + 1, a, b, gamesPerMatch, now]
+              `INSERT INTO tournament_team_matches (
+                id, tournamentId, round, team1Id, team2Id, gamesPerMatch,
+                msCount, wsCount, mdCount, xdCount, wdCount, createdAt
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [tmId, tournamentId, r + 1, a, b, totalCount, composition.ms, composition.ws, composition.md, composition.xd, composition.wd, now]
             );
             teamMatches.push({ id: tmId, round: r + 1, team1Id: a, team2Id: b });
           }
@@ -968,38 +983,79 @@ export async function registerIpcHandlers() {
         list[n - 1] = fixed;
       }
 
-      // Generate individual games for each team match
+      // Generate individual rubbers for each team match
       for (const tm of teamMatches) {
-        const p1s = queryAll<{ playerId: string }>(
-          'SELECT playerId FROM tournament_team_players WHERE teamId = ? ORDER BY position', [tm.team1Id]
+        const team1Roster = queryAll<{ playerId: string; gender: 'male' | 'female'; level: number }>(
+          `SELECT tp.playerId, p.gender, p.level
+           FROM tournament_team_players tp JOIN players p ON tp.playerId = p.id
+           WHERE tp.teamId = ? ORDER BY tp.position`, [tm.team1Id]
         );
-        const p2s = queryAll<{ playerId: string }>(
-          'SELECT playerId FROM tournament_team_players WHERE teamId = ? ORDER BY position', [tm.team2Id]
+        const team2Roster = queryAll<{ playerId: string; gender: 'male' | 'female'; level: number }>(
+          `SELECT tp.playerId, p.gender, p.level
+           FROM tournament_team_players tp JOIN players p ON tp.playerId = p.id
+           WHERE tp.teamId = ? ORDER BY tp.position`, [tm.team2Id]
         );
-        const count = Math.min(gamesPerMatch, Math.min(p1s.length, p2s.length));
-        for (let g = 0; g < count; g++) {
+
+        const { games, skipped } = buildTeamMatchGames(team1Roster, team2Roster, composition);
+        for (const category of skipped) {
+          warnings.push(`${teamNameById.get(tm.team1Id)} vs ${teamNameById.get(tm.team2Id)}: not enough eligible players for ${category}, skipped`);
+        }
+
+        games.forEach((game, index) => {
           insertTournamentMatch({
             id: uuid(),
             tournamentId,
             round: `R${tm.round}`,
-            matchNumber: g + 1,
+            matchNumber: index + 1,
             courtNumber: null,
             status: 'pending',
-            team1Player1Id: p1s[g]!.playerId,
-            team1Player2Id: null,
-            team2Player1Id: p2s[g]!.playerId,
-            team2Player2Id: null,
+            team1Player1Id: game.team1Player1Id,
+            team1Player2Id: game.team1Player2Id,
+            team2Player1Id: game.team2Player1Id,
+            team2Player2Id: game.team2Player2Id,
             team1Score: null,
             team2Score: null,
             winner: null,
             completedAt: null,
             teamMatchId: tm.id,
-          } as any);
-        }
+            category: game.category,
+            slotNumber: game.slotNumber,
+          });
+        });
       }
 
-      return teamMatches;
+      return { teamMatches, warnings };
     });
+  });
+
+  ipcMain.handle('tournament:teamMatches:reassignPlayers', (_e, gameId: string, assignment: TeamReassignmentInput) => {
+    const game = queryOne<{ status: string; category: string | null; teamMatchId: string | null }>(
+      'SELECT status, category, teamMatchId FROM tournament_matches WHERE id = ?', [gameId]
+    );
+    if (!game) throw new Error('Match not found');
+    if (game.status !== 'pending') throw new Error('Cannot reassign players on a match that has already started');
+    if (!game.teamMatchId || !game.category) throw new Error('Not a team match rubber');
+
+    const teamMatch = queryOne<{ team1Id: string; team2Id: string }>(
+      'SELECT team1Id, team2Id FROM tournament_team_matches WHERE id = ?', [game.teamMatchId]
+    );
+    if (!teamMatch) throw new Error('Team match not found');
+
+    const team1Roster = queryAll<TeamRosterPlayer>(
+      `SELECT tp.playerId, p.gender, p.level FROM tournament_team_players tp JOIN players p ON tp.playerId = p.id WHERE tp.teamId = ?`,
+      [teamMatch.team1Id]
+    );
+    const team2Roster = queryAll<TeamRosterPlayer>(
+      `SELECT tp.playerId, p.gender, p.level FROM tournament_team_players tp JOIN players p ON tp.playerId = p.id WHERE tp.teamId = ?`,
+      [teamMatch.team2Id]
+    );
+
+    validateTeamReassignment(game.category as TeamMatchCategory, team1Roster, team2Roster, assignment);
+
+    run(
+      'UPDATE tournament_matches SET team1Player1Id = ?, team1Player2Id = ?, team2Player1Id = ?, team2Player2Id = ? WHERE id = ?',
+      [assignment.team1Player1Id, assignment.team1Player2Id, assignment.team2Player1Id, assignment.team2Player2Id, gameId]
+    );
   });
 
   ipcMain.handle('tournament:teamMatches:list', (_e, tournamentId: string) => {
@@ -1024,10 +1080,14 @@ export async function registerIpcHandlers() {
     return queryAll(
       `SELECT tm.*,
          p1.name as team1Player1Name, p1.gender as team1Player1Gender, p1.level as team1Player1Level,
-         p2.name as team2Player1Name, p2.gender as team2Player1Gender, p2.level as team2Player1Level
+         p1b.name as team1Player2Name, p1b.gender as team1Player2Gender, p1b.level as team1Player2Level,
+         p2.name as team2Player1Name, p2.gender as team2Player1Gender, p2.level as team2Player1Level,
+         p2b.name as team2Player2Name, p2b.gender as team2Player2Gender, p2b.level as team2Player2Level
        FROM tournament_matches tm
        JOIN players p1 ON tm.team1Player1Id = p1.id
+       LEFT JOIN players p1b ON tm.team1Player2Id = p1b.id
        JOIN players p2 ON tm.team2Player1Id = p2.id
+       LEFT JOIN players p2b ON tm.team2Player2Id = p2b.id
        WHERE tm.teamMatchId = ?
        ORDER BY tm.matchNumber`,
       [teamMatchId]
