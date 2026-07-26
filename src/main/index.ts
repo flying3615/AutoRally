@@ -15,7 +15,10 @@ const startup = new StartupCoordinator();
 const handleStartupFailure = createStartupFailureHandler({
   report: error => {
     console.error('AutoRally startup failed:', error);
-    dialog.showErrorBox('AutoRally 启动失败', 'AutoRally 未能正常启动。请重启应用后重试。');
+    dialog.showErrorBox(
+      'AutoRally Failed to Start',
+      'AutoRally could not start. Please restart the application and try again.',
+    );
   },
   exit: () => app.quit(),
 });

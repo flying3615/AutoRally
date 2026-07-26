@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import {
   createStartupFailureHandler,
@@ -6,6 +8,20 @@ import {
   StartupCoordinator,
   waitForReadyToShow,
 } from '../main/startup';
+
+describe('startup UI copy', () => {
+  it('uses the approved English splash and startup failure copy', () => {
+    const splashSource = readFileSync(resolve(process.cwd(), 'public/splash.html'), 'utf8');
+    const startupFailureSource = readFileSync(resolve(process.cwd(), 'src/main/index.ts'), 'utf8');
+
+    expect(splashSource).toContain('Preparing AutoRally...');
+    expect(splashSource).not.toContain('正在准备应用');
+    expect(startupFailureSource).toContain('AutoRally Failed to Start');
+    expect(startupFailureSource).toContain(
+      'AutoRally could not start. Please restart the application and try again.',
+    );
+  });
+});
 
 class SplashWindowEventSource {
   private readyToShowListener: (() => void) | undefined;
