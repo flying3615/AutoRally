@@ -9,6 +9,7 @@ export interface AppWindow {
 export class StartupCoordinator {
   private splashWindow: AppWindow | null = null;
   private mainWindow: AppWindow | null = null;
+  private pendingMainWindow: AppWindow | null = null;
 
   setSplashWindow(window: AppWindow | null) {
     this.splashWindow = window;
@@ -16,6 +17,10 @@ export class StartupCoordinator {
 
   setMainWindow(window: AppWindow | null) {
     this.mainWindow = window;
+  }
+
+  setPendingMainWindow(window: AppWindow | null) {
+    this.pendingMainWindow = window;
   }
 
   focusActiveWindow() {
@@ -27,6 +32,10 @@ export class StartupCoordinator {
   }
 
   showMainWindow() {
+    if (this.pendingMainWindow) {
+      this.mainWindow = this.pendingMainWindow;
+      this.pendingMainWindow = null;
+    }
     this.mainWindow?.show();
     this.closeSplashWindow();
   }

@@ -52,7 +52,7 @@ function createWindow() {
     title: 'AutoRally - Badminton Club Manager',
   });
   mainWindow = window;
-  startup.setMainWindow(window);
+  startup.setPendingMainWindow(window);
 
   window.setAutoHideMenuBar(true);
 
@@ -86,6 +86,7 @@ function createWindow() {
 
   window.on('closed', () => {
     if (mainWindow === window) mainWindow = null;
+    startup.setPendingMainWindow(null);
     startup.setMainWindow(null);
     startup.closeSplashWindow();
   });

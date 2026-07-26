@@ -33,6 +33,25 @@ describe('StartupCoordinator', () => {
     expect(main.focus).toHaveBeenCalledOnce();
   });
 
+  it('keeps the splash active until the pending main window is ready', () => {
+    const splash = createWindowFake();
+    const main = createWindowFake();
+    const startup = new StartupCoordinator();
+    startup.setSplashWindow(splash);
+    startup.setPendingMainWindow(main);
+
+    startup.focusActiveWindow();
+
+    expect(splash.focus).toHaveBeenCalledOnce();
+    expect(main.focus).not.toHaveBeenCalled();
+
+    startup.showMainWindow();
+    startup.focusActiveWindow();
+
+    expect(main.show).toHaveBeenCalledOnce();
+    expect(main.focus).toHaveBeenCalledOnce();
+  });
+
   it('shows the main window and closes the splash window when ready', () => {
     const splash = createWindowFake();
     const main = createWindowFake();
