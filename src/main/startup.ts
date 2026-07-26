@@ -6,6 +6,14 @@ export interface AppWindow {
   close(): void;
 }
 
+export interface SplashContentEventSource {
+  once(event: 'did-finish-load', listener: () => void): unknown;
+}
+
+export function waitForSplashContentReady(splashContent: SplashContentEventSource): Promise<void> {
+  return new Promise(resolve => splashContent.once('did-finish-load', resolve));
+}
+
 export class StartupCoordinator {
   private splashWindow: AppWindow | null = null;
   private mainWindow: AppWindow | null = null;

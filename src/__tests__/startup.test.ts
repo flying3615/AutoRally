@@ -1,5 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
-import { StartupCoordinator } from '../main/startup';
+import { StartupCoordinator, waitForSplashContentReady } from '../main/startup';
+
+class SplashContentEventSource {
+  private didFinishLoadListener: (() => void) | undefined;
+
+  once(event: 'did-finish-load', listener: () => void) {
+    if (event === 'did-finish-load') this.didFinishLoadListener = listener;
+  }
+
+  finishLoading() {
+    this.didFinishLoadListener?.();
+  }
+}
 
 function createWindowFake({ minimized = false }: { minimized?: boolean } = {}) {
   return {
@@ -12,6 +24,21 @@ function createWindowFake({ minimized = false }: { minimized?: boolean } = {}) {
 }
 
 describe('StartupCoordinator', () => {
+  it('waits to proceed until splash content has finished loading', async () => {
+    const splashContent = new SplashContentEventSource();
+    let proceeded = false;
+    const ready = waitForSplashContentReady(splashContent).then(() => {
+      proceeded = true;
+    });
+
+    expect(proceeded).toBe(false);
+
+    splashContent.finishLoading();
+    await ready;
+
+    expect(proceeded).toBe(true);
+  });
+
   it('focuses the splash window while startup is in progress', () => {
     const splash = createWindowFake();
     const startup = new StartupCoordinator();

@@ -2,12 +2,12 @@ import { app, BrowserWindow, globalShortcut, shell } from 'electron';
 import path from 'path';
 import { registerIpcHandlers } from './ipc';
 import { closeDb } from './database';
-import { StartupCoordinator } from './startup';
+import { StartupCoordinator, waitForSplashContentReady } from './startup';
 
 let mainWindow: BrowserWindow | null = null;
 const startup = new StartupCoordinator();
 
-function createSplashWindow() {
+async function createSplashWindow() {
   const splashWindow = new BrowserWindow({
     width: 360,
     height: 240,
@@ -22,19 +22,20 @@ function createSplashWindow() {
   startup.setSplashWindow(splashWindow);
   splashWindow.setMenuBarVisibility(false);
 
-  splashWindow.webContents.once('did-finish-load', () => {
-    splashWindow.show();
-  });
+  const splashContentReady = waitForSplashContentReady(splashWindow.webContents);
 
   splashWindow.on('closed', () => {
     startup.setSplashWindow(null);
   });
 
   if (process.env.VITE_DEV_SERVER_URL) {
-    splashWindow.loadURL(new URL('splash.html', process.env.VITE_DEV_SERVER_URL).toString());
+    await splashWindow.loadURL(new URL('splash.html', process.env.VITE_DEV_SERVER_URL).toString());
   } else {
-    splashWindow.loadFile(path.join(__dirname, '../renderer/splash.html'));
+    await splashWindow.loadFile(path.join(__dirname, '../renderer/splash.html'));
   }
+
+  await splashContentReady;
+  splashWindow.show();
 }
 
 function createWindow() {
@@ -148,7 +149,7 @@ if (!app.requestSingleInstanceLock()) {
   app.on('second-instance', () => startup.focusActiveWindow());
 
   app.whenReady().then(async () => {
-    createSplashWindow();
+    await createSplashWindow();
     await registerIpcHandlers();
     createWindow();
     registerShortcuts();
