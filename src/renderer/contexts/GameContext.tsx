@@ -52,7 +52,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const earlyFinishGame = useCallback((courtNumber: number) => {
-    const cb = onEndedRef.current.get(courtNumber);
     timerRef.current.stop(courtNumber);
     onEndedRef.current.delete(courtNumber);
     setTimers(prev => {
@@ -60,7 +59,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
       next.delete(courtNumber);
       return next;
     });
-    cb?.();
   }, []);
 
   return (
