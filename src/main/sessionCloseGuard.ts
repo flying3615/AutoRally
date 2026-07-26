@@ -3,6 +3,18 @@ export interface ActiveSessionForClose {
   startTime: string | null;
 }
 
+export function handleSessionCloseEvent(
+  guard: Pick<SessionCloseGuard, 'canClose'>,
+  event: { preventDefault(): void },
+): void {
+  try {
+    if (!guard.canClose()) event.preventDefault();
+  } catch (error) {
+    event.preventDefault();
+    throw error;
+  }
+}
+
 export class SessionCloseGuard {
   private approved = false;
 

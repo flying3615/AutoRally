@@ -1,9 +1,9 @@
 import { app, BrowserWindow, dialog, globalShortcut, shell } from 'electron';
 import path from 'path';
 import { registerIpcHandlers } from './ipc';
-import { closeDb, queryOne, run } from './database';
+import { closeDb, queryOne, run, saveDb } from './database';
 import { safeSessionEndTime } from './sessionDuration';
-import { SessionCloseGuard } from './sessionCloseGuard';
+import { handleSessionCloseEvent, SessionCloseGuard } from './sessionCloseGuard';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -36,6 +36,7 @@ function createWindow() {
         safeSessionEndTime(session.startTime, new Date().toISOString()),
         session.id,
       ]);
+      saveDb();
     },
   );
 
@@ -66,7 +67,7 @@ function createWindow() {
   });
 
   mainWindow.on('close', event => {
-    if (!sessionCloseGuard.canClose()) event.preventDefault();
+    handleSessionCloseEvent(sessionCloseGuard, event);
   });
 
   mainWindow.on('closed', () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { SessionCloseGuard } from '../main/sessionCloseGuard';
+import { handleSessionCloseEvent, SessionCloseGuard } from '../main/sessionCloseGuard';
 
 describe('SessionCloseGuard', () => {
   it('allows closing immediately when there is no active session', () => {
@@ -50,5 +50,27 @@ describe('SessionCloseGuard', () => {
     expect(() => guard.canClose()).toThrow('write failed');
     expect(() => guard.canClose()).toThrow('write failed');
     expect(endSession).toHaveBeenCalledTimes(2);
+  });
+
+  it('prevents the close event and rethrows when ending a confirmed active session fails', () => {
+    const active = { id: 'session-1', startTime: '2026-07-26T08:00:00.000Z' };
+    const writeError = new Error('write failed');
+    const guard = new SessionCloseGuard(
+      () => active,
+      () => true,
+      () => { throw writeError; },
+    );
+    const preventDefault = vi.fn();
+    const event = { preventDefault };
+
+    let thrownError: unknown;
+    try {
+      handleSessionCloseEvent(guard, event);
+    } catch (error) {
+      thrownError = error;
+    }
+
+    expect(thrownError).toBe(writeError);
+    expect(preventDefault).toHaveBeenCalledTimes(1);
   });
 });
