@@ -29,9 +29,11 @@ interface CourtCandidate extends MatchResult {
   restUrgency: number;
   levelPenalty: number;
   fairnessPenalty: number;
+  groupRepeatPenalty: number;
   typePenalty: number;
   teamBalancePenalty: number;
   partnerPenalty: number;
+  opponentPenalty: number;
   waitPenalty: number;
   tieBreak: number;
 }
@@ -43,9 +45,11 @@ interface SearchState {
   restUrgency: number;
   levelPenalty: number;
   fairnessPenalty: number;
+  groupRepeatPenalty: number;
   typePenalty: number;
   teamBalancePenalty: number;
   partnerPenalty: number;
+  opponentPenalty: number;
   waitPenalty: number;
   tieBreak: number;
 }
@@ -65,10 +69,12 @@ function compareCandidate(a: CourtCandidate, b: CourtCandidate): number {
     // search considers them before the candidate pool is truncated.
     b.restUrgency - a.restUrgency ||
     a.fairnessPenalty - b.fairnessPenalty ||
+    a.groupRepeatPenalty - b.groupRepeatPenalty ||
+    a.partnerPenalty - b.partnerPenalty ||
+    a.opponentPenalty - b.opponentPenalty ||
     a.levelPenalty - b.levelPenalty ||
     a.typePenalty - b.typePenalty ||
     a.teamBalancePenalty - b.teamBalancePenalty ||
-    a.partnerPenalty - b.partnerPenalty ||
     a.waitPenalty - b.waitPenalty ||
     a.tieBreak - b.tieBreak
   );
@@ -85,11 +91,14 @@ function compareState(a: SearchState, b: SearchState): number {
     // 3. Equal play counts: prefer courts built from the fewest-played players,
     //    even when that means a wider level gap.
     a.fairnessPenalty - b.fairnessPenalty ||
-    // 4. Among equally-fair arrangements, prefer the tightest level match.
+    // 4. Avoid repeating a recent court or player relationships when possible.
+    a.groupRepeatPenalty - b.groupRepeatPenalty ||
+    a.partnerPenalty - b.partnerPenalty ||
+    a.opponentPenalty - b.opponentPenalty ||
+    // 5. Among equally-diverse arrangements, prefer the tightest level match.
     a.levelPenalty - b.levelPenalty ||
     a.typePenalty - b.typePenalty ||
     a.teamBalancePenalty - b.teamBalancePenalty ||
-    a.partnerPenalty - b.partnerPenalty ||
     a.waitPenalty - b.waitPenalty ||
     a.tieBreak - b.tieBreak
   );
@@ -113,9 +122,11 @@ function selectBestMatches(
     restUrgency: 0,
     levelPenalty: 0,
     fairnessPenalty: 0,
+    groupRepeatPenalty: 0,
     typePenalty: 0,
     teamBalancePenalty: 0,
     partnerPenalty: 0,
+    opponentPenalty: 0,
     waitPenalty: 0,
     tieBreak: 0,
   }];
@@ -135,9 +146,11 @@ function selectBestMatches(
         restUrgency: state.restUrgency + candidate.restUrgency,
         levelPenalty: state.levelPenalty + candidate.levelPenalty,
         fairnessPenalty: state.fairnessPenalty + candidate.fairnessPenalty,
+        groupRepeatPenalty: state.groupRepeatPenalty + candidate.groupRepeatPenalty,
         typePenalty: state.typePenalty + candidate.typePenalty,
         teamBalancePenalty: state.teamBalancePenalty + candidate.teamBalancePenalty,
         partnerPenalty: state.partnerPenalty + candidate.partnerPenalty,
+        opponentPenalty: state.opponentPenalty + candidate.opponentPenalty,
         waitPenalty: state.waitPenalty + candidate.waitPenalty,
         tieBreak: state.tieBreak + candidate.tieBreak,
       });
@@ -184,6 +197,18 @@ export function generateMatches(
   //   • when courts are too few to avoid it, equalise streaks so the forced
   //     extra rests are shared, not dumped on the same unlucky players.
   const roundsDesc = [...new Set(countedGames.map(g => g.roundNumber))].sort((a, b) => b - a);
+  const latestRoundGroupKeys = new Set(
+    roundsDesc.length === 0
+      ? []
+      : countedGames
+        .filter(g => g.roundNumber === roundsDesc[0])
+        .map(g => [
+          g.team1Player1Id,
+          g.team1Player2Id,
+          g.team2Player1Id,
+          g.team2Player2Id,
+        ].sort().join('|')),
+  );
   const playedInRound = new Map<number, Set<string>>();
   for (const g of countedGames) {
     let set = playedInRound.get(g.roundNumber);
@@ -276,7 +301,14 @@ export function generateMatches(
       [[0, 2], [1, 3]],
       [[0, 3], [1, 2]],
     ];
-    let bestTeams: { team1: [string, string]; team2: [string, string]; balance: number; partners: number; tie: number } | null = null;
+    let bestTeams: {
+      team1: [string, string];
+      team2: [string, string];
+      balance: number;
+      partners: number;
+      opponents: number;
+      tie: number;
+    } | null = null;
 
     for (const [left, right] of partitions) {
       const t1 = [group[left[0]]!, group[left[1]]!] as const;
@@ -293,12 +325,18 @@ export function generateMatches(
       const partners =
         (partnerCount.get(partnerKey(t1[0].id, t1[1].id)) ?? 0) +
         (partnerCount.get(partnerKey(t2[0].id, t2[1].id)) ?? 0);
+      const opponents =
+        (opponentCount.get(pairKey(t1[0].id, t2[0].id)) ?? 0) +
+        (opponentCount.get(pairKey(t1[0].id, t2[1].id)) ?? 0) +
+        (opponentCount.get(pairKey(t1[1].id, t2[0].id)) ?? 0) +
+        (opponentCount.get(pairKey(t1[1].id, t2[1].id)) ?? 0);
       const tie = hashString(`${t1[0].id}|${t1[1].id}|${t2[0].id}|${t2[1].id}`, seed);
       const current = {
         team1: [t1[0].id, t1[1].id] as [string, string],
         team2: [t2[0].id, t2[1].id] as [string, string],
         balance,
         partners,
+        opponents,
         tie,
       };
 
@@ -306,7 +344,8 @@ export function generateMatches(
         !bestTeams ||
         balance < bestTeams.balance ||
         (balance === bestTeams.balance && partners < bestTeams.partners) ||
-        (balance === bestTeams.balance && partners === bestTeams.partners && tie < bestTeams.tie);
+        (balance === bestTeams.balance && partners === bestTeams.partners && opponents < bestTeams.opponents) ||
+        (balance === bestTeams.balance && partners === bestTeams.partners && opponents === bestTeams.opponents && tie < bestTeams.tie);
       if (better) bestTeams = current;
     }
     if (!bestTeams) return;
@@ -338,9 +377,11 @@ export function generateMatches(
       restUrgency,
       levelPenalty,
       fairnessPenalty,
+      groupRepeatPenalty: latestRoundGroupKeys.has(key) ? 1 : 0,
       typePenalty,
       teamBalancePenalty: bestTeams.balance,
       partnerPenalty: bestTeams.partners,
+      opponentPenalty: bestTeams.opponents,
       waitPenalty,
       tieBreak: hashString(key, seed),
     });
