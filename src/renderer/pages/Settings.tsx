@@ -15,6 +15,12 @@ interface UpcomingSession {
   note: string;
 }
 
+interface HistoricalDataCleanupResult {
+  payments: number;
+  sessions: number;
+  tournaments: number;
+}
+
 const durations = [
   { value: '10', label: '10 min' },
   { value: '12', label: '12 min' },
@@ -172,6 +178,102 @@ function SessionModal({ session, onClose, onSaved }: {
   );
 }
 
+function HistoricalDataCleanupDialog({ onClose, onSuccess }: {
+  onClose: () => void;
+  onSuccess: (result: HistoricalDataCleanupResult) => void;
+}) {
+  const [confirmationText, setConfirmationText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const canClear = confirmationText === '清理' && !busy;
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !busy) onClose();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [busy, onClose]);
+
+  const handleClear = async () => {
+    if (!canClear) return;
+
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await window.api.dataClearHistory();
+      onSuccess(result);
+    } catch (err: any) {
+      setError(err?.message ?? 'Failed to clear historical data');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[250] flex items-center justify-center bg-black/30"
+      onClick={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="historical-data-cleanup-title"
+        className="bg-white rounded-2xl p-6 w-[440px] max-w-[90vw]"
+        style={{
+          boxShadow: '0 24px 48px -12px rgba(0,0,0,0.25), 0 0 0 1px rgba(0,0,0,0.04)',
+          animation: 'ctxFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+        }}
+      >
+        <h3 id="historical-data-cleanup-title" className="text-lg font-bold text-zinc-900 tracking-tight mb-2">
+          Clear historical data
+        </h3>
+        <p className="text-sm text-zinc-500 leading-relaxed">
+          Completed daily sessions, all payments and top-ups, and completed tournaments will be permanently deleted.
+          Players, balances, settings, upcoming sessions, active daily sessions, and upcoming or active tournaments remain.
+        </p>
+
+        {error && (
+          <div className="mt-4 text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</div>
+        )}
+
+        <div className="mt-5">
+          <label htmlFor="historical-data-confirmation" className="block text-xs font-semibold text-zinc-500 mb-1">
+            Type 清理 to confirm
+          </label>
+          <input
+            id="historical-data-confirmation"
+            autoFocus
+            value={confirmationText}
+            onChange={(event) => {
+              setConfirmationText(event.target.value);
+              setError(null);
+            }}
+            className="w-full px-3 py-2 text-sm border-2 border-zinc-200 rounded-xl focus:outline-none focus:border-zinc-400 focus:ring-2 focus:ring-gray-100 transition-all"
+          />
+        </div>
+
+        <div className="flex justify-end gap-2 mt-6">
+          <button
+            onClick={onClose}
+            disabled={busy}
+            className="px-4 py-2 text-sm font-semibold border border-zinc-200 text-zinc-600 rounded-xl hover:bg-zinc-50 active:scale-[0.97] disabled:opacity-50 transition-all"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleClear}
+            disabled={!canClear}
+            className="px-4 py-2 text-sm font-semibold bg-red-600 hover:bg-red-700 text-white rounded-xl active:scale-[0.97] disabled:opacity-50 transition-all"
+          >
+            {busy ? 'Clearing...' : 'Permanently Clear Data'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function Settings() {
   const [settings, setSettings] = useState<SettingsData>({ courtCount: '3', sessionFee: '10', gameDuration: '15' });
   const [saved, setSaved] = useState(false);
@@ -181,6 +283,8 @@ export function Settings() {
   const [appVersion, setAppVersion] = useState('');
   const [backupBusy, setBackupBusy] = useState<'export' | 'import' | null>(null);
   const [backupMessage, setBackupMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [showHistoricalDataCleanup, setShowHistoricalDataCleanup] = useState(false);
+  const [historicalDataCleanupMessage, setHistoricalDataCleanupMessage] = useState<string | null>(null);
 
   useEffect(() => {
     window.api.settingsGetAll().then((s: Record<string, string>) => {
@@ -244,6 +348,15 @@ export function Settings() {
     } finally {
       setBackupBusy(null);
     }
+  };
+
+  const handleHistoricalDataCleanupSuccess = (result: HistoricalDataCleanupResult) => {
+    const unit = (count: number, name: string) => `${count} ${name}${count === 1 ? '' : 's'}`;
+    setShowHistoricalDataCleanup(false);
+    setHistoricalDataCleanupMessage(
+      `Cleared ${unit(result.payments, 'payment')}, ${unit(result.sessions, 'completed session')}, and ${unit(result.tournaments, 'completed tournament')}.`,
+    );
+    refreshUpcoming();
   };
 
   const formatDate = (dateStr: string, timeStr: string) => {
@@ -424,6 +537,34 @@ export function Settings() {
           )}
         </div>
 
+        {/* Historical Data */}
+        <div className="border-t border-zinc-200 pt-10 mb-10">
+          <div className="flex items-start justify-between gap-6">
+            <div>
+              <h3 className="text-lg font-bold text-zinc-900 tracking-tight">Historical Data</h3>
+              <p className="text-sm text-zinc-400 mt-0.5">
+                Permanently remove completed sessions, payments and top-ups, and completed tournaments. Players,
+                balances, settings, and current or upcoming activity remain.
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                setHistoricalDataCleanupMessage(null);
+                setShowHistoricalDataCleanup(true);
+              }}
+              className="h-9 px-4 text-sm font-semibold bg-white border border-red-300 text-red-700 rounded-lg hover:bg-red-50 hover:border-red-400 active:scale-[0.97] transition-all shrink-0"
+            >
+              Clear Historical Data
+            </button>
+          </div>
+
+          {historicalDataCleanupMessage && (
+            <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
+              {historicalDataCleanupMessage}
+            </div>
+          )}
+        </div>
+
         {/* Upcoming Sessions */}
         <div className="border-t border-zinc-200 pt-10 mb-10">
           <div className="flex items-center justify-between mb-4">
@@ -533,6 +674,12 @@ export function Settings() {
               setModalSession(null);
               refreshUpcoming();
             }}
+          />
+        )}
+        {showHistoricalDataCleanup && (
+          <HistoricalDataCleanupDialog
+            onClose={() => setShowHistoricalDataCleanup(false)}
+            onSuccess={handleHistoricalDataCleanupSuccess}
           />
         )}
       </div>

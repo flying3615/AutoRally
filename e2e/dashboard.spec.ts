@@ -87,28 +87,75 @@ test.describe('Dashboard', () => {
     await expect(page.locator('tr', { hasText: '2026-05-19' }).getByText('—')).toBeVisible();
   });
 
-  test('clears historical data through the preload API', async ({ page }) => {
+  test('clears historical data from Settings after exact typed confirmation', async ({ page }) => {
     const player = await addPlayer(page, 'Cleanup Player') as { id: string };
     const completedSession = await createSession(page) as { id: string };
     await checkinPlayer(page, player.id, completedSession.id);
     await page.evaluate((id) => window.api.sessionsEnd(id), completedSession.id);
 
-    const activeSession = await createSession(page) as { id: string };
-    await checkinPlayer(page, player.id, activeSession.id);
+    await navigateTo(page, '/settings');
+    await page.getByRole('button', { name: 'Clear Historical Data' }).click();
 
-    const cleanup = await page.evaluate(() => window.api.dataClearHistory());
-    expect(cleanup).toEqual({ payments: 2, sessions: 1, tournaments: 0 });
+    const dialog = page.getByRole('dialog', { name: 'Clear historical data' });
+    const confirmation = dialog.getByLabel('Type 清理 to confirm');
+    const clearButton = dialog.getByRole('button', { name: 'Permanently Clear Data' });
+    await expect(dialog).toBeVisible();
+    await expect(clearButton).toBeDisabled();
 
-    const [sessions, active, activePayments, players] = await page.evaluate(async (activeSessionId) => [
-      await window.api.sessionsList(),
-      await window.api.sessionsGetActive(),
-      await window.api.paymentsListBySession(activeSessionId),
-      await window.api.playersList(),
-    ], activeSession.id);
+    await confirmation.fill('clear');
+    await expect(clearButton).toBeDisabled();
+    await confirmation.fill('清理');
+    await expect(clearButton).toBeEnabled();
 
-    expect(sessions).not.toContainEqual(expect.objectContaining({ status: 'completed' }));
-    expect(active).toEqual(expect.objectContaining({ id: activeSession.id }));
-    expect(activePayments).toEqual([]);
-    expect(players).toContainEqual(expect.objectContaining({ id: player.id }));
+    await clearButton.click();
+
+    await expect(dialog).toBeHidden();
+    await expect(page.getByText(/Cleared 1 payment, 1 completed session, and 0 completed tournaments\./)).toBeVisible();
+    await expect(page.evaluate(() => window.api.sessionsList())).resolves.not.toContainEqual(
+      expect.objectContaining({ id: completedSession.id }),
+    );
+  });
+
+  test('cancels historical data cleanup without deleting completed history', async ({ page }) => {
+    const player = await addPlayer(page, 'Cancelled Cleanup Player') as { id: string };
+    const completedSession = await createSession(page) as { id: string };
+    await checkinPlayer(page, player.id, completedSession.id);
+    await page.evaluate((id) => window.api.sessionsEnd(id), completedSession.id);
+
+    await navigateTo(page, '/settings');
+    await page.getByRole('button', { name: 'Clear Historical Data' }).click();
+
+    const dialog = page.getByRole('dialog', { name: 'Clear historical data' });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+
+    await expect(dialog).toBeHidden();
+    await expect(page.evaluate(() => window.api.sessionsList())).resolves.toContainEqual(
+      expect.objectContaining({ id: completedSession.id, status: 'completed' }),
+    );
+  });
+
+  test('dismisses historical data cleanup with Escape and backdrop without deleting history', async ({ page }) => {
+    const player = await addPlayer(page, 'Dismissed Cleanup Player') as { id: string };
+    const completedSession = await createSession(page) as { id: string };
+    await checkinPlayer(page, player.id, completedSession.id);
+    await page.evaluate((id) => window.api.sessionsEnd(id), completedSession.id);
+
+    await navigateTo(page, '/settings');
+    await page.getByRole('button', { name: 'Clear Historical Data' }).click();
+
+    const dialog = page.getByRole('dialog', { name: 'Clear historical data' });
+    await dialog.getByLabel('Type 清理 to confirm').fill('清理');
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+
+    await page.getByRole('button', { name: 'Clear Historical Data' }).click();
+    await expect(dialog.getByRole('button', { name: 'Permanently Clear Data' })).toBeDisabled();
+    await page.mouse.click(0, 0);
+    await expect(dialog).toBeHidden();
+
+    await expect(page.evaluate(() => window.api.sessionsList())).resolves.toContainEqual(
+      expect.objectContaining({ id: completedSession.id, status: 'completed' }),
+    );
   });
 });
