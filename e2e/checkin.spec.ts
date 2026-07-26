@@ -60,10 +60,13 @@ test.describe('Check-in Flow', () => {
 
     await navigateTo(page, `/checkin/${session.id}`);
     await page.getByText('Delete From Checkin').first().click({ button: 'right' });
-    page.once('dialog', dialog => dialog.accept());
-    await page.getByRole('button', { name: /Delete Player/ }).click();
+    await page.getByRole('button', { name: 'Delete Player', exact: true }).click();
 
-    await expect(page.getByText('Delete From Checkin')).toHaveCount(0);
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: 'Delete', exact: true }).click();
+
+    await expect(page.getByText('Delete From Checkin', { exact: true })).toHaveCount(0);
     const players = await page.evaluate(() => window.api.playersList()) as any[];
     expect(players.some(p => p.id === player.id)).toBe(false);
   });

@@ -1,7 +1,5 @@
 # Startup UI English Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
-
 **Goal:** Make the user-visible startup loading and failure UI consistently English.
 
 **Architecture:** Update only static splash copy and the Electron failure-dialog

@@ -1,7 +1,5 @@
 # Native Close Dialog Language Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
-
 **Goal:** Preserve the macOS-native close confirmation dialog and its
 system-locale language behavior.
 

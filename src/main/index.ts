@@ -1,7 +1,7 @@
 import { app, BrowserWindow, dialog, globalShortcut, shell } from 'electron';
 import path from 'path';
 import { registerIpcHandlers } from './ipc';
-import { closeDb } from './database';
+import { closeDb, queryAll, run, runWithoutAutosave, saveDb } from './database';
 import {
   createStartupFailureHandler,
   navigateWithReadyToShowListener,
@@ -9,6 +9,12 @@ import {
   runStartupSequence,
   StartupCoordinator,
 } from './startup';
+import {
+  completeSessionsForClose,
+  createSessionCloseCompletionDependencies,
+} from './sessionCloseCompletion';
+import { sessionCloseErrorMessage } from './sessionCloseErrorMessage';
+import { handleSessionCloseEvent, SessionCloseGuard } from './sessionCloseGuard';
 
 let mainWindow: BrowserWindow | null = null;
 const startup = new StartupCoordinator();
@@ -31,6 +37,10 @@ async function createSplashWindow() {
     maximizable: false,
     minimizable: false,
     skipTaskbar: true,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
   });
 
   startup.setSplashWindow(splashWindow);
@@ -70,6 +80,29 @@ async function createWindow() {
   mainWindow = window;
   startup.setPendingMainWindow(window);
 
+  const sessionCloseGuard = new SessionCloseGuard(
+    () => queryAll<{ id: string; startTime: string | null }>(
+      "SELECT id, startTime FROM sessions WHERE status = 'active'",
+    ),
+    () => dialog.showMessageBoxSync(window, {
+      type: 'warning',
+      buttons: ['Cancel', 'End Session and Close'],
+      defaultId: 0,
+      cancelId: 0,
+      message: 'An active session is in progress.',
+      detail: 'The session will be ended before AutoRally closes.',
+    }) === 1,
+    sessions => completeSessionsForClose(
+      sessions,
+      createSessionCloseCompletionDependencies({
+        run,
+        runWithoutAutosave,
+        saveDb,
+        now: () => new Date().toISOString(),
+      }),
+    ),
+  );
+
   window.setAutoHideMenuBar(true);
 
   window.webContents.setWindowOpenHandler(({ url }) => {
@@ -92,10 +125,21 @@ async function createWindow() {
     if (input.type !== 'keyDown') return;
     const key = input.key.toLowerCase();
     if (key === 'w') {
-      mainWindow?.webContents.send('shortcut:end-session');
+      window.webContents.send('shortcut:end-session');
     } else if (key === 'f' && !input.shift) {
-      mainWindow?.webContents.send('shortcut:search-player');
+      window.webContents.send('shortcut:search-player');
     }
+  });
+
+  window.on('close', event => {
+    handleSessionCloseEvent(sessionCloseGuard, event, error => {
+      console.error('Failed to finish the active session during app close; keeping the application open.', error);
+      dialog.showMessageBoxSync(window, {
+        type: 'error',
+        message: 'Unable to End Active Session',
+        detail: sessionCloseErrorMessage(error),
+      });
+    });
   });
 
   window.on('closed', () => {

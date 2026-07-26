@@ -1,7 +1,5 @@
 # Startup Splash Screen Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
-
 **Goal:** Show an immediate branded startup window and enforce a single
 AutoRally instance so repeat launches focus the active window.
 

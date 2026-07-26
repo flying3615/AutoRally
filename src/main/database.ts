@@ -4,6 +4,7 @@ import fs from 'fs';
 import { app } from 'electron';
 import { v4 as uuid } from 'uuid';
 import { validateAutoRallyDatabase } from './databaseBackup';
+import { atomicWriteFile } from './atomicFileWriter';
 
 const dbPath = path.join(app.getPath('userData'), 'autorally.db');
 let db: Database | null = null;
@@ -34,22 +35,31 @@ export function getDb(): Database {
   return db;
 }
 
-function save() {
-  if (!db) return;
-  const data = db.export();
+function save(database = db) {
+  if (!database) return;
+  const data = database.export();
   const buf = Buffer.from(data);
-  const tmpPath = dbPath + '.tmp';
-  fs.writeFileSync(tmpPath, buf);
-  fs.renameSync(tmpPath, dbPath);
+  atomicWriteFile(dbPath, buf);
 }
 
-export function saveDb() {
-  save();
+export function saveDb(database?: Database) {
+  cancelPendingSave();
+  save(database);
+}
+
+function cancelPendingSave() {
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+  }
 }
 
 function debounceSave() {
-  if (saveTimer) clearTimeout(saveTimer);
-  saveTimer = setTimeout(save, 500);
+  cancelPendingSave();
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    save();
+  }, 500);
 }
 
 function migrate(db: Database, options: { seedIfEmpty?: boolean; saveDirty?: boolean } = {}) {
@@ -508,14 +518,17 @@ export function run(sql: string, params?: SqlValue[]) {
   if (!inTransaction) debounceSave();
 }
 
+// Internal use only: execute a write while preserving the current persistence schedule.
+export function runWithoutAutosave(sql: string, params?: SqlValue[]) {
+  const d = getDb();
+  d.run(sql, params);
+}
+
 export function transaction<T>(fn: () => T): T {
   const d = getDb();
 
   // Prevent a previously scheduled auto-save from firing mid-transaction.
-  if (saveTimer) {
-    clearTimeout(saveTimer);
-    saveTimer = null;
-  }
+  cancelPendingSave();
 
   const wasInTransaction = inTransaction;
   d.run('BEGIN');
