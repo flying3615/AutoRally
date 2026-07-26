@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSessionStore } from '../stores/sessionStore';
 import { confirm } from '../stores/confirmStore';
 
@@ -185,15 +185,41 @@ function HistoricalDataCleanupDialog({ onClose, onSuccess }: {
   const [confirmationText, setConfirmationText] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const confirmationInputRef = useRef<HTMLInputElement>(null);
   const canClear = confirmationText === '清理' && !busy;
 
   useEffect(() => {
+    confirmationInputRef.current?.focus();
+
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && !busy) onClose();
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [busy, onClose]);
+
+  const handleDialogKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'Tab') return;
+
+    const focusableElements = Array.from(
+      dialogRef.current?.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ) ?? [],
+    );
+    const firstFocusable = focusableElements[0];
+    const lastFocusable = focusableElements[focusableElements.length - 1];
+    if (!firstFocusable || !lastFocusable) return;
+
+    const activeElement = document.activeElement;
+    if (event.shiftKey && activeElement === firstFocusable) {
+      event.preventDefault();
+      lastFocusable.focus();
+    } else if (!event.shiftKey && activeElement === lastFocusable) {
+      event.preventDefault();
+      firstFocusable.focus();
+    }
+  };
 
   const handleClear = async () => {
     if (!canClear) return;
@@ -219,6 +245,8 @@ function HistoricalDataCleanupDialog({ onClose, onSuccess }: {
         role="dialog"
         aria-modal="true"
         aria-labelledby="historical-data-cleanup-title"
+        ref={dialogRef}
+        onKeyDown={handleDialogKeyDown}
         className="bg-white rounded-2xl p-6 w-[440px] max-w-[90vw]"
         style={{
           boxShadow: '0 24px 48px -12px rgba(0,0,0,0.25), 0 0 0 1px rgba(0,0,0,0.04)',
@@ -234,7 +262,7 @@ function HistoricalDataCleanupDialog({ onClose, onSuccess }: {
         </p>
 
         {error && (
-          <div className="mt-4 text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</div>
+          <div role="alert" className="mt-4 text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</div>
         )}
 
         <div className="mt-5">
@@ -243,7 +271,7 @@ function HistoricalDataCleanupDialog({ onClose, onSuccess }: {
           </label>
           <input
             id="historical-data-confirmation"
-            autoFocus
+            ref={confirmationInputRef}
             value={confirmationText}
             onChange={(event) => {
               setConfirmationText(event.target.value);
@@ -285,6 +313,7 @@ export function Settings() {
   const [backupMessage, setBackupMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [showHistoricalDataCleanup, setShowHistoricalDataCleanup] = useState(false);
   const [historicalDataCleanupMessage, setHistoricalDataCleanupMessage] = useState<string | null>(null);
+  const historicalDataCleanupOpenerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     window.api.settingsGetAll().then((s: Record<string, string>) => {
@@ -359,6 +388,11 @@ export function Settings() {
     refreshUpcoming();
   };
 
+  const closeHistoricalDataCleanup = () => {
+    setShowHistoricalDataCleanup(false);
+    requestAnimationFrame(() => historicalDataCleanupOpenerRef.current?.focus());
+  };
+
   const formatDate = (dateStr: string, timeStr: string) => {
     const d = new Date(dateStr + 'T00:00:00');
     const datePart = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
@@ -368,7 +402,12 @@ export function Settings() {
   };
 
   return (
-    <div className="h-full overflow-y-auto">
+    <>
+    <div
+      className="h-full overflow-y-auto"
+      aria-hidden={showHistoricalDataCleanup}
+      inert={showHistoricalDataCleanup}
+    >
       <div className="w-[90%] mx-auto px-8 py-10" style={{ animation: 'fadeIn 0.3s ease' }}>
 
         {/* Header */}
@@ -548,6 +587,7 @@ export function Settings() {
               </p>
             </div>
             <button
+              ref={historicalDataCleanupOpenerRef}
               onClick={() => {
                 setHistoricalDataCleanupMessage(null);
                 setShowHistoricalDataCleanup(true);
@@ -676,13 +716,14 @@ export function Settings() {
             }}
           />
         )}
-        {showHistoricalDataCleanup && (
-          <HistoricalDataCleanupDialog
-            onClose={() => setShowHistoricalDataCleanup(false)}
-            onSuccess={handleHistoricalDataCleanupSuccess}
-          />
-        )}
       </div>
     </div>
+    {showHistoricalDataCleanup && (
+      <HistoricalDataCleanupDialog
+        onClose={closeHistoricalDataCleanup}
+        onSuccess={handleHistoricalDataCleanupSuccess}
+      />
+    )}
+    </>
   );
 }

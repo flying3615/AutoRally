@@ -135,6 +135,27 @@ test.describe('Dashboard', () => {
     );
   });
 
+  test('keeps Tab focus within the historical data cleanup dialog', async ({ page }) => {
+    await navigateTo(page, '/settings');
+    await page.getByRole('button', { name: 'Clear Historical Data' }).click();
+
+    const dialog = page.getByRole('dialog', { name: 'Clear historical data' });
+    const confirmation = dialog.getByLabel('Type 清理 to confirm');
+    const clearButton = dialog.getByRole('button', { name: 'Permanently Clear Data' });
+    await confirmation.fill('清理');
+    await confirmation.focus();
+
+    await page.keyboard.press('Tab');
+    await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(clearButton).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(confirmation).toBeFocused();
+
+    await page.keyboard.press('Shift+Tab');
+    await expect(clearButton).toBeFocused();
+  });
+
   test('dismisses historical data cleanup with Escape and backdrop without deleting history', async ({ page }) => {
     const player = await addPlayer(page, 'Dismissed Cleanup Player') as { id: string };
     const completedSession = await createSession(page) as { id: string };
