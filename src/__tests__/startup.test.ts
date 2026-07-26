@@ -1,15 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
-import { StartupCoordinator, waitForSplashContentReady } from '../main/startup';
+import { StartupCoordinator, waitForSplashReadyToShow } from '../main/startup';
 
-class SplashContentEventSource {
-  private didFinishLoadListener: (() => void) | undefined;
+class SplashWindowEventSource {
+  private readyToShowListener: (() => void) | undefined;
+  readonly events: string[] = [];
 
-  once(event: 'did-finish-load', listener: () => void) {
-    if (event === 'did-finish-load') this.didFinishLoadListener = listener;
+  once(event: 'ready-to-show', listener: () => void) {
+    this.events.push(event);
+    this.readyToShowListener = listener;
   }
 
-  finishLoading() {
-    this.didFinishLoadListener?.();
+  emitReadyToShow() {
+    this.readyToShowListener?.();
   }
 }
 
@@ -24,16 +26,19 @@ function createWindowFake({ minimized = false }: { minimized?: boolean } = {}) {
 }
 
 describe('StartupCoordinator', () => {
-  it('waits to proceed until splash content has finished loading', async () => {
-    const splashContent = new SplashContentEventSource();
+  it('waits until the splash window is ready to show', async () => {
+    const splashWindow = new SplashWindowEventSource();
     let proceeded = false;
-    const ready = waitForSplashContentReady(splashContent).then(() => {
+    const ready = waitForSplashReadyToShow(splashWindow).then(() => {
       proceeded = true;
     });
 
+    await Promise.resolve();
+
+    expect(splashWindow.events).toEqual(['ready-to-show']);
     expect(proceeded).toBe(false);
 
-    splashContent.finishLoading();
+    splashWindow.emitReadyToShow();
     await ready;
 
     expect(proceeded).toBe(true);

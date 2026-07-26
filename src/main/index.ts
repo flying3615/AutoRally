@@ -2,7 +2,7 @@ import { app, BrowserWindow, globalShortcut, shell } from 'electron';
 import path from 'path';
 import { registerIpcHandlers } from './ipc';
 import { closeDb } from './database';
-import { StartupCoordinator, waitForSplashContentReady } from './startup';
+import { StartupCoordinator, waitForSplashReadyToShow } from './startup';
 
 let mainWindow: BrowserWindow | null = null;
 const startup = new StartupCoordinator();
@@ -22,7 +22,7 @@ async function createSplashWindow() {
   startup.setSplashWindow(splashWindow);
   splashWindow.setMenuBarVisibility(false);
 
-  const splashContentReady = waitForSplashContentReady(splashWindow.webContents);
+  const splashReadyToShow = waitForSplashReadyToShow(splashWindow);
 
   splashWindow.on('closed', () => {
     startup.setSplashWindow(null);
@@ -34,7 +34,7 @@ async function createSplashWindow() {
     await splashWindow.loadFile(path.join(__dirname, '../renderer/splash.html'));
   }
 
-  await splashContentReady;
+  await splashReadyToShow;
   splashWindow.show();
 }
 
