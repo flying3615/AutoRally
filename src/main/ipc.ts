@@ -1,8 +1,9 @@
 import { ipcMain, BrowserWindow, dialog, app } from 'electron';
 import { v4 as uuid } from 'uuid';
 import { SqlValue } from 'sql.js';
-import { exportDatabaseBackup, importDatabaseBackup, initDb, run, queryAll, queryOne, transaction } from './database';
+import { exportDatabaseBackup, getDb, importDatabaseBackup, initDb, run, queryAll, queryOne, saveDb, transaction } from './database';
 import { backupFileName } from './databaseBackup';
+import { clearHistoricalData } from './historyCleanup';
 import {
   buildNextKnockoutMatches,
   buildTeamMatchGames,
@@ -67,6 +68,12 @@ export async function registerIpcHandlers() {
     const filePath = filePaths[0]!;
     await importDatabaseBackup(filePath);
     return { canceled: false as const, filePath };
+  });
+
+  ipcMain.handle('data:clearHistory', () => {
+    const result = clearHistoricalData(getDb());
+    saveDb();
+    return result;
   });
 
   // ── Helpers ──

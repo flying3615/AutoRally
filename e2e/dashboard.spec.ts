@@ -1,6 +1,6 @@
 import path from 'path';
 import type { ElectronApplication } from '@playwright/test';
-import { test, expect, navigateTo } from './helpers';
+import { test, expect, addPlayer, checkinPlayer, createSession, navigateTo } from './helpers';
 
 async function insertCompletedSession(
   app: ElectronApplication,
@@ -85,5 +85,30 @@ test.describe('Dashboard', () => {
     await expect(page.locator('body')).not.toContainText(/-\d+m/);
     await expect(page.getByText('avg 3h 0m')).toBeVisible();
     await expect(page.locator('tr', { hasText: '2026-05-19' }).getByText('—')).toBeVisible();
+  });
+
+  test('clears historical data through the preload API', async ({ page }) => {
+    const player = await addPlayer(page, 'Cleanup Player') as { id: string };
+    const completedSession = await createSession(page) as { id: string };
+    await checkinPlayer(page, player.id, completedSession.id);
+    await page.evaluate((id) => window.api.sessionsEnd(id), completedSession.id);
+
+    const activeSession = await createSession(page) as { id: string };
+    await checkinPlayer(page, player.id, activeSession.id);
+
+    const cleanup = await page.evaluate(() => window.api.dataClearHistory());
+    expect(cleanup).toEqual({ payments: 2, sessions: 1, tournaments: 0 });
+
+    const [sessions, active, activePayments, players] = await page.evaluate(async (activeSessionId) => [
+      await window.api.sessionsList(),
+      await window.api.sessionsGetActive(),
+      await window.api.paymentsListBySession(activeSessionId),
+      await window.api.playersList(),
+    ], activeSession.id);
+
+    expect(sessions).not.toContainEqual(expect.objectContaining({ status: 'completed' }));
+    expect(active).toEqual(expect.objectContaining({ id: activeSession.id }));
+    expect(activePayments).toEqual([]);
+    expect(players).toContainEqual(expect.objectContaining({ id: player.id }));
   });
 });
