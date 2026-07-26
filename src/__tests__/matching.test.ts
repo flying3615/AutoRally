@@ -295,9 +295,7 @@ describe('generateMatches', () => {
     for (const id of allIds) expect(pool.some(p => p.id === id)).toBe(true);
   });
 
-  it('avoids repeating opponent pairings when alternatives exist', () => {
-    // 8 players, 2 courts. After 3 rounds where m1 always faced m2,
-    // the algo should prefer to put them on different courts.
+  it('rotates courts, partners, and opponents after the previous round', () => {
     const pool = [
       makePlayer('m1', 'M1', 'male', 3),
       makePlayer('m2', 'M2', 'male', 3),
@@ -308,23 +306,67 @@ describe('generateMatches', () => {
       makePlayer('f3', 'F3', 'female', 3),
       makePlayer('f4', 'F4', 'female', 3),
     ];
-    // m1+f1 vs m2+f2 repeated 3 times — high opponent penalty for m1↔m2, m1↔f2, f1↔m2, f1↔f2
-    const pastGames: Game[] = Array.from({ length: 3 }, (_, i) => ({
-      id: `g${i}`, sessionId: 's', courtNumber: 1,
-      team1Player1Id: 'm1', team1Player2Id: 'f1',
-      team2Player1Id: 'm2', team2Player2Id: 'f2',
-      status: 'completed' as const, roundNumber: i + 1, gameType: 'mixed',
-      startedAt: null, endedAt: null,
-    }));
+    const pastGames: Game[] = [
+      {
+        id: 'r1c1', sessionId: 's', courtNumber: 1,
+        team1Player1Id: 'm1', team1Player2Id: 'f1',
+        team2Player1Id: 'm2', team2Player2Id: 'f2',
+        status: 'completed', roundNumber: 1, gameType: 'mixed',
+        startedAt: null, endedAt: null,
+      },
+      {
+        id: 'r1c2', sessionId: 's', courtNumber: 2,
+        team1Player1Id: 'm3', team1Player2Id: 'f3',
+        team2Player1Id: 'm4', team2Player2Id: 'f4',
+        status: 'completed', roundNumber: 1, gameType: 'mixed',
+        startedAt: null, endedAt: null,
+      },
+    ];
 
-    const result = generateMatches(pool, 2, 4, pastGames);
+    const courtKey = (ids: string[]) => [...ids].sort().join('|');
+    const pairKey = (first: string, second: string) => courtKey([first, second]);
+    const partnerPairs = (games: Array<Pick<Game,
+      'team1Player1Id' | 'team1Player2Id' | 'team2Player1Id' | 'team2Player2Id'
+    >>) => new Set(games.flatMap(game => [
+      pairKey(game.team1Player1Id, game.team1Player2Id),
+      pairKey(game.team2Player1Id, game.team2Player2Id),
+    ]));
+    const opponentPairs = (games: Array<Pick<Game,
+      'team1Player1Id' | 'team1Player2Id' | 'team2Player1Id' | 'team2Player2Id'
+    >>) => new Set(games.flatMap(game => [
+      pairKey(game.team1Player1Id, game.team2Player1Id),
+      pairKey(game.team1Player1Id, game.team2Player2Id),
+      pairKey(game.team1Player2Id, game.team2Player1Id),
+      pairKey(game.team1Player2Id, game.team2Player2Id),
+    ]));
+
+    const result = generateMatches(pool, 2, 2, pastGames);
+    const previousCourts = new Set(pastGames.map(game => courtKey([
+      game.team1Player1Id,
+      game.team1Player2Id,
+      game.team2Player1Id,
+      game.team2Player2Id,
+    ])));
+
     expect(result).toHaveLength(2);
-    // m1 and m2 should not be on opposing teams in the same court
-    const sameCourtAsOpponents = result.some(m =>
-      (m.team1.includes('m1') && m.team2.includes('m2')) ||
-      (m.team1.includes('m2') && m.team2.includes('m1'))
-    );
-    expect(sameCourtAsOpponents).toBe(false);
+    for (const game of result) {
+      expect(previousCourts.has(courtKey([...game.team1, ...game.team2]))).toBe(false);
+    }
+
+    const generatedGames = result.map((game, index) => ({
+      id: `r2c${index + 1}`, sessionId: 's', courtNumber: index + 1,
+      team1Player1Id: game.team1[0]!, team1Player2Id: game.team1[1]!,
+      team2Player1Id: game.team2[0]!, team2Player2Id: game.team2[1]!,
+    }));
+    const previousPartnerPairs = partnerPairs(pastGames);
+    const previousOpponentPairs = opponentPairs(pastGames);
+    const repeatedPartnerPairs = [...partnerPairs(generatedGames)]
+      .filter(pair => previousPartnerPairs.has(pair)).length;
+    const repeatedOpponentPairs = [...opponentPairs(generatedGames)]
+      .filter(pair => previousOpponentPairs.has(pair)).length;
+
+    expect(repeatedPartnerPairs).toBe(0);
+    expect(repeatedPartnerPairs + repeatedOpponentPairs).toBe(4);
   });
 
   it('produces valid game types with no >1 level gap in any match', () => {
