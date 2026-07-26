@@ -362,7 +362,7 @@ describe('generateMatches', () => {
       .filter(pair => previousOpponentPairs.has(pair)).length;
 
     expect(repeatedPartnerPairs).toBe(0);
-    expect(repeatedPartnerPairs + repeatedOpponentPairs).toBe(4);
+    expect(repeatedOpponentPairs).toBe(0);
   });
 
   it('produces valid game types with no >1 level gap in any match', () => {
