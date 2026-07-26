@@ -110,19 +110,23 @@ describe('clearHistoricalData', () => {
     }
   });
 
-  it('rolls back all deletion when payment deletion aborts', () => {
+  it('rolls back all deletions when completed tournament deletion aborts', () => {
     db.run(`
-      CREATE TRIGGER abort_payment_delete
-      BEFORE DELETE ON payments
+      CREATE TRIGGER abort_completed_tournament_delete
+      BEFORE DELETE ON tournaments
+      WHEN OLD.status = 'completed'
       BEGIN
-        SELECT RAISE(ABORT, 'payment deletion blocked');
+        SELECT RAISE(ABORT, 'tournament deletion blocked');
       END;
     `);
 
-    expect(() => clearHistoricalData(db)).toThrow('payment deletion blocked');
+    expect(() => clearHistoricalData(db)).toThrow('tournament deletion blocked');
 
-    expect(countWhere('sessions', "status = 'completed'")).toBe(1);
     expect(countWhere('payments', "id = 'payment-completed'")).toBe(1);
+    expect(countWhere('sessions', "id = 'session-completed'")).toBe(1);
+    expect(countWhere('attendance', "sessionId = 'session-completed'")).toBe(1);
+    expect(countWhere('games', "sessionId = 'session-completed'")).toBe(1);
     expect(countWhere('tournaments', "status = 'completed'")).toBe(1);
+    expect(countWhere('tournament_registrations', "tournamentId = 'tournament-completed'")).toBe(1);
   });
 });
