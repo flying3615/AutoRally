@@ -16,11 +16,14 @@ export function waitForSplashReadyToShow(splashWindow: SplashWindowEventSource):
 
 export class StartupCoordinator {
   private splashWindow: AppWindow | null = null;
+  private splashVisible = false;
   private mainWindow: AppWindow | null = null;
   private pendingMainWindow: AppWindow | null = null;
+  private pendingFocus = false;
 
   setSplashWindow(window: AppWindow | null) {
     this.splashWindow = window;
+    this.splashVisible = false;
   }
 
   setMainWindow(window: AppWindow | null) {
@@ -32,11 +35,21 @@ export class StartupCoordinator {
   }
 
   focusActiveWindow() {
-    const window = this.mainWindow ?? this.splashWindow;
-    if (!window) return;
+    const window = this.mainWindow ?? (this.splashVisible ? this.splashWindow : null);
+    if (!window) {
+      this.pendingFocus = true;
+      return;
+    }
 
-    if (window.isMinimized()) window.restore();
-    window.focus();
+    this.focusWindow(window);
+  }
+
+  showSplashWindow() {
+    if (!this.splashWindow) return;
+
+    this.splashWindow.show();
+    this.splashVisible = true;
+    this.focusPendingWindow(this.splashWindow);
   }
 
   showMainWindow() {
@@ -45,11 +58,25 @@ export class StartupCoordinator {
       this.pendingMainWindow = null;
     }
     this.mainWindow?.show();
+    this.focusPendingWindow(this.mainWindow);
     this.closeSplashWindow();
   }
 
   closeSplashWindow() {
     this.splashWindow?.close();
     this.splashWindow = null;
+    this.splashVisible = false;
+  }
+
+  private focusPendingWindow(window: AppWindow | null) {
+    if (!this.pendingFocus || !window) return;
+
+    this.pendingFocus = false;
+    this.focusWindow(window);
+  }
+
+  private focusWindow(window: AppWindow) {
+    if (window.isMinimized()) window.restore();
+    window.focus();
   }
 }

@@ -44,13 +44,33 @@ describe('StartupCoordinator', () => {
     expect(proceeded).toBe(true);
   });
 
-  it('focuses the splash window while startup is in progress', () => {
+  it('defers splash focus until the registered splash becomes visible', () => {
     const splash = createWindowFake();
     const startup = new StartupCoordinator();
     startup.setSplashWindow(splash);
 
     startup.focusActiveWindow();
 
+    expect(splash.focus).not.toHaveBeenCalled();
+
+    startup.showSplashWindow();
+
+    expect(splash.show).toHaveBeenCalledOnce();
+    expect(splash.focus).toHaveBeenCalledOnce();
+  });
+
+  it('fulfills an early focus request when the splash becomes visible', () => {
+    const splash = createWindowFake();
+    const startup = new StartupCoordinator();
+
+    startup.focusActiveWindow();
+    startup.setSplashWindow(splash);
+
+    expect(splash.focus).not.toHaveBeenCalled();
+
+    startup.showSplashWindow();
+
+    expect(splash.show).toHaveBeenCalledOnce();
     expect(splash.focus).toHaveBeenCalledOnce();
   });
 
@@ -71,6 +91,7 @@ describe('StartupCoordinator', () => {
     const startup = new StartupCoordinator();
     startup.setSplashWindow(splash);
     startup.setPendingMainWindow(main);
+    startup.showSplashWindow();
 
     startup.focusActiveWindow();
 

@@ -35,7 +35,7 @@ async function createSplashWindow() {
   }
 
   await splashReadyToShow;
-  splashWindow.show();
+  startup.showSplashWindow();
 }
 
 function createWindow() {
