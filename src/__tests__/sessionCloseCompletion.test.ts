@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { completeSessionForClose } from '../main/sessionCloseCompletion';
+import {
+  completeSessionForClose,
+  createSessionCloseCompletionDependencies,
+} from '../main/sessionCloseCompletion';
 
 describe('completeSessionForClose', () => {
   const session = { id: 'session-1', startTime: '2026-07-26T08:00:00.000Z' };
@@ -17,6 +20,32 @@ describe('completeSessionForClose', () => {
     });
 
     expect(calls).toEqual(['mark', 'persist']);
+  });
+
+  it('does not schedule another save when restoring after persistence fails', () => {
+    const persistenceError = new Error('save failed');
+    const autosaveWrites: string[] = [];
+    const recoveryWrites: string[] = [];
+    const dependencies = createSessionCloseCompletionDependencies({
+      run: sql => {
+        autosaveWrites.push(sql);
+      },
+      runWithoutAutosave: sql => {
+        recoveryWrites.push(sql);
+      },
+      saveDb: () => {
+        throw persistenceError;
+      },
+      now: () => '2026-07-26T10:00:00.000Z',
+    });
+
+    expect(() => completeSessionForClose(session, dependencies)).toThrow(persistenceError);
+    expect(autosaveWrites).toEqual([
+      "UPDATE sessions SET endTime = ?, status = 'completed' WHERE id = ?",
+    ]);
+    expect(recoveryWrites).toEqual([
+      "UPDATE sessions SET endTime = NULL, status = 'active' WHERE id = ?",
+    ]);
   });
 
   it('restores the session to active and rethrows the original persistence error', () => {

@@ -37,12 +37,13 @@ by the `sessions:end` IPC handler to avoid divergent lifecycle behaviour.
 ## Error handling
 
 The close request remains blocked unless the completion update succeeds. On
-failure, the active session is restored, closing is blocked, and a native error
-dialog explains that the session was not ended and the program remains open for
-a later retry. The dialog contains only fixed Chinese user-safe explanatory
-text; it never includes diagnostic error details. The main-process reporter
-logs the original error (including persistence and restoration failures) for
-diagnosis.
+failure, the synchronous completion save first cancels any pending autosave,
+then the active session is restored in memory without scheduling another
+persistence attempt. Closing is blocked, and a native error dialog explains
+that the session was not ended and the program remains open for a later retry.
+The dialog contains only fixed Chinese user-safe explanatory text; it never
+includes diagnostic error details. The main-process reporter logs the original
+error (including persistence and restoration failures) for diagnosis.
 
 ## Verification
 

@@ -1,12 +1,12 @@
 import { app, BrowserWindow, dialog, globalShortcut, shell } from 'electron';
 import path from 'path';
 import { registerIpcHandlers } from './ipc';
-import { closeDb, queryOne, run, saveDb } from './database';
+import { closeDb, queryOne, run, runWithoutAutosave, saveDb } from './database';
 import {
   completeSessionForClose,
+  createSessionCloseCompletionDependencies,
 } from './sessionCloseCompletion';
 import { sessionCloseErrorMessage } from './sessionCloseErrorMessage';
-import { safeSessionEndTime } from './sessionDuration';
 import { handleSessionCloseEvent, SessionCloseGuard } from './sessionCloseGuard';
 
 let mainWindow: BrowserWindow | null = null;
@@ -35,18 +35,15 @@ function createWindow() {
       message: '当前 session 正在进行中',
       detail: '结束 session 后将关闭程序。',
     }) === 1,
-    session => completeSessionForClose(session, {
-      markCompleted: selected => {
-        run("UPDATE sessions SET endTime = ?, status = 'completed' WHERE id = ?", [
-          safeSessionEndTime(selected.startTime, new Date().toISOString()),
-          selected.id,
-        ]);
-      },
-      persist: saveDb,
-      restoreActive: selected => {
-        run("UPDATE sessions SET endTime = NULL, status = 'active' WHERE id = ?", [selected.id]);
-      },
-    }),
+    session => completeSessionForClose(
+      session,
+      createSessionCloseCompletionDependencies({
+        run,
+        runWithoutAutosave,
+        saveDb,
+        now: () => new Date().toISOString(),
+      }),
+    ),
   );
 
   mainWindow.setAutoHideMenuBar(true);
