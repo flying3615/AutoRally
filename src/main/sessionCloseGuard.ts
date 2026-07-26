@@ -17,6 +17,7 @@ export function handleSessionCloseEvent(
 
 export class SessionCloseGuard {
   private approved = false;
+  private pendingSession: ActiveSessionForClose | undefined;
 
   constructor(
     private readonly getActiveSession: () => ActiveSessionForClose | undefined,
@@ -27,15 +28,20 @@ export class SessionCloseGuard {
   canClose(): boolean {
     if (this.approved) return true;
 
-    const session = this.getActiveSession();
+    const session = this.pendingSession ?? this.getActiveSession();
     if (!session) {
       this.approved = true;
       return true;
     }
 
-    if (!this.confirmEndSession()) return false;
+    if (!this.confirmEndSession()) {
+      this.pendingSession = undefined;
+      return false;
+    }
 
+    this.pendingSession = session;
     this.endSession(session);
+    this.pendingSession = undefined;
     this.approved = true;
     return true;
   }
