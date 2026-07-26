@@ -39,9 +39,10 @@ by the `sessions:end` IPC handler to avoid divergent lifecycle behaviour.
 The close request remains blocked unless the completion update succeeds. On
 failure, the active session is restored, closing is blocked, and a native error
 dialog explains that the session was not ended and the program remains open for
-a later retry. The dialog retains safe error detail for diagnosis, including
-both persistence and restoration failures when both occur, without exposing
-paths or stack traces.
+a later retry. The dialog contains only fixed Chinese user-safe explanatory
+text; it never includes diagnostic error details. The main-process reporter
+logs the original error (including persistence and restoration failures) for
+diagnosis.
 
 ## Verification
 

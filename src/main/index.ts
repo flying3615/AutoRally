@@ -4,41 +4,12 @@ import { registerIpcHandlers } from './ipc';
 import { closeDb, queryOne, run, saveDb } from './database';
 import {
   completeSessionForClose,
-  SessionCloseCompletionRestoreError,
 } from './sessionCloseCompletion';
+import { sessionCloseErrorMessage } from './sessionCloseErrorMessage';
 import { safeSessionEndTime } from './sessionDuration';
 import { handleSessionCloseEvent, SessionCloseGuard } from './sessionCloseGuard';
 
 let mainWindow: BrowserWindow | null = null;
-
-function safeErrorDetail(error: unknown): string {
-  if (!(error instanceof Error)) return '发生未知错误。';
-
-  const [firstLine = ''] = error.message.split(/\r?\n/, 1);
-  const detail = firstLine.trim();
-  if (!detail) return '发生未知错误。';
-
-  return detail
-    .replace(/(?:[A-Za-z]:)?(?:\/|\\)(?:[^/\s\\]+(?:\/|\\)?)*/g, '[路径已隐藏]')
-    .slice(0, 500);
-}
-
-function closeFailureDetail(error: unknown): string {
-  if (error instanceof SessionCloseCompletionRestoreError) {
-    return `保存会话失败：${safeErrorDetail(error.persistenceError)}\n恢复会话失败：${safeErrorDetail(error.restorationError)}`;
-  }
-
-  if (
-    error instanceof Error
-    && error.name === 'AggregateError'
-    && 'errors' in error
-    && Array.isArray(error.errors)
-  ) {
-    return `保存会话失败：${safeErrorDetail(error.errors[0])}\n恢复会话失败：${safeErrorDetail(error.errors[1])}`;
-  }
-
-  return `错误详情：${safeErrorDetail(error)}`;
-}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -106,10 +77,11 @@ function createWindow() {
 
   mainWindow.on('close', event => {
     handleSessionCloseEvent(sessionCloseGuard, event, error => {
+      console.error('Failed to finish the active session during app close; keeping the application open.', error);
       dialog.showMessageBoxSync(mainWindow!, {
         type: 'error',
         message: '无法结束当前会话',
-        detail: `当前会话未结束，程序将保持打开。您可以稍后重试。\n\n${closeFailureDetail(error)}`,
+        detail: sessionCloseErrorMessage(error),
       });
     });
   });
