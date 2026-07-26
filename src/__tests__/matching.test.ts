@@ -295,6 +295,37 @@ describe('generateMatches', () => {
     for (const id of allIds) expect(pool.some(p => p.id === id)).toBe(true);
   });
 
+  it('rotates prior partners before preserving team balance', () => {
+    const pool = [
+      { ...makePlayer('m1', 'M1', 'male', 4), checkinTime: '2026-01-01T00:00:00.000Z' },
+      { ...makePlayer('m2', 'M2', 'male', 3), checkinTime: '2026-01-01T00:01:00.000Z' },
+      { ...makePlayer('f1', 'F1', 'female', 4), checkinTime: '2026-01-01T00:02:00.000Z' },
+      { ...makePlayer('f2', 'F2', 'female', 3), checkinTime: '2026-01-01T00:03:00.000Z' },
+    ];
+    const priorGame: Game = {
+      id: 'round-1',
+      sessionId: 's',
+      courtNumber: 1,
+      team1Player1Id: 'm1',
+      team1Player2Id: 'f2',
+      team2Player1Id: 'm2',
+      team2Player2Id: 'f1',
+      status: 'completed',
+      roundNumber: 1,
+      gameType: 'mixed',
+      startedAt: null,
+      endedAt: null,
+    };
+
+    const result = generateMatches(pool, 1, 2, [priorGame]);
+    expect(result).toHaveLength(1);
+    const teams = [result[0]!.team1, result[0]!.team2]
+      .map(team => [...team].sort().join('|'))
+      .sort();
+    expect(teams).not.toContain('f2|m1');
+    expect(teams).not.toContain('f1|m2');
+  });
+
   it('avoids prior court groups and rotates relationships when equal alternatives exist', () => {
     const pool = Array.from({ length: 8 }, (_, index) => ({
       ...makePlayer(`m${index + 1}`, `M${index + 1}`, 'male', 3),

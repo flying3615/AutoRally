@@ -342,10 +342,10 @@ export function generateMatches(
 
       const better =
         !bestTeams ||
-        balance < bestTeams.balance ||
-        (balance === bestTeams.balance && partners < bestTeams.partners) ||
-        (balance === bestTeams.balance && partners === bestTeams.partners && opponents < bestTeams.opponents) ||
-        (balance === bestTeams.balance && partners === bestTeams.partners && opponents === bestTeams.opponents && tie < bestTeams.tie);
+        partners < bestTeams.partners ||
+        (partners === bestTeams.partners && opponents < bestTeams.opponents) ||
+        (partners === bestTeams.partners && opponents === bestTeams.opponents && balance < bestTeams.balance) ||
+        (partners === bestTeams.partners && opponents === bestTeams.opponents && balance === bestTeams.balance && tie < bestTeams.tie);
       if (better) bestTeams = current;
     }
     if (!bestTeams) return;
