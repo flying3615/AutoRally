@@ -4,6 +4,7 @@ import fs from 'fs';
 import { app } from 'electron';
 import { v4 as uuid } from 'uuid';
 import { validateAutoRallyDatabase } from './databaseBackup';
+import { atomicWriteFile } from './atomicFileWriter';
 
 const dbPath = path.join(app.getPath('userData'), 'autorally.db');
 let db: Database | null = null;
@@ -38,9 +39,7 @@ function save(database = db) {
   if (!database) return;
   const data = database.export();
   const buf = Buffer.from(data);
-  const tmpPath = dbPath + '.tmp';
-  fs.writeFileSync(tmpPath, buf);
-  fs.renameSync(tmpPath, dbPath);
+  atomicWriteFile(dbPath, buf);
 }
 
 export function saveDb(database?: Database) {
