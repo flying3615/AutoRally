@@ -11,7 +11,9 @@ describe('sessionCloseErrorMessage', () => {
     for (const error of [new Error(unixMessage), new Error(windowsMessage)]) {
       const message = sessionCloseErrorMessage(error);
 
-      expect(message).toBe('当前会话未结束，程序将保持打开。您可以稍后重试。');
+      expect(message).toBe(
+        'The active session could not be ended. AutoRally will remain open. Please try again.',
+      );
       for (const leakedValue of [unixPath, windowsPath, 'Users', 'Alice', 'My Data', 'db.sqlite']) {
         expect(message).not.toContain(leakedValue);
       }

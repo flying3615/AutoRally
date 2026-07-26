@@ -1,7 +1,5 @@
 # Historical Data Cleanup Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
-
 **Goal:** Add a typed-confirmation settings action that permanently clears historical activity, payment, and historical tournament data without changing the current operating state.
 
 **Architecture:** Put the deletion rules in a pure main-process service that operates on an injected `sql.js` database and owns its transaction. Expose that service through a narrow IPC/preload API, then add a Settings-local destructive dialog whose final action is disabled until the user types `清理`.

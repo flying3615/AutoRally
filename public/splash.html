@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AutoRally</title>
+    <style>
+      :root {
+        background: #f8fafb;
+        color: #18181b;
+        font-family:
+          "SF Pro Display", "SF Pro Text", "PingFang SC", "Microsoft YaHei",
+          system-ui, sans-serif;
+      }
+
+      html,
+      body {
+        width: 360px;
+        height: 240px;
+        margin: 0;
+        overflow: hidden;
+      }
+
+      body {
+        display: grid;
+        place-items: center;
+      }
+
+      main {
+        display: grid;
+        justify-items: center;
+        gap: 12px;
+        text-align: center;
+      }
+
+      .mark {
+        width: 44px;
+        height: 44px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 24px;
+        font-weight: 700;
+        letter-spacing: -0.04em;
+        line-height: 1;
+      }
+
+      p {
+        margin: 0;
+        color: #18181b;
+        font-size: 14px;
+        line-height: 1.5;
+        opacity: 0.68;
+      }
+
+      .spinner {
+        width: 18px;
+        height: 18px;
+        margin-top: 4px;
+        border: 2px solid #059669;
+        border-right-color: transparent;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .spinner {
+          animation: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main aria-label="AutoRally is starting">
+      <svg class="mark" viewBox="0 0 44 44" aria-hidden="true">
+        <path
+          fill="#059669"
+          d="M22 3 39 13v18L22 41 5 31V13L22 3Zm0 6.2-11.6 6.8v12L22 34.8 33.6 28V16L22 9.2Zm0 5.8 7 4.1v7.8l-7 4.1-7-4.1v-7.8l7-4.1Z"
+        />
+      </svg>
+      <h1>AutoRally</h1>
+      <p>Preparing AutoRally...</p>
+      <div class="spinner" aria-hidden="true"></div>
+    </main>
+  </body>
+</html>
