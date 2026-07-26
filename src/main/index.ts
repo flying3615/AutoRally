@@ -1,7 +1,9 @@
-import { app, BrowserWindow, globalShortcut, shell } from 'electron';
+import { app, BrowserWindow, dialog, globalShortcut, shell } from 'electron';
 import path from 'path';
 import { registerIpcHandlers } from './ipc';
-import { closeDb } from './database';
+import { closeDb, queryOne, run } from './database';
+import { safeSessionEndTime } from './sessionDuration';
+import { SessionCloseGuard } from './sessionCloseGuard';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -18,6 +20,24 @@ function createWindow() {
     },
     title: 'AutoRally - Badminton Club Manager',
   });
+
+  const sessionCloseGuard = new SessionCloseGuard(
+    () => queryOne<{ id: string; startTime: string | null }>("SELECT id, startTime FROM sessions WHERE status = 'active'"),
+    () => dialog.showMessageBoxSync(mainWindow!, {
+      type: 'warning',
+      buttons: ['取消关闭', '结束并关闭'],
+      defaultId: 0,
+      cancelId: 0,
+      message: '当前 session 正在进行中',
+      detail: '结束 session 后将关闭程序。',
+    }) === 1,
+    session => {
+      run("UPDATE sessions SET endTime = ?, status = 'completed' WHERE id = ?", [
+        safeSessionEndTime(session.startTime, new Date().toISOString()),
+        session.id,
+      ]);
+    },
+  );
 
   mainWindow.setAutoHideMenuBar(true);
 
@@ -43,6 +63,10 @@ function createWindow() {
     } else if (key === 'f' && !input.shift) {
       mainWindow?.webContents.send('shortcut:search-player');
     }
+  });
+
+  mainWindow.on('close', event => {
+    if (!sessionCloseGuard.canClose()) event.preventDefault();
   });
 
   mainWindow.on('closed', () => {
