@@ -1,5 +1,6 @@
 import { app, BrowserWindow, dialog, globalShortcut, shell } from 'electron';
 import path from 'path';
+import { createAppLifecycle } from './appLifecycle';
 import { registerIpcHandlers } from './ipc';
 import { closeDb, queryAll, run, runWithoutAutosave, saveDb } from './database';
 import {
@@ -203,6 +204,13 @@ function registerShortcuts() {
   });
 }
 
+const appLifecycle = createAppLifecycle({
+  platform: process.platform,
+  quit: () => app.quit(),
+  unregisterShortcuts: () => globalShortcut.unregisterAll(),
+  closeDb,
+});
+
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
@@ -232,11 +240,9 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 app.on('window-all-closed', () => {
-  globalShortcut.unregisterAll();
-  closeDb();
-  if (process.platform !== 'darwin') app.quit();
+  appLifecycle.handleWindowAllClosed();
 });
 
 app.on('will-quit', () => {
-  globalShortcut.unregisterAll();
+  appLifecycle.handleWillQuit();
 });
