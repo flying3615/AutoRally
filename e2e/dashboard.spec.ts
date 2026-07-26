@@ -47,11 +47,11 @@ test.describe('Dashboard', () => {
   });
 
   test('shows the app version in the status bar and settings page', async ({ page }) => {
-    await expect(page.getByText('v1.0.0')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('v1.2.0')).toBeVisible({ timeout: 5000 });
 
     await navigateTo(page, '/settings');
 
-    await expect(page.locator('main').getByText('v1.0.0')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('main').getByText('v1.2.0')).toBeVisible({ timeout: 5000 });
   });
 
   test('shows full database backup controls in settings', async ({ page }) => {
