@@ -9,6 +9,12 @@ const api = {
     ipcRenderer.invoke('data:exportBackup') as Promise<{ canceled: true } | { canceled: false; filePath: string }>,
   dataImportBackup: () =>
     ipcRenderer.invoke('data:importBackup') as Promise<{ canceled: true } | { canceled: false; filePath: string }>,
+  dataClearHistory: () =>
+    ipcRenderer.invoke('data:clearHistory') as Promise<{
+      payments: number;
+      sessions: number;
+      tournaments: number;
+    }>,
 
   // Players
   playersList: () => ipcRenderer.invoke('players:list'),

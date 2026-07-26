@@ -1,7 +1,15 @@
 import { app, BrowserWindow, dialog, globalShortcut, shell } from 'electron';
 import path from 'path';
+import { createAppLifecycle } from './appLifecycle';
 import { registerIpcHandlers } from './ipc';
 import { closeDb, queryAll, run, runWithoutAutosave, saveDb } from './database';
+import {
+  createStartupFailureHandler,
+  navigateWithReadyToShowListener,
+  presentStartupFailureDialog,
+  runStartupSequence,
+  StartupCoordinator,
+} from './startup';
 import {
   completeSessionsForClose,
   createSessionCloseCompletionDependencies,
@@ -10,13 +18,63 @@ import { sessionCloseErrorMessage } from './sessionCloseErrorMessage';
 import { handleSessionCloseEvent, SessionCloseGuard } from './sessionCloseGuard';
 
 let mainWindow: BrowserWindow | null = null;
+const startup = new StartupCoordinator();
 
-function createWindow() {
-  mainWindow = new BrowserWindow({
+const handleStartupFailure = createStartupFailureHandler({
+  report: error => {
+    console.error('AutoRally startup failed:', error);
+    presentStartupFailureDialog({ showErrorBox: dialog.showErrorBox });
+  },
+  exit: () => app.quit(),
+});
+
+async function createSplashWindow() {
+  const splashWindow = new BrowserWindow({
+    width: 360,
+    height: 240,
+    show: false,
+    frame: false,
+    resizable: false,
+    maximizable: false,
+    minimizable: false,
+    skipTaskbar: true,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+
+  startup.setSplashWindow(splashWindow);
+  splashWindow.setMenuBarVisibility(false);
+
+  splashWindow.on('closed', () => {
+    startup.setSplashWindow(null);
+  });
+
+  splashWindow.on('session-end', () => {
+    appLifecycle.handleSessionEnd();
+  });
+
+  const { navigation: splashNavigation, readyToShow: splashReadyToShow } =
+    navigateWithReadyToShowListener(splashWindow, () => {
+      if (process.env.VITE_DEV_SERVER_URL) {
+        return splashWindow.loadURL(new URL('splash.html', process.env.VITE_DEV_SERVER_URL).toString());
+      }
+
+      return splashWindow.loadFile(path.join(__dirname, '../renderer/splash.html'));
+    });
+
+  await Promise.all([splashNavigation, splashReadyToShow]);
+  startup.showSplashWindow();
+}
+
+async function createWindow() {
+  const window = new BrowserWindow({
     width: 1280,
     height: 800,
     minWidth: 900,
     minHeight: 600,
+    show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -24,18 +82,20 @@ function createWindow() {
     },
     title: 'AutoRally - Badminton Club Manager',
   });
+  mainWindow = window;
+  startup.setPendingMainWindow(window);
 
   const sessionCloseGuard = new SessionCloseGuard(
     () => queryAll<{ id: string; startTime: string | null }>(
       "SELECT id, startTime FROM sessions WHERE status = 'active'",
     ),
-    () => dialog.showMessageBoxSync(mainWindow!, {
+    () => dialog.showMessageBoxSync(window, {
       type: 'warning',
-      buttons: ['取消关闭', '结束并关闭'],
+      buttons: ['Cancel', 'End Session and Close'],
       defaultId: 0,
       cancelId: 0,
-      message: '当前 session 正在进行中',
-      detail: '结束 session 后将关闭程序。',
+      message: 'An active session is in progress.',
+      detail: 'The session will be ended before AutoRally closes.',
     }) === 1,
     sessions => completeSessionsForClose(
       sessions,
@@ -48,46 +108,58 @@ function createWindow() {
     ),
   );
 
-  mainWindow.setAutoHideMenuBar(true);
+  window.setAutoHideMenuBar(true);
 
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+  window.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\//i.test(url)) {
       shell.openExternal(url).catch(err => console.error('Failed to open external link:', err));
     }
     return { action: 'deny' };
   });
 
-  if (process.env.VITE_DEV_SERVER_URL) {
-    mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
-  } else {
-    mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
-  }
+  const { navigation: mainNavigation, readyToShow } = navigateWithReadyToShowListener(window, () => {
+    if (process.env.VITE_DEV_SERVER_URL) {
+      return window.loadURL(process.env.VITE_DEV_SERVER_URL);
+    }
 
-  mainWindow.webContents.on('before-input-event', (_event, input) => {
+    return window.loadFile(path.join(__dirname, '../renderer/index.html'));
+  });
+
+  window.webContents.on('before-input-event', (_event, input) => {
     if (!input.control && !input.meta) return;
     if (input.type !== 'keyDown') return;
     const key = input.key.toLowerCase();
     if (key === 'w') {
-      mainWindow?.webContents.send('shortcut:end-session');
+      window.webContents.send('shortcut:end-session');
     } else if (key === 'f' && !input.shift) {
-      mainWindow?.webContents.send('shortcut:search-player');
+      window.webContents.send('shortcut:search-player');
     }
   });
 
-  mainWindow.on('close', event => {
+  window.on('close', event => {
     handleSessionCloseEvent(sessionCloseGuard, event, error => {
       console.error('Failed to finish the active session during app close; keeping the application open.', error);
-      dialog.showMessageBoxSync(mainWindow!, {
+      dialog.showMessageBoxSync(window, {
         type: 'error',
-        message: '无法结束当前会话',
+        message: 'Unable to End Active Session',
         detail: sessionCloseErrorMessage(error),
       });
     });
   });
 
-  mainWindow.on('closed', () => {
-    mainWindow = null;
+  window.on('session-end', () => {
+    appLifecycle.handleSessionEnd();
   });
+
+  window.on('closed', () => {
+    if (mainWindow === window) mainWindow = null;
+    startup.setPendingMainWindow(null);
+    startup.setMainWindow(null);
+    startup.closeSplashWindow();
+  });
+
+  await Promise.all([mainNavigation, readyToShow]);
+  startup.showMainWindow();
 }
 
 function registerShortcuts() {
@@ -140,22 +212,45 @@ function registerShortcuts() {
   });
 }
 
-app.whenReady().then(async () => {
-  await registerIpcHandlers();
-  createWindow();
-  registerShortcuts();
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
-  });
+const appLifecycle = createAppLifecycle({
+  platform: process.platform,
+  quit: () => app.quit(),
+  unregisterShortcuts: () => globalShortcut.unregisterAll(),
+  closeDb,
 });
 
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on('second-instance', () => startup.focusActiveWindow());
+
+  app
+    .whenReady()
+    .then(() => {
+      return runStartupSequence({
+        createSplashWindow,
+        initializeIpc: registerIpcHandlers,
+        createMainWindow: createWindow,
+        registerShortcuts,
+        onFailure: handleStartupFailure,
+      });
+    })
+    .then(started => {
+      if (!started) return;
+
+      app.on('activate', () => {
+        if (BrowserWindow.getAllWindows().length === 0) {
+          void createWindow().catch(handleStartupFailure);
+        }
+      });
+    })
+    .catch(handleStartupFailure);
+}
+
 app.on('window-all-closed', () => {
-  globalShortcut.unregisterAll();
-  closeDb();
-  if (process.platform !== 'darwin') app.quit();
+  appLifecycle.handleWindowAllClosed();
 });
 
 app.on('will-quit', () => {
-  globalShortcut.unregisterAll();
+  appLifecycle.handleWillQuit();
 });

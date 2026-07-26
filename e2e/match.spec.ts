@@ -13,19 +13,18 @@ test.describe('Match Flow', () => {
   }
 
   test('generates court cards with unique numbers', async ({ page }) => {
-    await setupMatch(page);
+    const { session } = await setupMatch(page);
 
     await page.getByRole('button', { name: /Generate Matches/ }).click();
     await page.waitForTimeout(500);
 
-    const courtCards = page.getByText(/C\d/);
-    const count = await courtCards.count();
+    const courtHeaders = page.getByText('COURT', { exact: true });
+    const count = await courtHeaders.count();
     expect(count).toBeGreaterThanOrEqual(2);
 
-    const texts = await courtCards.allTextContents();
-    const courtNumbers = texts.map(t => t.match(/C(\d+)/)?.[1]).filter(Boolean);
-    const unique = new Set(courtNumbers);
-    expect(unique.size).toBe(courtNumbers.length);
+    const games = await page.evaluate((sid) => window.api.gamesListBySession(sid), session.id) as any[];
+    const courtNumbers = games.map((game: any) => game.courtNumber);
+    expect(new Set(courtNumbers).size).toBe(courtNumbers.length);
   });
 
   test('shows timer after starting round', async ({ page }) => {
@@ -40,8 +39,8 @@ test.describe('Match Flow', () => {
     await expect(page.getByText(/\d+:\d{2}/).first()).toBeVisible({ timeout: 5000 });
   });
 
-  test('hides timer after ending all games', async ({ page }) => {
-    await setupMatch(page);
+  test('ends all playing games', async ({ page }) => {
+    const { session } = await setupMatch(page);
 
     await page.getByRole('button', { name: /Generate Matches/ }).click();
     await page.waitForTimeout(500);
@@ -51,11 +50,11 @@ test.describe('Match Flow', () => {
 
     await expect(page.getByText(/\d+:\d{2}/).first()).toBeVisible({ timeout: 5000 });
 
-    await page.getByRole('button', { name: /End All/ }).click();
-    await page.waitForTimeout(1000);
-
-    const timerBar = page.locator('text=In Progress');
-    expect(await timerBar.count()).toBe(0);
+    await page.getByRole('button', { name: 'End round', exact: true }).click();
+    await expect.poll(async () => {
+      const games = await page.evaluate((sid) => window.api.gamesListBySession(sid), session.id) as any[];
+      return games.filter((game: any) => game.status === 'playing').length;
+    }).toBe(0);
   });
 
   test('shows resume button after pausing all', async ({ page }) => {
@@ -69,15 +68,17 @@ test.describe('Match Flow', () => {
 
     await expect(page.getByText(/\d+:\d{2}/).first()).toBeVisible({ timeout: 5000 });
 
-    await page.getByRole('button', { name: /Pause All/ }).click();
-    await page.waitForTimeout(300);
+    await expect(page.getByText('In progress', { exact: true })).toBeVisible();
 
-    await expect(page.getByRole('button', { name: /Resume All/ })).toBeVisible();
+    await page.getByRole('button', { name: 'Pause all', exact: true }).click();
 
-    await page.getByRole('button', { name: /Resume All/ }).click();
-    await page.waitForTimeout(300);
+    await expect(page.getByText('Paused', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Resume all', exact: true })).toBeVisible();
 
-    await expect(page.getByRole('button', { name: /Pause All/ })).toBeVisible();
+    await page.getByRole('button', { name: 'Resume all', exact: true }).click();
+
+    await expect(page.getByText('In progress', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Pause all', exact: true })).toBeVisible();
   });
 
   test('replaces pending games on regenerate', async ({ page }) => {
@@ -130,11 +131,12 @@ test.describe('Match Flow', () => {
     await expect(page.getByRole('button', { name: /Resume/ })).toBeVisible();
 
     await page.getByRole('button', { name: /Skip Wait/ }).click();
-    await expect(page.getByText(/In Progress/).first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('In progress', { exact: true })).toBeVisible({ timeout: 5000 });
 
-    const games = await page.evaluate((sid) => window.api.gamesListBySession(sid), session.id) as any[];
-    expect(games.filter((g: any) => g.status === 'playing')).toHaveLength(4);
-    expect(games.filter((g: any) => g.status === 'pending')).toHaveLength(0);
+    await expect.poll(async () => {
+      const games = await page.evaluate((sid) => window.api.gamesListBySession(sid), session.id) as any[];
+      return games.filter((game: any) => game.status === 'playing').length;
+    }).toBe(4);
   });
 
   test('fills four courts when twenty players are waiting', async ({ page }) => {
@@ -150,7 +152,7 @@ test.describe('Match Flow', () => {
     expect(new Set(pending.map((g: any) => g.courtNumber)).size).toBe(4);
   });
 
-  test('auto-generates next round during warning', async ({ page }) => {
+  test('pre-schedules the next round while a round is live', async ({ page }) => {
     await page.evaluate(
       (d) => window.api.settingsSet('gameDuration', d),
       '0.05'
@@ -165,12 +167,14 @@ test.describe('Match Flow', () => {
 
     await expect(page.getByText(/\d+:\d{2}/).first()).toBeVisible({ timeout: 5000 });
 
-    await expect(page.getByText(/Time Warning/)).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('Round ending soon', { exact: false })).toBeVisible({ timeout: 10000 });
 
-    await page.waitForTimeout(1000);
-
-    const pendingCourts = await page.getByText(/C\d/).allTextContents();
-    expect(pendingCourts.length).toBeGreaterThan(0);
+    await expect.poll(async () => {
+      const games = await page.evaluate((sid) => window.api.gamesListBySession(sid), session.id) as any[];
+      return games.some((game: any) => game.status === 'playing')
+        && games.some((game: any) => game.status === 'pending');
+    }).toBe(true);
+    await expect(page.getByText('NEXT UP', { exact: true }).first()).toBeVisible();
   });
 
   test('replaces player in pending game via API (IPC test)', async ({ page }) => {

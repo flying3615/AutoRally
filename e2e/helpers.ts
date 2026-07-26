@@ -50,11 +50,8 @@ export const test = base.extend<AppFixture>({
         }
       }
     } finally {
-      try {
-        await app.close();
-      } finally {
-        fs.rmSync(tmpDir, { recursive: true, force: true });
-      }
+      await app.evaluate(({ app }) => app.exit(0));
+      try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
     }
   },
 
