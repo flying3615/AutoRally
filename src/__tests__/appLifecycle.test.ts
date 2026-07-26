@@ -42,4 +42,25 @@ describe('app lifecycle', () => {
     expect(dependencies.unregisterShortcuts).toHaveBeenCalledOnce();
     expect(dependencies.closeDb).toHaveBeenCalledOnce();
   });
+
+  it('cleans up shortcuts and database when a Windows session ends', () => {
+    const dependencies = createDependencies('win32');
+    const lifecycle = createAppLifecycle(dependencies);
+
+    lifecycle.handleSessionEnd();
+
+    expect(dependencies.unregisterShortcuts).toHaveBeenCalledOnce();
+    expect(dependencies.closeDb).toHaveBeenCalledOnce();
+  });
+
+  it('cleans up only once when session end is followed by will quit', () => {
+    const dependencies = createDependencies('win32');
+    const lifecycle = createAppLifecycle(dependencies);
+
+    lifecycle.handleSessionEnd();
+    lifecycle.handleWillQuit();
+
+    expect(dependencies.unregisterShortcuts).toHaveBeenCalledOnce();
+    expect(dependencies.closeDb).toHaveBeenCalledOnce();
+  });
 });

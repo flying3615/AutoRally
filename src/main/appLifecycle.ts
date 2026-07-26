@@ -11,14 +11,25 @@ export function createAppLifecycle({
   unregisterShortcuts,
   closeDb,
 }: AppLifecycleDependencies) {
+  let finalized = false;
+  const finalize = () => {
+    if (finalized) return;
+    finalized = true;
+    unregisterShortcuts();
+    closeDb();
+  };
+
   return {
     handleWindowAllClosed() {
       if (platform !== 'darwin') quit();
     },
 
     handleWillQuit() {
-      unregisterShortcuts();
-      closeDb();
+      finalize();
+    },
+
+    handleSessionEnd() {
+      finalize();
     },
   };
 }

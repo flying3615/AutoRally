@@ -51,6 +51,10 @@ async function createSplashWindow() {
     startup.setSplashWindow(null);
   });
 
+  splashWindow.on('session-end', () => {
+    appLifecycle.handleSessionEnd();
+  });
+
   const { navigation: splashNavigation, readyToShow: splashReadyToShow } =
     navigateWithReadyToShowListener(splashWindow, () => {
       if (process.env.VITE_DEV_SERVER_URL) {
@@ -141,6 +145,10 @@ async function createWindow() {
         detail: sessionCloseErrorMessage(error),
       });
     });
+  });
+
+  window.on('session-end', () => {
+    appLifecycle.handleSessionEnd();
   });
 
   window.on('closed', () => {
