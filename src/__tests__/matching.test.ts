@@ -358,36 +358,104 @@ describe('generateMatches', () => {
     for (const id of allIds) expect(pool.some(p => p.id === id)).toBe(true);
   });
 
-  it('avoids repeating opponent pairings when alternatives exist', () => {
-    // 8 players, 2 courts. After 3 rounds where m1 always faced m2,
-    // the algo should prefer to put them on different courts.
+  it('rotates prior partners before preserving team balance', () => {
     const pool = [
-      makePlayer('m1', 'M1', 'male', 3),
-      makePlayer('m2', 'M2', 'male', 3),
-      makePlayer('m3', 'M3', 'male', 3),
-      makePlayer('m4', 'M4', 'male', 3),
-      makePlayer('f1', 'F1', 'female', 3),
-      makePlayer('f2', 'F2', 'female', 3),
-      makePlayer('f3', 'F3', 'female', 3),
-      makePlayer('f4', 'F4', 'female', 3),
+      { ...makePlayer('m1', 'M1', 'male', 4), checkinTime: '2026-01-01T00:00:00.000Z' },
+      { ...makePlayer('m2', 'M2', 'male', 3), checkinTime: '2026-01-01T00:01:00.000Z' },
+      { ...makePlayer('f1', 'F1', 'female', 4), checkinTime: '2026-01-01T00:02:00.000Z' },
+      { ...makePlayer('f2', 'F2', 'female', 3), checkinTime: '2026-01-01T00:03:00.000Z' },
     ];
-    // m1+f1 vs m2+f2 repeated 3 times — high opponent penalty for m1↔m2, m1↔f2, f1↔m2, f1↔f2
-    const pastGames: Game[] = Array.from({ length: 3 }, (_, i) => ({
-      id: `g${i}`, sessionId: 's', courtNumber: 1,
-      team1Player1Id: 'm1', team1Player2Id: 'f1',
-      team2Player1Id: 'm2', team2Player2Id: 'f2',
-      status: 'completed' as const, roundNumber: i + 1, gameType: 'mixed',
-      startedAt: null, endedAt: null,
-    }));
+    const priorGame: Game = {
+      id: 'round-1',
+      sessionId: 's',
+      courtNumber: 1,
+      team1Player1Id: 'm1',
+      team1Player2Id: 'f2',
+      team2Player1Id: 'm2',
+      team2Player2Id: 'f1',
+      status: 'completed',
+      roundNumber: 1,
+      gameType: 'mixed',
+      startedAt: null,
+      endedAt: null,
+    };
 
-    const result = generateMatches(pool, 2, 4, pastGames);
+    const result = generateMatches(pool, 1, 2, [priorGame]);
+    expect(result).toHaveLength(1);
+    const teams = [result[0]!.team1, result[0]!.team2]
+      .map(team => [...team].sort().join('|'))
+      .sort();
+    expect(teams).not.toContain('f2|m1');
+    expect(teams).not.toContain('f1|m2');
+  });
+
+  it('avoids prior court groups and rotates relationships when equal alternatives exist', () => {
+    const pool = Array.from({ length: 8 }, (_, index) => ({
+      ...makePlayer(`m${index + 1}`, `M${index + 1}`, 'male', 3),
+      checkinTime: '2026-01-01T00:00:00.000Z',
+    }));
+    const pastGames: Game[] = [
+      {
+        id: 'r1c1', sessionId: 's', courtNumber: 1,
+        team1Player1Id: 'm1', team1Player2Id: 'm2',
+        team2Player1Id: 'm3', team2Player2Id: 'm4',
+        status: 'completed', roundNumber: 28, gameType: 'male-double',
+        startedAt: null, endedAt: null,
+      },
+      {
+        id: 'r1c2', sessionId: 's', courtNumber: 2,
+        team1Player1Id: 'm5', team1Player2Id: 'm6',
+        team2Player1Id: 'm7', team2Player2Id: 'm8',
+        status: 'completed', roundNumber: 28, gameType: 'male-double',
+        startedAt: null, endedAt: null,
+      },
+    ];
+
+    const courtKey = (ids: string[]) => [...ids].sort().join('|');
+    const pairKey = (first: string, second: string) => courtKey([first, second]);
+    const partnerPairs = (games: Array<Pick<Game,
+      'team1Player1Id' | 'team1Player2Id' | 'team2Player1Id' | 'team2Player2Id'
+    >>) => new Set(games.flatMap(game => [
+      pairKey(game.team1Player1Id, game.team1Player2Id),
+      pairKey(game.team2Player1Id, game.team2Player2Id),
+    ]));
+    const opponentPairs = (games: Array<Pick<Game,
+      'team1Player1Id' | 'team1Player2Id' | 'team2Player1Id' | 'team2Player2Id'
+    >>) => new Set(games.flatMap(game => [
+      pairKey(game.team1Player1Id, game.team2Player1Id),
+      pairKey(game.team1Player1Id, game.team2Player2Id),
+      pairKey(game.team1Player2Id, game.team2Player1Id),
+      pairKey(game.team1Player2Id, game.team2Player2Id),
+    ]));
+
+    // Fixed check-in times and round number make this rotation scenario deterministic.
+    const result = generateMatches(pool, 2, 29, pastGames);
+    const previousCourts = new Set(pastGames.map(game => courtKey([
+      game.team1Player1Id,
+      game.team1Player2Id,
+      game.team2Player1Id,
+      game.team2Player2Id,
+    ])));
+
     expect(result).toHaveLength(2);
-    // m1 and m2 should not be on opposing teams in the same court
-    const sameCourtAsOpponents = result.some(m =>
-      (m.team1.includes('m1') && m.team2.includes('m2')) ||
-      (m.team1.includes('m2') && m.team2.includes('m1'))
-    );
-    expect(sameCourtAsOpponents).toBe(false);
+    expect(result.every(game =>
+      !previousCourts.has(courtKey([...game.team1, ...game.team2])),
+    )).toBe(true);
+
+    const generatedGames = result.map((game, index) => ({
+      id: `r2c${index + 1}`, sessionId: 's', courtNumber: index + 1,
+      team1Player1Id: game.team1[0]!, team1Player2Id: game.team1[1]!,
+      team2Player1Id: game.team2[0]!, team2Player2Id: game.team2[1]!,
+    }));
+    const previousPartnerPairs = partnerPairs(pastGames);
+    const previousOpponentPairs = opponentPairs(pastGames);
+    const repeatedPartnerPairs = [...partnerPairs(generatedGames)]
+      .filter(pair => previousPartnerPairs.has(pair)).length;
+    const repeatedOpponentPairs = [...opponentPairs(generatedGames)]
+      .filter(pair => previousOpponentPairs.has(pair)).length;
+
+    expect(repeatedPartnerPairs).toBe(0);
+    expect(repeatedOpponentPairs).toBe(0);
   });
 
   it('produces valid game types with no >1 level gap in any match', () => {
