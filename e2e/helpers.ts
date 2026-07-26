@@ -9,6 +9,11 @@ type AppFixture = {
   page: Page;
 };
 
+function isUnavailableWindowError(error: unknown): boolean {
+  return error instanceof Error
+    && error.message.includes('Target page, context or browser has been closed');
+}
+
 export const test = base.extend<AppFixture>({
   app: async ({}, use) => {
     const mainPath = path.join(__dirname, '..', 'dist', 'main', 'index.js');
@@ -28,8 +33,26 @@ export const test = base.extend<AppFixture>({
 
     await use(app);
 
-    await app.evaluate(({ app }) => app.exit(0));
-    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+    try {
+      for (const page of app.windows()) {
+        if (page.isClosed()) continue;
+
+        try {
+          await page.evaluate(async () => {
+            const sessions = await window.api.sessionsList() as { id: string; status: string }[];
+            for (const session of sessions) {
+              if (session.status === 'active') await window.api.sessionsEnd(session.id);
+            }
+          });
+        } catch (error) {
+          if (!isUnavailableWindowError(error)) throw error;
+          // The renderer can close between windows() and evaluate().
+        }
+      }
+    } finally {
+      await app.evaluate(({ app }) => app.exit(0));
+      try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+    }
   },
 
   page: async ({ app }, use) => {

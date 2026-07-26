@@ -24,4 +24,11 @@ test.describe('Session Management', () => {
     const active = await getActiveSession(page);
     expect(active).toBeUndefined();
   });
+
+  test('fixture teardown closes an active session without dialog interaction', async ({ page }) => {
+    await createSession(page, 4);
+
+    const active = await getActiveSession(page);
+    expect(active).toBeDefined();
+  });
 });
