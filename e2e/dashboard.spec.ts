@@ -110,10 +110,40 @@ test.describe('Dashboard', () => {
     await clearButton.click();
 
     await expect(dialog).toBeHidden();
+    await expect(page.getByRole('button', { name: 'Clear Historical Data' })).toBeFocused();
     await expect(page.getByText(/Cleared 1 payment, 1 completed session, and 0 completed tournaments\./)).toBeVisible();
     await expect(page.evaluate(() => window.api.sessionsList())).resolves.not.toContainEqual(
       expect.objectContaining({ id: completedSession.id }),
     );
+  });
+
+  test('keeps focus on confirmation while historical data cleanup is busy', async ({ app, page }) => {
+    await app.evaluate((_electron) => {
+      const { createRequire } = process.getBuiltinModule('module') as typeof import('module');
+      const requireFromApp = createRequire(`${process.cwd()}/`);
+      const { ipcMain } = requireFromApp('electron') as typeof import('electron');
+      ipcMain.removeHandler('data:clearHistory');
+      ipcMain.handle('data:clearHistory', () => new Promise(() => {}));
+    });
+
+    await navigateTo(page, '/settings');
+    await page.getByRole('button', { name: 'Clear Historical Data' }).click();
+
+    const dialog = page.getByRole('dialog', { name: 'Clear historical data' });
+    const confirmation = dialog.getByLabel('Type 清理 to confirm');
+    await confirmation.fill('清理');
+    const clearButton = dialog.getByRole('button', { name: 'Permanently Clear Data' });
+    await clearButton.focus();
+    await expect(clearButton).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    await expect(dialog.getByRole('button', { name: 'Clearing...' })).toBeDisabled();
+    await expect(confirmation).toBeFocused();
+
+    await page.keyboard.press('Tab');
+    await expect(confirmation).toBeFocused();
+    await page.keyboard.press('Shift+Tab');
+    await expect(confirmation).toBeFocused();
   });
 
   test('cancels historical data cleanup without deleting completed history', async ({ page }) => {

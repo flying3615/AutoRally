@@ -224,6 +224,7 @@ function HistoricalDataCleanupDialog({ onClose, onSuccess }: {
   const handleClear = async () => {
     if (!canClear) return;
 
+    confirmationInputRef.current?.focus();
     setBusy(true);
     setError(null);
     try {
@@ -379,18 +380,18 @@ export function Settings() {
     }
   };
 
+  const closeHistoricalDataCleanup = () => {
+    setShowHistoricalDataCleanup(false);
+    requestAnimationFrame(() => historicalDataCleanupOpenerRef.current?.focus());
+  };
+
   const handleHistoricalDataCleanupSuccess = (result: HistoricalDataCleanupResult) => {
     const unit = (count: number, name: string) => `${count} ${name}${count === 1 ? '' : 's'}`;
-    setShowHistoricalDataCleanup(false);
+    closeHistoricalDataCleanup();
     setHistoricalDataCleanupMessage(
       `Cleared ${unit(result.payments, 'payment')}, ${unit(result.sessions, 'completed session')}, and ${unit(result.tournaments, 'completed tournament')}.`,
     );
     refreshUpcoming();
-  };
-
-  const closeHistoricalDataCleanup = () => {
-    setShowHistoricalDataCleanup(false);
-    requestAnimationFrame(() => historicalDataCleanupOpenerRef.current?.focus());
   };
 
   const formatDate = (dateStr: string, timeStr: string) => {
