@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { StartupCoordinator, waitForSplashReadyToShow } from '../main/startup';
+import {
+  navigateWithReadyToShowListener,
+  StartupCoordinator,
+  waitForReadyToShow,
+} from '../main/startup';
 
 class SplashWindowEventSource {
   private readyToShowListener: (() => void) | undefined;
@@ -15,6 +19,13 @@ class SplashWindowEventSource {
   }
 }
 
+class NavigatingWindowEventSource extends SplashWindowEventSource {
+  navigate() {
+    this.events.push('navigate');
+    this.emitReadyToShow();
+  }
+}
+
 function createWindowFake({ minimized = false }: { minimized?: boolean } = {}) {
   return {
     isMinimized: vi.fn(() => minimized),
@@ -26,10 +37,23 @@ function createWindowFake({ minimized = false }: { minimized?: boolean } = {}) {
 }
 
 describe('StartupCoordinator', () => {
+  it('subscribes to ready-to-show before navigation can emit it', async () => {
+    const window = new NavigatingWindowEventSource();
+    let proceeded = false;
+
+    const { readyToShow } = navigateWithReadyToShowListener(window, () => window.navigate());
+    await readyToShow.then(() => {
+      proceeded = true;
+    });
+
+    expect(window.events).toEqual(['ready-to-show', 'navigate']);
+    expect(proceeded).toBe(true);
+  });
+
   it('waits until the splash window is ready to show', async () => {
     const splashWindow = new SplashWindowEventSource();
     let proceeded = false;
-    const ready = waitForSplashReadyToShow(splashWindow).then(() => {
+    const ready = waitForReadyToShow(splashWindow).then(() => {
       proceeded = true;
     });
 

@@ -2,7 +2,7 @@ import { app, BrowserWindow, globalShortcut, shell } from 'electron';
 import path from 'path';
 import { registerIpcHandlers } from './ipc';
 import { closeDb } from './database';
-import { StartupCoordinator, waitForSplashReadyToShow } from './startup';
+import { navigateWithReadyToShowListener, StartupCoordinator } from './startup';
 
 let mainWindow: BrowserWindow | null = null;
 const startup = new StartupCoordinator();
@@ -22,18 +22,20 @@ async function createSplashWindow() {
   startup.setSplashWindow(splashWindow);
   splashWindow.setMenuBarVisibility(false);
 
-  const splashReadyToShow = waitForSplashReadyToShow(splashWindow);
-
   splashWindow.on('closed', () => {
     startup.setSplashWindow(null);
   });
 
-  if (process.env.VITE_DEV_SERVER_URL) {
-    await splashWindow.loadURL(new URL('splash.html', process.env.VITE_DEV_SERVER_URL).toString());
-  } else {
-    await splashWindow.loadFile(path.join(__dirname, '../renderer/splash.html'));
-  }
+  const { navigation: splashNavigation, readyToShow: splashReadyToShow } =
+    navigateWithReadyToShowListener(splashWindow, () => {
+      if (process.env.VITE_DEV_SERVER_URL) {
+        return splashWindow.loadURL(new URL('splash.html', process.env.VITE_DEV_SERVER_URL).toString());
+      }
 
+      return splashWindow.loadFile(path.join(__dirname, '../renderer/splash.html'));
+    });
+
+  await splashNavigation;
   await splashReadyToShow;
   startup.showSplashWindow();
 }
@@ -64,11 +66,13 @@ function createWindow() {
     return { action: 'deny' };
   });
 
-  if (process.env.VITE_DEV_SERVER_URL) {
-    window.loadURL(process.env.VITE_DEV_SERVER_URL);
-  } else {
-    window.loadFile(path.join(__dirname, '../renderer/index.html'));
-  }
+  const { readyToShow } = navigateWithReadyToShowListener(window, () => {
+    if (process.env.VITE_DEV_SERVER_URL) {
+      return window.loadURL(process.env.VITE_DEV_SERVER_URL);
+    }
+
+    return window.loadFile(path.join(__dirname, '../renderer/index.html'));
+  });
 
   window.webContents.on('before-input-event', (_event, input) => {
     if (!input.control && !input.meta) return;
@@ -81,7 +85,7 @@ function createWindow() {
     }
   });
 
-  window.once('ready-to-show', () => {
+  void readyToShow.then(() => {
     startup.showMainWindow();
   });
 

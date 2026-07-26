@@ -6,12 +6,21 @@ export interface AppWindow {
   close(): void;
 }
 
-export interface SplashWindowEventSource {
+export interface ReadyToShowEventSource {
   once(event: 'ready-to-show', listener: () => void): unknown;
 }
 
-export function waitForSplashReadyToShow(splashWindow: SplashWindowEventSource): Promise<void> {
-  return new Promise(resolve => splashWindow.once('ready-to-show', resolve));
+export function waitForReadyToShow(window: ReadyToShowEventSource): Promise<void> {
+  return new Promise(resolve => window.once('ready-to-show', resolve));
+}
+
+export function navigateWithReadyToShowListener<T>(
+  window: ReadyToShowEventSource,
+  navigate: () => T,
+): { navigation: T; readyToShow: Promise<void> } {
+  const readyToShow = waitForReadyToShow(window);
+
+  return { navigation: navigate(), readyToShow };
 }
 
 export class StartupCoordinator {
