@@ -2,6 +2,7 @@ import { app, BrowserWindow, dialog, globalShortcut, shell } from 'electron';
 import path from 'path';
 import { registerIpcHandlers } from './ipc';
 import { closeDb, queryOne, run, saveDb } from './database';
+import { completeSessionForClose } from './sessionCloseCompletion';
 import { safeSessionEndTime } from './sessionDuration';
 import { handleSessionCloseEvent, SessionCloseGuard } from './sessionCloseGuard';
 
@@ -31,13 +32,18 @@ function createWindow() {
       message: '当前 session 正在进行中',
       detail: '结束 session 后将关闭程序。',
     }) === 1,
-    session => {
-      run("UPDATE sessions SET endTime = ?, status = 'completed' WHERE id = ?", [
-        safeSessionEndTime(session.startTime, new Date().toISOString()),
-        session.id,
-      ]);
-      saveDb();
-    },
+    session => completeSessionForClose(session, {
+      markCompleted: selected => {
+        run("UPDATE sessions SET endTime = ?, status = 'completed' WHERE id = ?", [
+          safeSessionEndTime(selected.startTime, new Date().toISOString()),
+          selected.id,
+        ]);
+      },
+      persist: saveDb,
+      restoreActive: selected => {
+        run("UPDATE sessions SET endTime = NULL, status = 'active' WHERE id = ?", [selected.id]);
+      },
+    }),
   );
 
   mainWindow.setAutoHideMenuBar(true);

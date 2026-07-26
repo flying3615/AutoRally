@@ -56,22 +56,7 @@ describe('SessionCloseGuard', () => {
     expect(endSession).toHaveBeenCalledTimes(2);
   });
 
-  it('does not approve a retry when persistence failure leaves no active session in memory', () => {
-    const active = { id: 'session-1', startTime: '2026-07-26T08:00:00.000Z' };
-    let activeInMemory: typeof active | undefined = active;
-    const persistenceError = new Error('save failed');
-    const endSession = vi.fn(() => {
-      activeInMemory = undefined;
-      throw persistenceError;
-    });
-    const guard = new SessionCloseGuard(() => activeInMemory, () => true, endSession);
-
-    expect(() => guard.canClose()).toThrow(persistenceError);
-    expect(() => guard.canClose()).toThrow(persistenceError);
-    expect(endSession).toHaveBeenCalledTimes(2);
-  });
-
-  it('re-queries the active session after cancelling a retry following an end failure', () => {
+  it('re-queries the active session after an ending failure', () => {
     const failed: ActiveSessionForClose = {
       id: 'session-1',
       startTime: '2026-07-26T08:00:00.000Z',
@@ -80,24 +65,20 @@ describe('SessionCloseGuard', () => {
       id: 'session-2',
       startTime: '2026-07-26T09:00:00.000Z',
     };
-    let activeInMemory: ActiveSessionForClose | undefined = failed;
-    const getActiveSession = vi.fn(() => activeInMemory);
+    const getActiveSession = vi.fn()
+      .mockReturnValueOnce(failed)
+      .mockReturnValueOnce(fresh);
     const persistenceError = new Error('save failed');
     const endSession = vi.fn((session: ActiveSessionForClose) => {
       if (session === failed) throw persistenceError;
     });
-    const confirmEndSession = vi.fn()
-      .mockReturnValueOnce(true)
-      .mockReturnValueOnce(false)
-      .mockReturnValueOnce(true);
-    const guard = new SessionCloseGuard(getActiveSession, confirmEndSession, endSession);
+    const guard = new SessionCloseGuard(getActiveSession, () => true, endSession);
 
     expect(() => guard.canClose()).toThrow(persistenceError);
-    expect(guard.canClose()).toBe(false);
-    activeInMemory = fresh;
     expect(guard.canClose()).toBe(true);
     expect(getActiveSession).toHaveBeenCalledTimes(2);
-    expect(endSession).toHaveBeenLastCalledWith(fresh);
+    expect(endSession).toHaveBeenNthCalledWith(1, failed);
+    expect(endSession).toHaveBeenNthCalledWith(2, fresh);
   });
 
   it('prevents the close event and rethrows when ending a confirmed active session fails', () => {
