@@ -1,7 +1,13 @@
-import { app, BrowserWindow, globalShortcut, shell } from 'electron';
+import { app, BrowserWindow, dialog, globalShortcut, shell } from 'electron';
 import path from 'path';
 import { registerIpcHandlers } from './ipc';
-import { closeDb } from './database';
+import { closeDb, queryAll, run, runWithoutAutosave, saveDb } from './database';
+import {
+  completeSessionsForClose,
+  createSessionCloseCompletionDependencies,
+} from './sessionCloseCompletion';
+import { sessionCloseErrorMessage } from './sessionCloseErrorMessage';
+import { handleSessionCloseEvent, SessionCloseGuard } from './sessionCloseGuard';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -18,6 +24,29 @@ function createWindow() {
     },
     title: 'AutoRally - Badminton Club Manager',
   });
+
+  const sessionCloseGuard = new SessionCloseGuard(
+    () => queryAll<{ id: string; startTime: string | null }>(
+      "SELECT id, startTime FROM sessions WHERE status = 'active'",
+    ),
+    () => dialog.showMessageBoxSync(mainWindow!, {
+      type: 'warning',
+      buttons: ['取消关闭', '结束并关闭'],
+      defaultId: 0,
+      cancelId: 0,
+      message: '当前 session 正在进行中',
+      detail: '结束 session 后将关闭程序。',
+    }) === 1,
+    sessions => completeSessionsForClose(
+      sessions,
+      createSessionCloseCompletionDependencies({
+        run,
+        runWithoutAutosave,
+        saveDb,
+        now: () => new Date().toISOString(),
+      }),
+    ),
+  );
 
   mainWindow.setAutoHideMenuBar(true);
 
@@ -43,6 +72,17 @@ function createWindow() {
     } else if (key === 'f' && !input.shift) {
       mainWindow?.webContents.send('shortcut:search-player');
     }
+  });
+
+  mainWindow.on('close', event => {
+    handleSessionCloseEvent(sessionCloseGuard, event, error => {
+      console.error('Failed to finish the active session during app close; keeping the application open.', error);
+      dialog.showMessageBoxSync(mainWindow!, {
+        type: 'error',
+        message: '无法结束当前会话',
+        detail: sessionCloseErrorMessage(error),
+      });
+    });
   });
 
   mainWindow.on('closed', () => {

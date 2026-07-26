@@ -44,12 +44,23 @@ function save() {
 }
 
 export function saveDb() {
+  cancelPendingSave();
   save();
 }
 
+function cancelPendingSave() {
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+  }
+}
+
 function debounceSave() {
-  if (saveTimer) clearTimeout(saveTimer);
-  saveTimer = setTimeout(save, 500);
+  cancelPendingSave();
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    save();
+  }, 500);
 }
 
 function migrate(db: Database, options: { seedIfEmpty?: boolean; saveDirty?: boolean } = {}) {
@@ -508,14 +519,17 @@ export function run(sql: string, params?: SqlValue[]) {
   if (!inTransaction) debounceSave();
 }
 
+// Internal use only: execute a write while preserving the current persistence schedule.
+export function runWithoutAutosave(sql: string, params?: SqlValue[]) {
+  const d = getDb();
+  d.run(sql, params);
+}
+
 export function transaction<T>(fn: () => T): T {
   const d = getDb();
 
   // Prevent a previously scheduled auto-save from firing mid-transaction.
-  if (saveTimer) {
-    clearTimeout(saveTimer);
-    saveTimer = null;
-  }
+  cancelPendingSave();
 
   const wasInTransaction = inTransaction;
   d.run('BEGIN');
