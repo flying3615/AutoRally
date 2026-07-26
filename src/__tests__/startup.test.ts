@@ -236,6 +236,40 @@ describe('startup orchestration', () => {
     expect(registerShortcuts).not.toHaveBeenCalled();
   });
 
+  it('handles a splash navigation rejection through the startup sequence', async () => {
+    const splashWindow = new SplashWindowEventSource();
+    const splashFailure = new Error('splash navigation failed');
+    const reports: unknown[] = [];
+    const exit = vi.fn();
+    const initializeIpc = vi.fn();
+    const createMainWindow = vi.fn();
+    const registerShortcuts = vi.fn();
+
+    await runStartupSequence({
+      createSplashWindow: () => {
+        const { navigation, readyToShow } = navigateWithReadyToShowListener(splashWindow, () =>
+          Promise.reject(splashFailure),
+        );
+
+        return Promise.all([navigation, readyToShow]).then(() => {});
+      },
+      initializeIpc,
+      createMainWindow,
+      registerShortcuts,
+      onFailure: createStartupFailureHandler({
+        report: error => reports.push(error),
+        exit,
+      }),
+    });
+
+    expect(reports).toHaveLength(1);
+    expect(reports[0]).toBe(splashFailure);
+    expect(exit).toHaveBeenCalledOnce();
+    expect(initializeIpc).not.toHaveBeenCalled();
+    expect(createMainWindow).not.toHaveBeenCalled();
+    expect(registerShortcuts).not.toHaveBeenCalled();
+  });
+
   it('reports the original IPC initialization failure and skips main startup work', async () => {
     const ipcFailure = new Error('IPC initialization failed');
     const reports: unknown[] = [];
@@ -295,6 +329,37 @@ describe('startup orchestration', () => {
     expect(reports).toHaveLength(1);
     expect(reports[0]).toBeInstanceOf(Error);
     expect((reports[0] as Error).message).toBe('Window closed before it was ready to show');
+    expect(exit).toHaveBeenCalledOnce();
+    expect(registerShortcuts).not.toHaveBeenCalled();
+  });
+
+  it('handles a main navigation rejection through the startup sequence', async () => {
+    const mainWindow = new SplashWindowEventSource();
+    const mainFailure = new Error('main navigation failed');
+    const reports: unknown[] = [];
+    const exit = vi.fn();
+    const registerShortcuts = vi.fn();
+
+    await runStartupSequence({
+      createSplashWindow: async () => {},
+      initializeIpc: async () => {},
+      createMainWindow: () => {
+        const { navigation, readyToShow } = navigateWithReadyToShowListener(mainWindow, () =>
+          Promise.reject(mainFailure),
+        );
+        mainWindow.emitReadyToShow();
+
+        return Promise.all([navigation, readyToShow]).then(() => {});
+      },
+      registerShortcuts,
+      onFailure: createStartupFailureHandler({
+        report: error => reports.push(error),
+        exit,
+      }),
+    });
+
+    expect(reports).toHaveLength(1);
+    expect(reports[0]).toBe(mainFailure);
     expect(exit).toHaveBeenCalledOnce();
     expect(registerShortcuts).not.toHaveBeenCalled();
   });
