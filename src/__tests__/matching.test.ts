@@ -305,14 +305,14 @@ describe('generateMatches', () => {
         id: 'r1c1', sessionId: 's', courtNumber: 1,
         team1Player1Id: 'm1', team1Player2Id: 'm2',
         team2Player1Id: 'm3', team2Player2Id: 'm4',
-        status: 'completed', roundNumber: 1, gameType: 'male-double',
+        status: 'completed', roundNumber: 28, gameType: 'male-double',
         startedAt: null, endedAt: null,
       },
       {
         id: 'r1c2', sessionId: 's', courtNumber: 2,
         team1Player1Id: 'm5', team1Player2Id: 'm6',
         team2Player1Id: 'm7', team2Player2Id: 'm8',
-        status: 'completed', roundNumber: 1, gameType: 'male-double',
+        status: 'completed', roundNumber: 28, gameType: 'male-double',
         startedAt: null, endedAt: null,
       },
     ];
