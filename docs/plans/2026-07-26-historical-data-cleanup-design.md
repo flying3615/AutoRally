@@ -10,14 +10,14 @@ The cleanup removes:
 
 - Every payment and top-up record.
 - Completed daily sessions and their attendance and game records.
-- Completed tournaments and their registrations, standings, teams, team rosters, team matches, and tournament matches.
+- Tournaments marked completed or dated before today, with their registrations, standings, teams, team rosters, team matches, and tournament matches.
 
 The cleanup preserves:
 
 - Players, player balances, and settings.
 - Upcoming sessions.
 - Active daily sessions and their attendance and games.
-- Upcoming and active tournaments.
+- Non-completed tournaments dated today or later.
 
 ## User Experience
 
@@ -35,7 +35,7 @@ The main process executes the cleanup in one database transaction. It deletes de
 
 1. Delete all payments and top-ups.
 2. Delete games and completed daily sessions. Attendance is removed by the existing cascade.
-3. Delete records related to completed tournaments in dependency order: tournament matches, standings, team rosters, team matches, teams, registrations, and finally tournaments.
+3. Delete records related to tournaments marked completed or dated before today in dependency order: tournament matches, standings, team rosters, team matches, teams, registrations, and finally tournaments.
 
 The handler returns typed counts for user feedback. If any statement fails, the transaction rolls back and the error reaches the renderer.
 

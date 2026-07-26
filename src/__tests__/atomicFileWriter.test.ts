@@ -27,15 +27,17 @@ describe('atomicWriteFile', () => {
 
     atomicWriteFile('/data/autorally.db', Buffer.from('database'), filesystem);
 
-    expect(calls).toEqual([
+    const expectedCalls = [
       'write:/data/autorally.db.tmp',
       'open:/data/autorally.db.tmp',
       'fsync:10',
       'close:10',
       'rename:/data/autorally.db.tmp:/data/autorally.db',
-      'open:/data',
-      'fsync:11',
-      'close:11',
-    ]);
+    ];
+    if (process.platform !== 'win32') {
+      expectedCalls.push('open:/data', 'fsync:11', 'close:11');
+    }
+
+    expect(calls).toEqual(expectedCalls);
   });
 });
