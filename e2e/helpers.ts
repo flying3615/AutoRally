@@ -28,7 +28,7 @@ export const test = base.extend<AppFixture>({
 
     await use(app);
 
-    await app.close();
+    await app.evaluate(({ app }) => app.exit(0));
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
   },
 
