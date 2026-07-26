@@ -295,30 +295,24 @@ describe('generateMatches', () => {
     for (const id of allIds) expect(pool.some(p => p.id === id)).toBe(true);
   });
 
-  it('rotates courts, partners, and opponents after the previous round', () => {
-    const pool = [
-      makePlayer('m1', 'M1', 'male', 3),
-      makePlayer('m2', 'M2', 'male', 3),
-      makePlayer('m3', 'M3', 'male', 3),
-      makePlayer('m4', 'M4', 'male', 3),
-      makePlayer('f1', 'F1', 'female', 3),
-      makePlayer('f2', 'F2', 'female', 3),
-      makePlayer('f3', 'F3', 'female', 3),
-      makePlayer('f4', 'F4', 'female', 3),
-    ];
+  it('avoids prior court groups and rotates relationships when equal alternatives exist', () => {
+    const pool = Array.from({ length: 8 }, (_, index) => ({
+      ...makePlayer(`m${index + 1}`, `M${index + 1}`, 'male', 3),
+      checkinTime: '2026-01-01T00:00:00.000Z',
+    }));
     const pastGames: Game[] = [
       {
         id: 'r1c1', sessionId: 's', courtNumber: 1,
-        team1Player1Id: 'm1', team1Player2Id: 'f1',
-        team2Player1Id: 'm2', team2Player2Id: 'f2',
-        status: 'completed', roundNumber: 1, gameType: 'mixed',
+        team1Player1Id: 'm1', team1Player2Id: 'm2',
+        team2Player1Id: 'm3', team2Player2Id: 'm4',
+        status: 'completed', roundNumber: 1, gameType: 'male-double',
         startedAt: null, endedAt: null,
       },
       {
         id: 'r1c2', sessionId: 's', courtNumber: 2,
-        team1Player1Id: 'm3', team1Player2Id: 'f3',
-        team2Player1Id: 'm4', team2Player2Id: 'f4',
-        status: 'completed', roundNumber: 1, gameType: 'mixed',
+        team1Player1Id: 'm5', team1Player2Id: 'm6',
+        team2Player1Id: 'm7', team2Player2Id: 'm8',
+        status: 'completed', roundNumber: 1, gameType: 'male-double',
         startedAt: null, endedAt: null,
       },
     ];
@@ -340,7 +334,9 @@ describe('generateMatches', () => {
       pairKey(game.team1Player2Id, game.team2Player2Id),
     ]));
 
-    const result = generateMatches(pool, 2, 2, pastGames);
+    // This seed deterministically makes the unscored matcher reuse both
+    // previous groups, despite equivalent 2+2 cross-group alternatives.
+    const result = generateMatches(pool, 2, 29, pastGames);
     const previousCourts = new Set(pastGames.map(game => courtKey([
       game.team1Player1Id,
       game.team1Player2Id,
@@ -349,9 +345,9 @@ describe('generateMatches', () => {
     ])));
 
     expect(result).toHaveLength(2);
-    for (const game of result) {
-      expect(previousCourts.has(courtKey([...game.team1, ...game.team2]))).toBe(false);
-    }
+    expect(result.every(game =>
+      !previousCourts.has(courtKey([...game.team1, ...game.team2])),
+    )).toBe(true);
 
     const generatedGames = result.map((game, index) => ({
       id: `r2c${index + 1}`, sessionId: 's', courtNumber: index + 1,
