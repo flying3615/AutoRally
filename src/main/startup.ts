@@ -28,6 +28,10 @@ export class StartupCoordinator {
 
   showMainWindow() {
     this.mainWindow?.show();
+    this.closeSplashWindow();
+  }
+
+  closeSplashWindow() {
     this.splashWindow?.close();
     this.splashWindow = null;
   }

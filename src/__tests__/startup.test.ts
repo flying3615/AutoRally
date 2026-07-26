@@ -46,6 +46,19 @@ describe('StartupCoordinator', () => {
     expect(splash.close).toHaveBeenCalledOnce();
   });
 
+  it('closes the splash safely when startup is interrupted before the main window is ready', () => {
+    const splash = createWindowFake();
+    const startup = new StartupCoordinator();
+    startup.setSplashWindow(splash);
+
+    expect(() => {
+      startup.closeSplashWindow();
+      startup.closeSplashWindow();
+    }).not.toThrow();
+
+    expect(splash.close).toHaveBeenCalledOnce();
+  });
+
   it('safely handles missing splash and main windows', () => {
     const startup = new StartupCoordinator();
 

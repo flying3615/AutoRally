@@ -2,15 +2,48 @@ import { app, BrowserWindow, globalShortcut, shell } from 'electron';
 import path from 'path';
 import { registerIpcHandlers } from './ipc';
 import { closeDb } from './database';
+import { StartupCoordinator } from './startup';
 
 let mainWindow: BrowserWindow | null = null;
+const startup = new StartupCoordinator();
+
+function createSplashWindow() {
+  const splashWindow = new BrowserWindow({
+    width: 360,
+    height: 240,
+    show: false,
+    frame: false,
+    resizable: false,
+    maximizable: false,
+    minimizable: false,
+    skipTaskbar: true,
+  });
+
+  startup.setSplashWindow(splashWindow);
+  splashWindow.setMenuBarVisibility(false);
+
+  splashWindow.webContents.once('did-finish-load', () => {
+    splashWindow.show();
+  });
+
+  splashWindow.on('closed', () => {
+    startup.setSplashWindow(null);
+  });
+
+  if (process.env.VITE_DEV_SERVER_URL) {
+    splashWindow.loadURL(new URL('splash.html', process.env.VITE_DEV_SERVER_URL).toString());
+  } else {
+    splashWindow.loadFile(path.join(__dirname, '../renderer/splash.html'));
+  }
+}
 
 function createWindow() {
-  mainWindow = new BrowserWindow({
+  const window = new BrowserWindow({
     width: 1280,
     height: 800,
     minWidth: 900,
     minHeight: 600,
+    show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -18,10 +51,12 @@ function createWindow() {
     },
     title: 'AutoRally - Badminton Club Manager',
   });
+  mainWindow = window;
+  startup.setMainWindow(window);
 
-  mainWindow.setAutoHideMenuBar(true);
+  window.setAutoHideMenuBar(true);
 
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+  window.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\//i.test(url)) {
       shell.openExternal(url).catch(err => console.error('Failed to open external link:', err));
     }
@@ -29,12 +64,12 @@ function createWindow() {
   });
 
   if (process.env.VITE_DEV_SERVER_URL) {
-    mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
+    window.loadURL(process.env.VITE_DEV_SERVER_URL);
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
+    window.loadFile(path.join(__dirname, '../renderer/index.html'));
   }
 
-  mainWindow.webContents.on('before-input-event', (_event, input) => {
+  window.webContents.on('before-input-event', (_event, input) => {
     if (!input.control && !input.meta) return;
     if (input.type !== 'keyDown') return;
     const key = input.key.toLowerCase();
@@ -45,8 +80,14 @@ function createWindow() {
     }
   });
 
-  mainWindow.on('closed', () => {
-    mainWindow = null;
+  window.once('ready-to-show', () => {
+    startup.showMainWindow();
+  });
+
+  window.on('closed', () => {
+    if (mainWindow === window) mainWindow = null;
+    startup.setMainWindow(null);
+    startup.closeSplashWindow();
   });
 }
 
@@ -100,15 +141,22 @@ function registerShortcuts() {
   });
 }
 
-app.whenReady().then(async () => {
-  await registerIpcHandlers();
-  createWindow();
-  registerShortcuts();
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on('second-instance', () => startup.focusActiveWindow());
 
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+  app.whenReady().then(async () => {
+    createSplashWindow();
+    await registerIpcHandlers();
+    createWindow();
+    registerShortcuts();
+
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    });
   });
-});
+}
 
 app.on('window-all-closed', () => {
   globalShortcut.unregisterAll();
