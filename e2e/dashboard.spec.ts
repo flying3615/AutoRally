@@ -92,6 +92,24 @@ test.describe('Dashboard', () => {
     const completedSession = await createSession(page) as { id: string };
     await checkinPlayer(page, player.id, completedSession.id);
     await page.evaluate((id) => window.api.sessionsEnd(id), completedSession.id);
+    const pastTournament = await page.evaluate(
+      () => window.api.tournamentsCreate({
+        name: 'Past Cleanup Tournament',
+        description: '',
+        date: '2000-01-01',
+        format: 'round_robin',
+        courtCount: 4,
+      }),
+    ) as { id: string };
+    const futureTournament = await page.evaluate(
+      () => window.api.tournamentsCreate({
+        name: 'Future Cleanup Tournament',
+        description: '',
+        date: '2099-01-01',
+        format: 'round_robin',
+        courtCount: 4,
+      }),
+    ) as { id: string };
 
     await navigateTo(page, '/settings');
     await page.getByRole('button', { name: 'Clear Historical Data' }).click();
@@ -111,10 +129,12 @@ test.describe('Dashboard', () => {
 
     await expect(dialog).toBeHidden();
     await expect(page.getByRole('button', { name: 'Clear Historical Data' })).toBeFocused();
-    await expect(page.getByText(/Cleared 1 payment, 1 completed session, and 0 completed tournaments\./)).toBeVisible();
+    await expect(page.getByText(/Cleared 1 payment, 1 completed session, and 1 historical tournament\./)).toBeVisible();
     await expect(page.evaluate(() => window.api.sessionsList())).resolves.not.toContainEqual(
       expect.objectContaining({ id: completedSession.id }),
     );
+    await expect(page.evaluate((id) => window.api.tournamentsList().then(tournaments => tournaments.some(tournament => tournament.id === id)), pastTournament.id)).resolves.toBe(false);
+    await expect(page.evaluate((id) => window.api.tournamentsList().then(tournaments => tournaments.some(tournament => tournament.id === id)), futureTournament.id)).resolves.toBe(true);
   });
 
   test('keeps focus on confirmation while historical data cleanup is busy', async ({ app, page }) => {

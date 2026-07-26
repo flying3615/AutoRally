@@ -34,18 +34,18 @@ export function getDb(): Database {
   return db;
 }
 
-function save() {
-  if (!db) return;
-  const data = db.export();
+function save(database = db) {
+  if (!database) return;
+  const data = database.export();
   const buf = Buffer.from(data);
   const tmpPath = dbPath + '.tmp';
   fs.writeFileSync(tmpPath, buf);
   fs.renameSync(tmpPath, dbPath);
 }
 
-export function saveDb() {
+export function saveDb(database?: Database) {
   cancelPendingSave();
-  save();
+  save(database);
 }
 
 function cancelPendingSave() {

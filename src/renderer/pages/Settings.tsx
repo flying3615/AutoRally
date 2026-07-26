@@ -258,8 +258,8 @@ function HistoricalDataCleanupDialog({ onClose, onSuccess }: {
           Clear historical data
         </h3>
         <p className="text-sm text-zinc-500 leading-relaxed">
-          Completed daily sessions, all payments and top-ups, and completed tournaments will be permanently deleted.
-          Players, balances, settings, upcoming sessions, active daily sessions, and upcoming or active tournaments remain.
+          Completed daily sessions, all payments and top-ups, and tournaments marked completed or dated before today will be permanently deleted.
+          Players, balances, settings, upcoming sessions, active daily sessions, and non-completed tournaments dated today or later remain.
         </p>
 
         {error && (
@@ -389,7 +389,7 @@ export function Settings() {
     const unit = (count: number, name: string) => `${count} ${name}${count === 1 ? '' : 's'}`;
     closeHistoricalDataCleanup();
     setHistoricalDataCleanupMessage(
-      `Cleared ${unit(result.payments, 'payment')}, ${unit(result.sessions, 'completed session')}, and ${unit(result.tournaments, 'completed tournament')}.`,
+      `Cleared ${unit(result.payments, 'payment')}, ${unit(result.sessions, 'completed session')}, and ${unit(result.tournaments, 'historical tournament')}.`,
     );
     refreshUpcoming();
   };

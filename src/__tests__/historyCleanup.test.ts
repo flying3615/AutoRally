@@ -23,7 +23,7 @@ function setupSchema() {
     CREATE TABLE attendance (id TEXT PRIMARY KEY, playerId TEXT NOT NULL REFERENCES players(id), sessionId TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE);
     CREATE TABLE games (id TEXT PRIMARY KEY, sessionId TEXT NOT NULL REFERENCES sessions(id), playerId TEXT NOT NULL REFERENCES players(id));
     CREATE TABLE payments (id TEXT PRIMARY KEY, playerId TEXT NOT NULL REFERENCES players(id), sessionId TEXT REFERENCES sessions(id), paymentType TEXT NOT NULL);
-    CREATE TABLE tournaments (id TEXT PRIMARY KEY, status TEXT NOT NULL CHECK(status IN ('upcoming', 'active', 'completed')));
+    CREATE TABLE tournaments (id TEXT PRIMARY KEY, date TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('upcoming', 'active', 'completed')));
     CREATE TABLE tournament_registrations (id TEXT PRIMARY KEY, tournamentId TEXT NOT NULL REFERENCES tournaments(id), playerId TEXT NOT NULL REFERENCES players(id));
     CREATE TABLE tournament_standings (id TEXT PRIMARY KEY, tournamentId TEXT NOT NULL REFERENCES tournaments(id), playerId TEXT NOT NULL REFERENCES players(id));
     CREATE TABLE tournament_teams (id TEXT PRIMARY KEY, tournamentId TEXT NOT NULL REFERENCES tournaments(id));
@@ -50,20 +50,28 @@ function seedCleanupData() {
     INSERT INTO payments VALUES ('payment-completed', 'player-1', 'session-completed', 'session');
     INSERT INTO payments VALUES ('payment-topup', 'player-1', NULL, 'topup');
 
-    INSERT INTO tournaments VALUES ('tournament-active', 'active');
-    INSERT INTO tournaments VALUES ('tournament-completed', 'completed');
+    INSERT INTO tournaments VALUES ('tournament-active', '2099-01-01', 'active');
+    INSERT INTO tournaments VALUES ('tournament-completed', '2099-01-01', 'completed');
+    INSERT INTO tournaments VALUES ('tournament-historical-upcoming', '2000-01-01', 'upcoming');
+    INSERT INTO tournaments VALUES ('tournament-future-upcoming', '2099-01-01', 'upcoming');
     INSERT INTO tournament_registrations VALUES ('registration-active', 'tournament-active', 'player-1');
     INSERT INTO tournament_registrations VALUES ('registration-completed', 'tournament-completed', 'player-1');
+    INSERT INTO tournament_registrations VALUES ('registration-historical-upcoming', 'tournament-historical-upcoming', 'player-1');
     INSERT INTO tournament_standings VALUES ('standing-active', 'tournament-active', 'player-1');
     INSERT INTO tournament_standings VALUES ('standing-completed', 'tournament-completed', 'player-1');
+    INSERT INTO tournament_standings VALUES ('standing-historical-upcoming', 'tournament-historical-upcoming', 'player-1');
     INSERT INTO tournament_teams VALUES ('team-active', 'tournament-active');
     INSERT INTO tournament_teams VALUES ('team-completed', 'tournament-completed');
+    INSERT INTO tournament_teams VALUES ('team-historical-upcoming', 'tournament-historical-upcoming');
     INSERT INTO tournament_team_players VALUES ('team-player-active', 'team-active', 'player-1');
     INSERT INTO tournament_team_players VALUES ('team-player-completed', 'team-completed', 'player-1');
+    INSERT INTO tournament_team_players VALUES ('team-player-historical-upcoming', 'team-historical-upcoming', 'player-1');
     INSERT INTO tournament_team_matches VALUES ('team-match-active', 'tournament-active', 'team-active', 'team-active');
     INSERT INTO tournament_team_matches VALUES ('team-match-completed', 'tournament-completed', 'team-completed', 'team-completed');
+    INSERT INTO tournament_team_matches VALUES ('team-match-historical-upcoming', 'tournament-historical-upcoming', 'team-historical-upcoming', 'team-historical-upcoming');
     INSERT INTO tournament_matches VALUES ('match-active', 'tournament-active', 'team-match-active', 'player-1');
     INSERT INTO tournament_matches VALUES ('match-completed', 'tournament-completed', 'team-match-completed', 'player-1');
+    INSERT INTO tournament_matches VALUES ('match-historical-upcoming', 'tournament-historical-upcoming', 'team-match-historical-upcoming', 'player-1');
   `);
 }
 
@@ -75,11 +83,11 @@ beforeEach(async () => {
 });
 
 describe('clearHistoricalData', () => {
-  it('removes historical records while preserving current data', () => {
+  it('removes completed and past-dated tournaments while preserving future activity', () => {
     expect(clearHistoricalData(db)).toEqual({
       payments: 3,
       sessions: 1,
-      tournaments: 1,
+      tournaments: 2,
     });
 
     expect(count('players')).toBe(1);
@@ -91,6 +99,8 @@ describe('clearHistoricalData', () => {
     expect(count('payments')).toBe(0);
     expect(countWhere('tournaments', "status = 'active'")).toBe(1);
     expect(countWhere('tournaments', "status = 'completed'")).toBe(0);
+    expect(countWhere('tournaments', "id = 'tournament-historical-upcoming'")).toBe(0);
+    expect(countWhere('tournaments', "id = 'tournament-future-upcoming'")).toBe(1);
 
     expect(countWhere('attendance', "sessionId = 'session-active'")).toBe(1);
     expect(countWhere('attendance', "sessionId = 'session-completed'")).toBe(0);
@@ -108,6 +118,34 @@ describe('clearHistoricalData', () => {
       expect(count(table)).toBe(1);
       expect(countWhere(table, activeCondition)).toBe(1);
     }
+  });
+
+  it('rolls back mutations when persistence fails before commit', () => {
+    let persistedState: Uint8Array | undefined;
+
+    expect(() => clearHistoricalData(db, (persistedDb) => {
+      expect(count('payments')).toBe(0);
+      expect(countWhere('sessions', "status = 'completed'")).toBe(0);
+      expect(countWhere('tournaments', "id = 'tournament-completed'")).toBe(0);
+      expect(countWhere('tournaments', "id = 'tournament-historical-upcoming'")).toBe(0);
+      expect(persistedDb.exec('SELECT COUNT(*) AS count FROM payments')[0]!.values[0]![0]).toBe(0);
+      persistedState = persistedDb.export();
+      throw new Error('persistence failed');
+    })).toThrow('persistence failed');
+
+    expect(persistedState).toBeDefined();
+    expect(count('payments')).toBe(3);
+    expect(countWhere('sessions', "id = 'session-completed'")).toBe(1);
+    expect(countWhere('attendance', "sessionId = 'session-completed'")).toBe(1);
+    expect(countWhere('games', "sessionId = 'session-completed'")).toBe(1);
+    expect(countWhere('tournaments', "id = 'tournament-completed'")).toBe(1);
+    expect(countWhere('tournaments', "id = 'tournament-historical-upcoming'")).toBe(1);
+    expect(countWhere('tournament_registrations', "tournamentId = 'tournament-historical-upcoming'")).toBe(1);
+    expect(countWhere('tournament_standings', "tournamentId = 'tournament-historical-upcoming'")).toBe(1);
+    expect(countWhere('tournament_teams', "tournamentId = 'tournament-historical-upcoming'")).toBe(1);
+    expect(countWhere('tournament_team_players', "teamId = 'team-historical-upcoming'")).toBe(1);
+    expect(countWhere('tournament_team_matches', "tournamentId = 'tournament-historical-upcoming'")).toBe(1);
+    expect(countWhere('tournament_matches', "tournamentId = 'tournament-historical-upcoming'")).toBe(1);
   });
 
   it('rolls back all deletions when completed tournament deletion aborts', () => {

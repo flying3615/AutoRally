@@ -71,9 +71,7 @@ export async function registerIpcHandlers() {
   });
 
   ipcMain.handle('data:clearHistory', () => {
-    const result = clearHistoricalData(getDb());
-    saveDb();
-    return result;
+    return clearHistoricalData(getDb(), saveDb);
   });
 
   // ── Helpers ──
