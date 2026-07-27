@@ -13,6 +13,8 @@ export interface GameInfo {
   gameType: Game['gameType'];
   startedAt: string | null;
   endedAt: string | null;
+  pausedAt: string | null;
+  pausedSeconds: number;
   t1p1Name: string; t1p1Gender: string; t1p1Level: number;
   t1p2Name: string; t1p2Gender: string; t1p2Level: number;
   t2p1Name: string; t2p1Gender: string; t2p1Level: number;

@@ -85,7 +85,7 @@ beforeEach(async () => {
 describe('clearHistoricalData', () => {
   it('removes completed and past-dated tournaments while preserving future activity', () => {
     expect(clearHistoricalData(db)).toEqual({
-      payments: 3,
+      payments: 1,
       sessions: 1,
       tournaments: 2,
     });
@@ -96,7 +96,10 @@ describe('clearHistoricalData', () => {
     expect(count('upcoming_sessions')).toBe(1);
     expect(countWhere('sessions', "status = 'active'")).toBe(1);
     expect(countWhere('sessions', "status = 'completed'")).toBe(0);
-    expect(count('payments')).toBe(0);
+    expect(count('payments')).toBe(2);
+    expect(countWhere('payments', "id = 'payment-active'")).toBe(1);
+    expect(countWhere('payments', "id = 'payment-topup'")).toBe(1);
+    expect(countWhere('payments', "id = 'payment-completed'")).toBe(0);
     expect(countWhere('tournaments', "status = 'active'")).toBe(1);
     expect(countWhere('tournaments', "status = 'completed'")).toBe(0);
     expect(countWhere('tournaments', "id = 'tournament-historical-upcoming'")).toBe(0);
@@ -124,11 +127,11 @@ describe('clearHistoricalData', () => {
     let persistedState: Uint8Array | undefined;
 
     expect(() => clearHistoricalData(db, (persistedDb) => {
-      expect(count('payments')).toBe(0);
+      expect(count('payments')).toBe(2);
       expect(countWhere('sessions', "status = 'completed'")).toBe(0);
       expect(countWhere('tournaments', "id = 'tournament-completed'")).toBe(0);
       expect(countWhere('tournaments', "id = 'tournament-historical-upcoming'")).toBe(0);
-      expect(persistedDb.exec('SELECT COUNT(*) AS count FROM payments')[0]!.values[0]![0]).toBe(0);
+      expect(persistedDb.exec('SELECT COUNT(*) AS count FROM payments')[0]!.values[0]![0]).toBe(2);
       persistedState = persistedDb.export();
       throw new Error('persistence failed');
     })).toThrow('persistence failed');

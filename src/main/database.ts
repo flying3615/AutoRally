@@ -6,7 +6,14 @@ import { v4 as uuid } from 'uuid';
 import { validateAutoRallyDatabase } from './databaseBackup';
 import { atomicWriteFile } from './atomicFileWriter';
 
-const dbPath = path.join(app.getPath('userData'), 'autorally.db');
+// In dev mode, use the repo's own seed database instead of the real userData
+// path — `app.getPath('userData')` is derived from package.json's top-level
+// "name" field for unpackaged runs, which can coincide with a real install's
+// data directory on some platforms, and `npm run dev` reseeds this file fresh
+// on every launch (see scripts/seed.ts).
+const dbPath = process.env.VITE_DEV_SERVER_URL && !app.isPackaged
+  ? path.join(app.getAppPath(), 'autorally-seed.db')
+  : path.join(app.getPath('userData'), 'autorally.db');
 let db: Database | null = null;
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let inTransaction = false;
@@ -113,7 +120,9 @@ function migrate(db: Database, options: { seedIfEmpty?: boolean; saveDirty?: boo
       roundNumber INTEGER NOT NULL,
       gameType TEXT NOT NULL CHECK(gameType IN ('mixed', 'male-double', 'female-double', 'open-double')),
       startedAt TEXT,
-      endedAt TEXT
+      endedAt TEXT,
+      pausedAt TEXT,
+      pausedSeconds INTEGER NOT NULL DEFAULT 0
     );
   `);
   db.run(`
@@ -242,6 +251,8 @@ function migrate(db: Database, options: { seedIfEmpty?: boolean; saveDirty?: boo
   try { db.run('ALTER TABLE attendance ADD COLUMN paused INTEGER NOT NULL DEFAULT 0'); dirty = true; } catch (_) { /* already exists */ }
   try { db.run('ALTER TABLE payments ADD COLUMN paymentMethod TEXT NOT NULL DEFAULT \'\''); dirty = true; } catch (_) { /* already exists */ }
   try { db.run("ALTER TABLE players ADD COLUMN club TEXT NOT NULL DEFAULT ''"); dirty = true; } catch (_) { /* already exists */ }
+  try { db.run('ALTER TABLE games ADD COLUMN pausedAt TEXT'); dirty = true; } catch (_) { /* already exists */ }
+  try { db.run('ALTER TABLE games ADD COLUMN pausedSeconds INTEGER NOT NULL DEFAULT 0'); dirty = true; } catch (_) { /* already exists */ }
   try { db.run('ALTER TABLE tournament_matches ADD COLUMN teamMatchId TEXT REFERENCES tournament_team_matches(id)'); dirty = true; } catch (_) { /* already exists */ }
   try { db.run('ALTER TABLE tournament_matches ADD COLUMN category TEXT'); dirty = true; } catch (_) { /* already exists */ }
   try { db.run('ALTER TABLE tournament_matches ADD COLUMN slotNumber INTEGER'); dirty = true; } catch (_) { /* already exists */ }
@@ -283,8 +294,11 @@ export async function importDatabaseBackup(sourcePath: string) {
 
     const tmpPath = dbPath + '.import';
     fs.writeFileSync(tmpPath, Buffer.from(imported.export()));
-    if (db) db.close();
+    // Only close/replace the live db once the rename has actually succeeded —
+    // otherwise a mid-import failure (locked file, cross-device rename) leaves
+    // the module-level singleton closed with no replacement assigned.
     fs.renameSync(tmpPath, dbPath);
+    if (db) db.close();
     db = imported;
   } catch (err) {
     imported.close();
@@ -353,21 +367,23 @@ function migrateGameTypeConstraint(db: Database): boolean {
         roundNumber INTEGER NOT NULL,
         gameType TEXT NOT NULL CHECK(gameType IN ('mixed', 'male-double', 'female-double', 'open-double')),
         startedAt TEXT,
-        endedAt TEXT
+        endedAt TEXT,
+        pausedAt TEXT,
+        pausedSeconds INTEGER NOT NULL DEFAULT 0
       );
     `);
     db.run(`
       INSERT INTO games_new (
         id, sessionId, courtNumber,
         team1Player1Id, team1Player2Id, team2Player1Id, team2Player2Id,
-        status, roundNumber, gameType, startedAt, endedAt
+        status, roundNumber, gameType, startedAt, endedAt, pausedAt, pausedSeconds
       )
       SELECT
         id, sessionId, courtNumber,
         team1Player1Id, team1Player2Id, team2Player1Id, team2Player2Id,
         status, roundNumber,
         CASE WHEN gameType = 'same-gender' THEN 'male-double' ELSE gameType END,
-        startedAt, endedAt
+        startedAt, endedAt, pausedAt, COALESCE(pausedSeconds, 0)
       FROM games;
     `);
     db.run('DROP TABLE games');
@@ -474,19 +490,22 @@ function migrateAttendanceAndBalancesCascade(db: Database): boolean {
           roundNumber INTEGER NOT NULL,
           gameType TEXT NOT NULL CHECK(gameType IN ('mixed', 'male-double', 'female-double', 'open-double')),
           startedAt TEXT,
-          endedAt TEXT
+          endedAt TEXT,
+          pausedAt TEXT,
+          pausedSeconds INTEGER NOT NULL DEFAULT 0
         );
       `);
       db.run(`
         INSERT INTO games_new (
           id, sessionId, courtNumber,
           team1Player1Id, team1Player2Id, team2Player1Id, team2Player2Id,
-          status, roundNumber, gameType, startedAt, endedAt
+          status, roundNumber, gameType, startedAt, endedAt, pausedAt, pausedSeconds
         )
         SELECT
           id, sessionId, courtNumber,
           team1Player1Id, team1Player2Id, team2Player1Id, team2Player2Id,
-          status, roundNumber, gameType, startedAt, endedAt
+          status, roundNumber, gameType, startedAt, endedAt,
+          pausedAt, COALESCE(pausedSeconds, 0)
         FROM games;
       `);
       db.run('DROP TABLE games');

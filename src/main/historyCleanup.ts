@@ -16,7 +16,10 @@ function deleteHistoricalData(db: Database, today: string): HistoricalDataCleanu
   const historicalTournamentPredicate = "status = 'completed' OR date < ?";
   const historicalTournamentIds = `SELECT id FROM tournaments WHERE ${historicalTournamentPredicate}`;
 
-  db.run('DELETE FROM payments');
+  // Scoped like every other table here: only payments tied to a completed
+  // (historical) session are cleared. Active-session payments and topups
+  // (sessionId IS NULL) are not tied to session history and must survive.
+  db.run("DELETE FROM payments WHERE sessionId IN (SELECT id FROM sessions WHERE status = 'completed')");
   const payments = db.getRowsModified();
 
   db.run("DELETE FROM games WHERE sessionId IN (SELECT id FROM sessions WHERE status = 'completed')");
