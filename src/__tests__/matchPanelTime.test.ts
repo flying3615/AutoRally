@@ -59,4 +59,19 @@ describe('match panel pending countdown labels', () => {
       paused: false,
     });
   });
+
+  it('clamps elapsed time to zero when pausedSeconds exceeds the wall-clock delta', () => {
+    // Only 60 real seconds have passed since start, but pausedSeconds claims
+    // an hour of pause time (e.g. clock skew or inconsistent legacy data).
+    // Elapsed must clamp to 0, not go negative and hand back more than the
+    // full duration.
+    const now = Date.parse('2026-05-19T05:30:00.000Z');
+    const startedAt = '2026-05-19T05:29:00.000Z';
+
+    expect(getPlayingTimerRecovery(startedAt, 15 * 60, null, 3600, now)).toEqual({
+      action: 'restore',
+      remainingSeconds: 15 * 60,
+      paused: false,
+    });
+  });
 });

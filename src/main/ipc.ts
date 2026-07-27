@@ -292,7 +292,10 @@ export async function registerIpcHandlers() {
     const game = queryOne<{ pausedAt: string | null; pausedSeconds: number }>(
       'SELECT pausedAt, pausedSeconds FROM games WHERE id = ?', [id]);
     if (!game || !game.pausedAt) return;
-    const elapsed = Math.max(0, Math.floor((Date.now() - Date.parse(game.pausedAt)) / 1000));
+    const pausedMs = Date.parse(game.pausedAt);
+    // A corrupt/invalid pausedAt must not propagate NaN into pausedSeconds —
+    // treat it as zero elapsed pause time rather than poisoning the column.
+    const elapsed = Number.isFinite(pausedMs) ? Math.max(0, Math.floor((Date.now() - pausedMs) / 1000)) : 0;
     run('UPDATE games SET pausedAt = NULL, pausedSeconds = ? WHERE id = ?',
       [game.pausedSeconds + elapsed, id]);
   });

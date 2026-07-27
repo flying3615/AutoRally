@@ -26,9 +26,12 @@ export function getPlayingTimerRecovery(
   // wall-clock "now" — so time spent paused (including across an app restart)
   // never counts against the game's remaining duration.
   const referenceNow = pausedAt ? Date.parse(pausedAt) : now;
-  if (pausedAt && !Number.isFinite(referenceNow)) return null;
+  if (!Number.isFinite(referenceNow)) return null;
 
-  const elapsedSeconds = Math.max(0, Math.floor((referenceNow - startedMs) / 1000)) - pausedSeconds;
+  // Clamp after subtracting pausedSeconds, not before — otherwise inconsistent
+  // data (pausedSeconds larger than the wall-clock delta) could drive elapsed
+  // negative and hand back more remaining time than the game's own duration.
+  const elapsedSeconds = Math.max(0, Math.floor((referenceNow - startedMs) / 1000) - pausedSeconds);
   const remainingSeconds = Math.ceil(durationSeconds - elapsedSeconds);
   if (remainingSeconds <= 0) return { action: 'complete' };
   return { action: 'restore', remainingSeconds, paused: !!pausedAt };
