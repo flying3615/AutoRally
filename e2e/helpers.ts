@@ -3,6 +3,7 @@ import { _electron } from 'playwright';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
+import { pathToFileURL } from 'url';
 
 type AppFixture = {
   app: ElectronApplication;
@@ -56,7 +57,15 @@ export const test = base.extend<AppFixture>({
   },
 
   page: async ({ app }, use) => {
-    const page = await app.firstWindow();
+    const mainRendererUrl = pathToFileURL(
+      path.join(__dirname, '..', 'dist', 'renderer', 'index.html')
+    ).toString();
+    const isMainRenderer = (candidate: Page) => (
+      !candidate.isClosed() && candidate.url() === mainRendererUrl
+    );
+    const page = app.windows().find(isMainRenderer)
+      ?? await app.waitForEvent('window', { predicate: isMainRenderer });
+
     await page.waitForFunction(() => (
       Boolean(window.api)
       && document.readyState !== 'loading'
