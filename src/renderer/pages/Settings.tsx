@@ -187,7 +187,7 @@ function HistoricalDataCleanupDialog({ onClose, onSuccess }: {
   const [error, setError] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const confirmationInputRef = useRef<HTMLInputElement>(null);
-  const canClear = confirmationText === '清理' && !busy;
+  const canClear = confirmationText === 'CLEAR' && !busy;
 
   useEffect(() => {
     confirmationInputRef.current?.focus();
@@ -268,7 +268,7 @@ function HistoricalDataCleanupDialog({ onClose, onSuccess }: {
 
         <div className="mt-5">
           <label htmlFor="historical-data-confirmation" className="block text-xs font-semibold text-zinc-500 mb-1">
-            Type 清理 to confirm
+            Type CLEAR to confirm
           </label>
           <input
             id="historical-data-confirmation"

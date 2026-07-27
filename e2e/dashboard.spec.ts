@@ -115,14 +115,14 @@ test.describe('Dashboard', () => {
     await page.getByRole('button', { name: 'Clear Historical Data' }).click();
 
     const dialog = page.getByRole('dialog', { name: 'Clear historical data' });
-    const confirmation = dialog.getByLabel('Type 清理 to confirm');
+    const confirmation = dialog.getByLabel('Type CLEAR to confirm');
     const clearButton = dialog.getByRole('button', { name: 'Permanently Clear Data' });
     await expect(dialog).toBeVisible();
     await expect(clearButton).toBeDisabled();
 
     await confirmation.fill('clear');
     await expect(clearButton).toBeDisabled();
-    await confirmation.fill('清理');
+    await confirmation.fill('CLEAR');
     await expect(clearButton).toBeEnabled();
 
     await clearButton.click();
@@ -150,8 +150,8 @@ test.describe('Dashboard', () => {
     await page.getByRole('button', { name: 'Clear Historical Data' }).click();
 
     const dialog = page.getByRole('dialog', { name: 'Clear historical data' });
-    const confirmation = dialog.getByLabel('Type 清理 to confirm');
-    await confirmation.fill('清理');
+    const confirmation = dialog.getByLabel('Type CLEAR to confirm');
+    await confirmation.fill('CLEAR');
     const clearButton = dialog.getByRole('button', { name: 'Permanently Clear Data' });
     await clearButton.focus();
     await expect(clearButton).toBeFocused();
@@ -190,9 +190,9 @@ test.describe('Dashboard', () => {
     await page.getByRole('button', { name: 'Clear Historical Data' }).click();
 
     const dialog = page.getByRole('dialog', { name: 'Clear historical data' });
-    const confirmation = dialog.getByLabel('Type 清理 to confirm');
+    const confirmation = dialog.getByLabel('Type CLEAR to confirm');
     const clearButton = dialog.getByRole('button', { name: 'Permanently Clear Data' });
-    await confirmation.fill('清理');
+    await confirmation.fill('CLEAR');
     await confirmation.focus();
 
     await page.keyboard.press('Tab');
@@ -216,7 +216,7 @@ test.describe('Dashboard', () => {
     await page.getByRole('button', { name: 'Clear Historical Data' }).click();
 
     const dialog = page.getByRole('dialog', { name: 'Clear historical data' });
-    await dialog.getByLabel('Type 清理 to confirm').fill('清理');
+    await dialog.getByLabel('Type CLEAR to confirm').fill('CLEAR');
     await page.keyboard.press('Escape');
     await expect(dialog).toBeHidden();
 
