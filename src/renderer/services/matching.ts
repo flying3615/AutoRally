@@ -287,7 +287,10 @@ export function generateMatches(
   });
 
   const waitRank = new Map(sorted.map((p, i) => [p.id, i]));
-  const poolMin = Math.min(...[...gameCount.values()]);
+  // Only the *current* pool's counts define the fairness baseline — gameCount also
+  // holds entries for players who have since checked out, and their stale (often
+  // lower) counts must not pin poolMin below what anyone still present has played.
+  const poolMin = Math.min(...pool.map(p => gameCount.get(p.id) ?? 0));
   const candidateByKey = new Map<string, CourtCandidate>();
   const seed = currentRound * CANDIDATES;
 

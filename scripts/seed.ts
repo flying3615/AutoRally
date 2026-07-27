@@ -175,16 +175,6 @@ async function seed() {
   console.log(`  Sessions: 2 (1 completed, 1 active)`);
   console.log(`  Games: 6 completed + 3 pending`);
   console.log(`  Payments: ~28 records`);
-
-  // Also copy to Electron userData dir so the app can use it
-  const electronDbPath = path.join(
-    process.env.HOME || '/tmp',
-    'Library', 'Application Support', 'autorally', 'autorally.db'
-  );
-  const dir = path.dirname(electronDbPath);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  fs.copyFileSync(dbPath, electronDbPath);
-  console.log(`\nCopied to Electron userData: ${electronDbPath}`);
 }
 
 seed().catch(console.error);

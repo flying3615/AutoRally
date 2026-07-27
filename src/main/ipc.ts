@@ -280,6 +280,26 @@ export async function registerIpcHandlers() {
       [new Date().toISOString(), id]);
   });
 
+  // Persists pause state so a restart mid-pause doesn't recompute elapsed time
+  // as if the game had been running the whole time (see getPlayingTimerRecovery).
+  ipcMain.handle('games:pause', (_e, id: string) => {
+    const game = queryOne<{ pausedAt: string | null }>('SELECT pausedAt FROM games WHERE id = ?', [id]);
+    if (!game || game.pausedAt) return;
+    run('UPDATE games SET pausedAt = ? WHERE id = ?', [new Date().toISOString(), id]);
+  });
+
+  ipcMain.handle('games:resume', (_e, id: string) => {
+    const game = queryOne<{ pausedAt: string | null; pausedSeconds: number }>(
+      'SELECT pausedAt, pausedSeconds FROM games WHERE id = ?', [id]);
+    if (!game || !game.pausedAt) return;
+    const pausedMs = Date.parse(game.pausedAt);
+    // A corrupt/invalid pausedAt must not propagate NaN into pausedSeconds —
+    // treat it as zero elapsed pause time rather than poisoning the column.
+    const elapsed = Number.isFinite(pausedMs) ? Math.max(0, Math.floor((Date.now() - pausedMs) / 1000)) : 0;
+    run('UPDATE games SET pausedAt = NULL, pausedSeconds = ? WHERE id = ?',
+      [game.pausedSeconds + elapsed, id]);
+  });
+
   ipcMain.handle('games:delete', (_e, id: string) => {
     run('DELETE FROM games WHERE id = ? AND status = ?', [id, 'pending']);
   });

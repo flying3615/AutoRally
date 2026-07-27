@@ -65,7 +65,7 @@ export function useMatchRoundLifecycle({
     for (const game of activeGames) {
       if (timers.has(game.courtNumber) || recoveringGameIdsRef.current.has(game.id)) continue;
 
-      const recovery = getPlayingTimerRecovery(game.startedAt, durationSeconds);
+      const recovery = getPlayingTimerRecovery(game.startedAt, durationSeconds, game.pausedAt, game.pausedSeconds ?? 0);
       if (!recovery) continue;
 
       recoveringGameIdsRef.current.add(game.id);
@@ -77,10 +77,13 @@ export function useMatchRoundLifecycle({
         startGame(game.courtNumber, recovery.remainingSeconds / 60, () => {
           window.api.gamesComplete(game.id).then(() => load());
         });
+        // The game was still paused when the app closed — restore that state
+        // rather than letting it run from the recovered remaining time.
+        if (recovery.paused) pauseGame(game.courtNumber);
         window.setTimeout(() => recoveringGameIdsRef.current.delete(game.id), 0);
       }
     }
-  }, [activeGames, timers, gameDuration, startGame, load]);
+  }, [activeGames, timers, gameDuration, startGame, pauseGame, load]);
 
   const handleStartRound = useCallback(async () => {
     if (pendingGames.length === 0) return;
@@ -104,13 +107,18 @@ export function useMatchRoundLifecycle({
   const pauseAll = useCallback(() => {
     for (const game of activeGames) {
       pauseGame(game.courtNumber);
+      // Persist so a restart while paused doesn't count paused time as elapsed.
+      window.api.gamesPause(game.id);
     }
   }, [activeGames, pauseGame]);
 
   const resumeAll = useCallback(() => {
     for (const game of activeGames) {
       const timer = timers.get(game.courtNumber);
-      if (timer?.phase === 'paused') resumeGame(game.courtNumber);
+      if (timer?.phase === 'paused') {
+        resumeGame(game.courtNumber);
+        window.api.gamesResume(game.id);
+      }
     }
   }, [activeGames, resumeGame, timers]);
 

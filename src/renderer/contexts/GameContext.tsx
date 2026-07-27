@@ -26,13 +26,12 @@ export function GameProvider({ children }: { children: ReactNode }) {
     onEndedRef.current.set(courtNumber, onEnded);
 
     timerRef.current.start(courtNumber, durationMinutes, (remaining, phase) => {
+      // Keep the 'ended' entry visible (like every other phase) so the UI can
+      // render "round over" state — it gets replaced when the next round starts
+      // and explicitly cleared by earlyFinishGame.
       setTimers(prev => {
         const next = new Map(prev);
-        if (phase === 'ended') {
-          next.delete(courtNumber); // clean up on natural end
-        } else {
-          next.set(courtNumber, { remaining, phase });
-        }
+        next.set(courtNumber, { remaining, phase });
         return next;
       });
 
