@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generateMatches } from '../renderer/services/matching';
+import { generateMatches, type MatchResult } from '../renderer/services/matching';
 import type { Game } from '../shared/types';
 import fs from 'fs';
 import path from 'path';
@@ -12,8 +12,46 @@ interface PlayerInPool {
   checkinTime: string;
 }
 
+const CHECKIN_REFERENCE = Date.parse('2026-01-01T12:00:00.000Z');
+
 function makePlayer(id: string, name: string, gender: 'male' | 'female', level: number, minutesAgo = 0): PlayerInPool {
-  return { id, name, gender, level, checkinTime: new Date(Date.now() - minutesAgo * 60_000).toISOString() };
+  return { id, name, gender, level, checkinTime: new Date(CHECKIN_REFERENCE - minutesAgo * 60_000).toISOString() };
+}
+
+function assertMatchesAreValid(pool: PlayerInPool[], matches: MatchResult[], courtCount: number): void {
+  expect(matches.length).toBeLessThanOrEqual(courtCount);
+
+  const playersById = new Map(pool.map(player => [player.id, player]));
+  const allIds = matches.flatMap(match => [...match.team1, ...match.team2]);
+  expect(new Set(allIds).size).toBe(allIds.length);
+  expect(allIds.every(id => playersById.has(id))).toBe(true);
+
+  const getPlayers = (ids: readonly string[]) => ids.map(id => playersById.get(id)!);
+  for (const match of matches) {
+    const ids = [...match.team1, ...match.team2];
+    const players = getPlayers(ids);
+    const maleCount = players.filter(player => player.gender === 'male').length;
+    const femaleCount = players.length - maleCount;
+
+    expect(ids).toHaveLength(4);
+    switch (match.gameType) {
+      case 'mixed':
+        expect([maleCount, femaleCount]).toEqual([2, 2]);
+        for (const team of [match.team1, match.team2]) {
+          expect(getPlayers(team).map(player => player.gender).sort()).toEqual(['female', 'male']);
+        }
+        break;
+      case 'male-double':
+        expect(maleCount).toBe(4);
+        break;
+      case 'female-double':
+        expect(femaleCount).toBe(4);
+        break;
+      case 'open-double':
+        expect([maleCount, femaleCount].sort()).toEqual([1, 3]);
+        break;
+    }
+  }
 }
 
 describe('generateMatches', () => {
@@ -487,6 +525,108 @@ describe('generateMatches', () => {
         }
       }
     }
+  });
+
+  it('keeps a full valid schedule above the per-level candidate cap', () => {
+    const pool = Array.from({ length: 40 }, (_, index) =>
+      makePlayer(`p${index + 1}`, `P${index + 1}`, index % 2 === 0 ? 'male' : 'female', 3, index),
+    );
+
+    const matches = generateMatches(pool, 4, 1, []);
+
+    expect(matches).toHaveLength(4);
+    assertMatchesAreValid(pool, matches, 4);
+  });
+
+  it('counts playing games when selecting the lowest-play-count players', () => {
+    const pool = Array.from({ length: 8 }, (_, index) =>
+      makePlayer(`p${index + 1}`, `P${index + 1}`, 'male', 3, index),
+    );
+    const playingGame = {
+      id: 'playing-r1-c1', sessionId: 's', courtNumber: 1,
+      team1Player1Id: 'p1', team1Player2Id: 'p2',
+      team2Player1Id: 'p3', team2Player2Id: 'p4',
+      status: 'playing', roundNumber: 1, gameType: 'male-double',
+      startedAt: null, endedAt: null,
+    } satisfies Game;
+
+    const matches = generateMatches(pool, 1, 2, [playingGame]);
+    const selectedIds = matches.flatMap(match => [...match.team1, ...match.team2]).sort();
+
+    assertMatchesAreValid(pool, matches, 1);
+    expect(selectedIds).toEqual(['p5', 'p6', 'p7', 'p8']);
+  });
+
+  it('seats a zero-game late arrival when a court has capacity', () => {
+    const pool = [
+      ...Array.from({ length: 7 }, (_, index) =>
+        makePlayer(`p${index + 1}`, `P${index + 1}`, 'male', 3, index + 1),
+      ),
+      makePlayer('newcomer', 'Newcomer', 'male', 3, 0),
+    ];
+    const completedGames = [1, 2].map(round => ({
+      id: `completed-r${round}`, sessionId: 's', courtNumber: 1,
+      team1Player1Id: 'p1', team1Player2Id: 'p2',
+      team2Player1Id: 'p3', team2Player2Id: 'p4',
+      status: 'completed' as const, roundNumber: round, gameType: 'male-double' as const,
+      startedAt: null, endedAt: null,
+    }));
+
+    const matches = generateMatches(pool, 1, 3, completedGames);
+    const selectedIds = matches.flatMap(match => [...match.team1, ...match.team2]);
+
+    assertMatchesAreValid(pool, matches, 1);
+    expect(selectedIds).toContain('newcomer');
+  });
+
+  it.each([
+    {
+      name: 'one all-female level-one court',
+      courtCount: 1,
+      pool: Array.from({ length: 4 }, (_, index) =>
+        makePlayer(`f${index + 1}`, `F${index + 1}`, 'female', 1, index),
+      ),
+    },
+    {
+      name: 'a gender-imbalanced pool that cannot fill every requested court',
+      courtCount: 2,
+      pool: [
+        ...Array.from({ length: 6 }, (_, index) =>
+          makePlayer(`m${index + 1}`, `M${index + 1}`, 'male', 2, index),
+        ),
+        makePlayer('f1', 'F1', 'female', 2, 6),
+      ],
+    },
+    {
+      name: 'three courts across levels one through five',
+      courtCount: 3,
+      pool: Array.from({ length: 13 }, (_, index) =>
+        makePlayer(
+          `p${index + 1}`,
+          `P${index + 1}`,
+          index % 3 === 0 ? 'female' : 'male',
+          (index % 5) + 1,
+          index,
+        ),
+      ),
+    },
+    {
+      name: 'four courts with more than 36 players',
+      courtCount: 4,
+      pool: Array.from({ length: 37 }, (_, index) =>
+        makePlayer(
+          `p${index + 1}`,
+          `P${index + 1}`,
+          index % 2 === 0 ? 'male' : 'female',
+          (index % 5) + 1,
+          index,
+        ),
+      ),
+    },
+  ])('maintains scheduling invariants for $name', ({ pool, courtCount }) => {
+    const matches = generateMatches(pool, courtCount, 7, []);
+
+    assertMatchesAreValid(pool, matches, courtCount);
   });
 
   it('does not rest a level-isolated player two rounds in a row', () => {
