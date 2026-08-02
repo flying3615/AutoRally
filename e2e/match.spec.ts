@@ -269,7 +269,10 @@ test.describe('Match Flow', () => {
     await navigateTo(page, '/');
     await navigateTo(page, `/match/${session.id}`);
 
-    await page.getByRole('button', { name: /Generate Matches/ }).click();
+    const generateMatchesButton = page.getByRole('button', { name: /Generate Matches/ });
+    const matchControls = generateMatchesButton.locator('xpath=../..');
+    await expect(matchControls.getByText('Waiting 8', { exact: true })).toBeVisible();
+    await generateMatchesButton.click();
     await expect.poll(async () => {
       const games = await page.evaluate((sid) => window.api.gamesListBySession(sid), session.id) as StoredGame[];
       return games.filter(game => game.status === 'pending').length;
