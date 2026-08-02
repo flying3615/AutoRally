@@ -50,6 +50,8 @@ function assertMatchesAreValid(pool: PlayerInPool[], matches: MatchResult[], cou
       case 'open-double':
         expect([maleCount, femaleCount].sort()).toEqual([1, 3]);
         break;
+      default:
+        expect.fail(`Unsupported game type: ${match.gameType}`);
     }
   }
 }
