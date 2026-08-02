@@ -1,9 +1,82 @@
+import { type Page } from '@playwright/test';
 import { test, expect, addTestPlayers, createSession, checkinPlayer, navigateTo } from './helpers';
 
+type Gender = 'male' | 'female';
+
+interface StoredGame {
+  id: string;
+  courtNumber: number;
+  status: string;
+  gameType: string;
+  team1Player1Id: string;
+  team1Player2Id: string;
+  team2Player1Id: string;
+  team2Player2Id: string;
+}
+
+interface StoredPlayer {
+  id: string;
+  gender: Gender;
+}
+
+interface StoredAttendance {
+  id: string;
+  playerId: string;
+  paused: number;
+}
+
+function gamePlayerIds(game: StoredGame): string[] {
+  return [
+    game.team1Player1Id,
+    game.team1Player2Id,
+    game.team2Player1Id,
+    game.team2Player2Id,
+  ];
+}
+
+function expectStoredGameSemantics(game: StoredGame, players: Map<string, StoredPlayer>) {
+  const ids = gamePlayerIds(game);
+  expect(new Set(ids).size, 'each game must use four distinct players').toBe(4);
+
+  const gamePlayers = ids.map((id) => {
+    const player = players.get(id);
+    expect(player, `game references unknown player ${id}`).toBeDefined();
+    if (!player) throw new Error(`game references unknown player ${id}`);
+    return player;
+  });
+  const genders = gamePlayers.map(player => player.gender);
+  const teamGenders = [
+    genders.slice(0, 2),
+    genders.slice(2, 4),
+  ];
+  const maleCount = genders.filter(gender => gender === 'male').length;
+
+  switch (game.gameType) {
+    case 'mixed':
+      expect(maleCount).toBe(2);
+      for (const team of teamGenders) {
+        expect(team.filter(gender => gender === 'male')).toHaveLength(1);
+        expect(team.filter(gender => gender === 'female')).toHaveLength(1);
+      }
+      break;
+    case 'male-double':
+      expect(maleCount).toBe(4);
+      break;
+    case 'female-double':
+      expect(maleCount).toBe(0);
+      break;
+    case 'open-double':
+      expect([1, 3]).toContain(maleCount);
+      break;
+    default:
+      throw new Error(`Unknown stored game type: ${game.gameType}`);
+  }
+}
+
 test.describe('Match Flow', () => {
-  async function setupMatch(page: any, playerCount = 12) {
+  async function setupMatch(page: Page, playerCount = 12, courtCount = 4) {
     const players = await addTestPlayers(page, playerCount);
-    const session = await createSession(page, 4) as { id: string };
+    const session = await createSession(page, courtCount) as { id: string };
     for (const p of players) {
       await checkinPlayer(page, p.id, session.id);
     }
@@ -145,11 +218,89 @@ test.describe('Match Flow', () => {
     await page.getByRole('button', { name: /Generate Matches/ }).click();
     await expect(page.getByText(/Auto-start in/)).toBeVisible({ timeout: 5000 });
 
-    const games = await page.evaluate((sid) => window.api.gamesListBySession(sid), session.id) as any[];
-    const pending = games.filter((g: any) => g.status === 'pending');
+    await expect.poll(async () => {
+      const games = await page.evaluate((sid) => window.api.gamesListBySession(sid), session.id) as StoredGame[];
+      return games.filter(game => game.status === 'pending').length;
+    }).toBe(4);
+
+    const [games, players, attendance] = await page.evaluate(async (sid) => Promise.all([
+      window.api.gamesListBySession(sid),
+      window.api.playersList(),
+      window.api.attendanceListBySession(sid),
+    ]), session.id) as [StoredGame[], StoredPlayer[], StoredAttendance[]];
+    const pending = games.filter(game => game.status === 'pending');
+    const playerById = new Map(players.map(player => [player.id, player]));
+    const selectedIds = pending.flatMap(gamePlayerIds);
+    const checkedInIds = new Set(attendance.map(record => record.playerId));
 
     expect(pending).toHaveLength(4);
-    expect(new Set(pending.map((g: any) => g.courtNumber)).size).toBe(4);
+    expect(new Set(pending.map(game => game.courtNumber)).size).toBe(4);
+    for (const game of pending) expectStoredGameSemantics(game, playerById);
+    expect(new Set(selectedIds).size).toBe(16);
+    for (const playerId of selectedIds) {
+      expect(checkedInIds.has(playerId)).toBe(true);
+    }
+  });
+
+  test('excludes paused and checked-out players from persisted matches', async ({ page }) => {
+    const { session, players } = await setupMatch(page, 10, 2);
+    const attendance = await page.evaluate(
+      (sid) => window.api.attendanceListBySession(sid),
+      session.id,
+    ) as StoredAttendance[];
+    const pausedPlayerId = players[0]!.id;
+    const checkedOutPlayerId = players[1]!.id;
+    const pausedAttendance = attendance.find(record => record.playerId === pausedPlayerId);
+    const checkedOutAttendance = attendance.find(record => record.playerId === checkedOutPlayerId);
+
+    expect(pausedAttendance).toBeDefined();
+    expect(checkedOutAttendance).toBeDefined();
+    if (!pausedAttendance || !checkedOutAttendance) {
+      throw new Error('Expected test players to have attendance records');
+    }
+
+    await page.evaluate(async ({ pausedAttendanceId, checkedOutAttendanceId }) => {
+      await window.api.attendanceSetPaused(pausedAttendanceId, true);
+      await window.api.attendanceRemove(checkedOutAttendanceId);
+    }, {
+      pausedAttendanceId: pausedAttendance.id,
+      checkedOutAttendanceId: checkedOutAttendance.id,
+    });
+    await navigateTo(page, '/');
+    await navigateTo(page, `/match/${session.id}`);
+
+    const generateMatchesButton = page.getByRole('button', { name: /Generate Matches/ });
+    const matchControls = generateMatchesButton.locator('xpath=../..');
+    await expect(matchControls.getByText('Waiting 8', { exact: true })).toBeVisible();
+    await generateMatchesButton.click();
+    await expect.poll(async () => {
+      const games = await page.evaluate((sid) => window.api.gamesListBySession(sid), session.id) as StoredGame[];
+      return games.filter(game => game.status === 'pending').length;
+    }).toBe(2);
+
+    const [games, allPlayers, remainingAttendance] = await page.evaluate(async (sid) => Promise.all([
+      window.api.gamesListBySession(sid),
+      window.api.playersList(),
+      window.api.attendanceListBySession(sid),
+    ]), session.id) as [StoredGame[], StoredPlayer[], StoredAttendance[]];
+    const pending = games.filter(game => game.status === 'pending');
+    const playerById = new Map(allPlayers.map(player => [player.id, player]));
+    const eligibleIds = new Set(
+      remainingAttendance
+        .filter(record => record.paused !== 1)
+        .map(record => record.playerId),
+    );
+    const selectedIds = pending.flatMap(gamePlayerIds);
+
+    expect(eligibleIds.size).toBe(8);
+    expect(pending).toHaveLength(2);
+    for (const game of pending) expectStoredGameSemantics(game, playerById);
+    expect(selectedIds).not.toContain(pausedPlayerId);
+    expect(selectedIds).not.toContain(checkedOutPlayerId);
+    expect(new Set(selectedIds).size).toBe(8);
+    for (const playerId of selectedIds) {
+      expect(eligibleIds.has(playerId)).toBe(true);
+    }
   });
 
   test('pre-schedules the next round while a round is live', async ({ page }) => {
