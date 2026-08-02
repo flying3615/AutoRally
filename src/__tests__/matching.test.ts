@@ -609,7 +609,7 @@ describe('generateMatches', () => {
     {
       name: 'three courts across levels one through five',
       courtCount: 3,
-      expectedMinMatches: 1,
+      expectedMinMatches: 3,
       pool: Array.from({ length: 13 }, (_, index) =>
         makePlayer(
           `p${index + 1}`,
@@ -623,7 +623,7 @@ describe('generateMatches', () => {
     {
       name: 'four courts with more than 36 players',
       courtCount: 4,
-      expectedMinMatches: 1,
+      expectedMinMatches: 4,
       pool: Array.from({ length: 37 }, (_, index) =>
         makePlayer(
           `p${index + 1}`,
