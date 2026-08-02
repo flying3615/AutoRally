@@ -28,6 +28,8 @@ function assertMatchesAreValid(pool: PlayerInPool[], matches: MatchResult[], cou
 
   const getPlayers = (ids: readonly string[]) => ids.map(id => playersById.get(id)!);
   for (const match of matches) {
+    expect(match.team1).toHaveLength(2);
+    expect(match.team2).toHaveLength(2);
     const ids = [...match.team1, ...match.team2];
     const players = getPlayers(ids);
     const maleCount = players.filter(player => player.gender === 'male').length;
@@ -540,10 +542,12 @@ describe('generateMatches', () => {
     assertMatchesAreValid(pool, matches, 4);
   });
 
-  it('counts playing games when selecting the lowest-play-count players', () => {
+  it('treats playing games as history when seating players who rested last round', () => {
     const pool = Array.from({ length: 8 }, (_, index) =>
-      makePlayer(`p${index + 1}`, `P${index + 1}`, 'male', 3, index),
+      makePlayer(`p${index + 1}`, `P${index + 1}`, 'male', 3, 8 - index),
     );
+    // Without the playing game, p1-p4 are favored by the check-in tiebreak.
+    // Counting it gives p5-p8 the lowest play counts and rest urgency instead.
     const playingGame = {
       id: 'playing-r1-c1', sessionId: 's', courtNumber: 1,
       team1Player1Id: 'p1', team1Player2Id: 'p2',
@@ -555,6 +559,7 @@ describe('generateMatches', () => {
     const matches = generateMatches(pool, 1, 2, [playingGame]);
     const selectedIds = matches.flatMap(match => [...match.team1, ...match.team2]).sort();
 
+    expect(matches).toHaveLength(1);
     assertMatchesAreValid(pool, matches, 1);
     expect(selectedIds).toEqual(['p5', 'p6', 'p7', 'p8']);
   });
@@ -585,6 +590,7 @@ describe('generateMatches', () => {
     {
       name: 'one all-female level-one court',
       courtCount: 1,
+      expectedMinMatches: 1,
       pool: Array.from({ length: 4 }, (_, index) =>
         makePlayer(`f${index + 1}`, `F${index + 1}`, 'female', 1, index),
       ),
@@ -592,6 +598,7 @@ describe('generateMatches', () => {
     {
       name: 'a gender-imbalanced pool that cannot fill every requested court',
       courtCount: 2,
+      expectedMinMatches: 1,
       pool: [
         ...Array.from({ length: 6 }, (_, index) =>
           makePlayer(`m${index + 1}`, `M${index + 1}`, 'male', 2, index),
@@ -602,6 +609,7 @@ describe('generateMatches', () => {
     {
       name: 'three courts across levels one through five',
       courtCount: 3,
+      expectedMinMatches: 1,
       pool: Array.from({ length: 13 }, (_, index) =>
         makePlayer(
           `p${index + 1}`,
@@ -615,6 +623,7 @@ describe('generateMatches', () => {
     {
       name: 'four courts with more than 36 players',
       courtCount: 4,
+      expectedMinMatches: 1,
       pool: Array.from({ length: 37 }, (_, index) =>
         makePlayer(
           `p${index + 1}`,
@@ -625,9 +634,10 @@ describe('generateMatches', () => {
         ),
       ),
     },
-  ])('maintains scheduling invariants for $name', ({ pool, courtCount }) => {
+  ])('maintains scheduling invariants for $name', ({ pool, courtCount, expectedMinMatches }) => {
     const matches = generateMatches(pool, courtCount, 7, []);
 
+    expect(matches.length).toBeGreaterThanOrEqual(expectedMinMatches);
     assertMatchesAreValid(pool, matches, courtCount);
   });
 
