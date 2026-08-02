@@ -14,7 +14,8 @@ After the prerequisite is met:
 2. Enable **Require a pull request before merging**.
 3. Enable **Require status checks to pass before merging**, then select exactly
    `CI / quality` and `CI / e2e`.
-4. Include administrators if maintainers should also be gated.
+4. Enable **Do not allow bypassing the above settings**. This applies the gate
+   to administrators/maintainers who otherwise can bypass branch protection.
 
 Each CI check must complete successfully at least once before GitHub offers it
 for selection. These check names intentionally remain stable: the workflow is
