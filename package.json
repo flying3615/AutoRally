@@ -1,6 +1,6 @@
 {
   "name": "autorally",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Badminton Club Manager - Player management, match scheduling, and fee tracking",
   "main": "dist/main/index.js",
   "scripts": {
