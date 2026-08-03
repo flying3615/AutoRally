@@ -51,7 +51,14 @@ export const test = base.extend<AppFixture>({
         }
       }
     } finally {
-      await app.evaluate(({ app }) => app.exit(0));
+      // app.close() (unlike app.evaluate(() => app.exit(0))) waits for the
+      // Electron process to actually exit and closes Playwright's own debug
+      // connection to it. Skipping that wait left a dangling handle open
+      // across the 44 per-test launches, which the Node worker's own exit
+      // then had to wait out — intermittently past the 45s teardown budget,
+      // failing CI with "Worker teardown timeout exceeded" despite every
+      // test passing.
+      await app.close();
       try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
     }
   },
