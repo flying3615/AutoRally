@@ -328,6 +328,50 @@ test.describe('Match Flow', () => {
     await expect(page.getByText('NEXT UP', { exact: true }).first()).toBeVisible();
   });
 
+  test('right-clicking a NEXT UP player opens the context menu and pausing excludes them from the next round', async ({ page }) => {
+    const { session, players } = await setupMatch(page, 16, 4);
+
+    await page.getByRole('button', { name: /Generate Matches/ }).click();
+    await page.getByRole('button', { name: /Skip Wait/ }).click();
+    await expect(page.getByText('In progress', { exact: true })).toBeVisible({ timeout: 5000 });
+
+    // The live round triggers a silent pre-schedule of the next round, shown as NEXT UP chips.
+    await expect.poll(async () => {
+      const games = await page.evaluate((sid) => window.api.gamesListBySession(sid), session.id) as StoredGame[];
+      return games.filter(game => game.status === 'pending').length;
+    }).toBeGreaterThan(0);
+
+    const pending = (await page.evaluate((sid) => window.api.gamesListBySession(sid), session.id) as StoredGame[])
+      .filter(game => game.status === 'pending');
+    const targetPlayerId = pending[0]!.team1Player1Id;
+    const targetPlayer = players.find(p => p.id === targetPlayerId);
+    expect(targetPlayer).toBeDefined();
+
+    const chip = page.locator('span[title*="Drag to swap"]').filter({ hasText: targetPlayer!.name }).first();
+    await chip.click({ button: 'right' });
+
+    await expect(page.getByText('Pause Scheduling', { exact: true })).toBeVisible();
+    await expect(page.getByText('Check Out Early', { exact: true })).toBeVisible();
+
+    await page.getByText('Pause Scheduling', { exact: true }).click();
+
+    await expect.poll(async () => {
+      const attendance = await page.evaluate(
+        (sid) => window.api.attendanceListBySession(sid),
+        session.id,
+      ) as StoredAttendance[];
+      return attendance.find(record => record.playerId === targetPlayerId)?.paused ?? 0;
+    }).toBe(1);
+
+    // The next round is re-drafted without the paused player.
+    await expect.poll(async () => {
+      const games = await page.evaluate((sid) => window.api.gamesListBySession(sid), session.id) as StoredGame[];
+      return games
+        .filter(game => game.status === 'pending')
+        .some(game => gamePlayerIds(game).includes(targetPlayerId));
+    }).toBe(false);
+  });
+
   test('replaces player in pending game via API (IPC test)', async ({ page }) => {
     const { players } = await setupMatch(page, 20);
 

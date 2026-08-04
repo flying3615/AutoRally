@@ -30,6 +30,13 @@ export const test = base.extend<AppFixture>({
         path.join(__dirname, '..', '.'),
         `--user-data-dir=${tmpDir}`,
       ],
+      // On macOS the Electron app still creates real windows; run it as a
+      // non-activating accessory app so the test run never steals focus from
+      // whatever the developer is working on.
+      env: {
+        ...process.env,
+        AUTORALLY_E2E: '1',
+      },
     });
 
     await use(app);
@@ -51,13 +58,15 @@ export const test = base.extend<AppFixture>({
         }
       }
     } finally {
-      // app.close() (unlike app.evaluate(() => app.exit(0))) waits for the
-      // Electron process to actually exit and closes Playwright's own debug
-      // connection to it. Skipping that wait left a dangling handle open
-      // across the 44 per-test launches, which the Node worker's own exit
-      // then had to wait out — intermittently past the 45s teardown budget,
-      // failing CI with "Worker teardown timeout exceeded" despite every
-      // test passing.
+      // Force-exit first so the session-close guard never runs: app.exit(0)
+      // skips before-quit/will-quit (no window close event, no guard), so the
+      // blocking "Unable to End Active Session" dialog cannot appear and
+      // preventDefault cannot keep the app open past the teardown timeout.
+      await app.evaluate(({ app }) => app.exit(0)).catch(() => {});
+      // Now wait for the process to actually exit. app.close() alone would run
+      // the session-close guard; app.exit(0) alone left a dangling handle open
+      // across the 44 per-test launches, intermittently past the 45s teardown
+      // budget, failing CI with "Worker teardown timeout exceeded".
       await app.close();
       try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
     }
