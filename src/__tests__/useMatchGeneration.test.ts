@@ -217,4 +217,30 @@ describe('useMatchGeneration', () => {
     expect(alertMock).not.toHaveBeenCalled();
     expect(load).not.toHaveBeenCalled();
   });
+
+  it('refreshes state after a failed re-draft that deleted pending games', async () => {
+    const api = mockApi(
+      [game('pending-game', 'pending', ['pending-1', 'pending-2', 'pending-3', 'pending-4'])],
+      5,
+      [
+        attendance('m1', 'male', 0, 0),
+        attendance('f1', 'female', 0, 1),
+        attendance('m2', 'male', 0, 2),
+      ],
+    );
+    const load = vi.fn().mockResolvedValue(undefined);
+
+    const result = await captureGenerate({
+      sessionId: SESSION_ID,
+      settings,
+      load,
+    })({ silent: true });
+
+    expect(result).toBe(false);
+    expect(api.gamesDelete).toHaveBeenCalledWith('pending-game');
+    expect(api.gamesCreate).not.toHaveBeenCalled();
+    // The pending round was already deleted in the database, so the renderer
+    // must be refreshed or it keeps showing the stale NEXT UP chips.
+    expect(load).toHaveBeenCalledOnce();
+  });
 });

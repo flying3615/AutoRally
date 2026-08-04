@@ -367,19 +367,15 @@ export function MatchPanel() {
   const handlePlayerPause = async (target: ContextMenuTarget) => {
     const wasPending = playerInPendingGames(target.playerId);
     await handleTogglePause(target);
-    if (wasPending) {
-      await handleGenerate({ silent: true });
-      await load();
-    }
+    // handleGenerate refreshes renderer state itself (success and failed
+    // re-drafts alike), so no extra load() is needed here.
+    if (wasPending) await handleGenerate({ silent: true });
   };
 
   const handlePlayerCheckout = async (target: ContextMenuTarget) => {
     const wasPending = playerInPendingGames(target.playerId);
     await handleCheckout(target);
-    if (wasPending) {
-      await handleGenerate({ silent: true });
-      await load();
-    }
+    if (wasPending) await handleGenerate({ silent: true });
   };
 
   const {

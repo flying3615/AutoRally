@@ -27,6 +27,7 @@ export function useMatchGeneration({
         window.api.gamesListBySession(sessionId) as Promise<GameInfo[]>,
         window.api.attendanceListBySession(sessionId) as Promise<AttendanceInfo[]>,
       ]);
+      const hadPending = freshGames.some(g => g.status === 'pending');
 
       for (const game of freshGames) {
         if (game.status === 'pending') {
@@ -74,6 +75,12 @@ export function useMatchGeneration({
         if (!silent) {
           alert(`Not enough players to generate matches (waiting pool has ${pool.length} players, need at least ${courtCount * 4})`);
         }
+        // A failed re-draft already deleted the old pending games — refresh the
+        // renderer so stale NEXT UP chips disappear. Skipping the reload when
+        // there was nothing to delete avoids a reload → retry → reload loop in
+        // the silent background pre-scheduler (which only runs with no pending
+        // games).
+        if (hadPending) await load();
         return false;
       }
 
@@ -90,7 +97,7 @@ export function useMatchGeneration({
           gameType: match.gameType,
         });
       }
-      load();
+      await load();
       return true;
     } catch (err: unknown) {
       if (!silent) {
