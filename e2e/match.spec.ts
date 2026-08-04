@@ -372,6 +372,65 @@ test.describe('Match Flow', () => {
     }).toBe(false);
   });
 
+  test('re-pre-schedules the NEXT UP round when the pool recovers after a failed re-draft', async ({ page }) => {
+    // One court, four players: every player is on court, so the pre-scheduled
+    // NEXT UP round reuses them. Pausing one NEXT UP player drops the eligible
+    // pool below four, the re-draft fails, and the NEXT UP round disappears.
+    // Un-pausing must make the silent pre-scheduler retry automatically.
+    const { session, players } = await setupMatch(page, 4, 1);
+
+    await page.getByRole('button', { name: /Generate Matches/ }).click();
+    await page.getByRole('button', { name: /Skip Wait/ }).click();
+    await expect(page.getByText('In progress', { exact: true })).toBeVisible({ timeout: 5000 });
+
+    await expect.poll(async () => {
+      const games = await page.evaluate((sid) => window.api.gamesListBySession(sid), session.id) as StoredGame[];
+      return games.filter(game => game.status === 'pending').length;
+    }).toBe(1);
+
+    const pending = (await page.evaluate((sid) => window.api.gamesListBySession(sid), session.id) as StoredGame[])
+      .filter(game => game.status === 'pending');
+    const targetPlayerId = pending[0]!.team1Player1Id;
+    const targetPlayer = players.find(p => p.id === targetPlayerId);
+    expect(targetPlayer).toBeDefined();
+
+    const chip = page.locator('span[title*="Drag to swap"]').filter({ hasText: targetPlayer!.name }).first();
+    await chip.click({ button: 'right' });
+    await page.getByText('Pause Scheduling', { exact: true }).click();
+
+    await expect.poll(async () => {
+      const attendance = await page.evaluate(
+        (sid) => window.api.attendanceListBySession(sid),
+        session.id,
+      ) as StoredAttendance[];
+      return attendance.find(record => record.playerId === targetPlayerId)?.paused ?? 0;
+    }).toBe(1);
+    await expect.poll(async () => {
+      const games = await page.evaluate((sid) => window.api.gamesListBySession(sid), session.id) as StoredGame[];
+      return games.filter(game => game.status === 'pending').length;
+    }).toBe(0);
+
+    // Resume from the on-court player tag (the paused player is still playing
+    // round one, so they only appear in the court grid, not the waiting pool).
+    const courtPlayer = page.locator('div.rounded-2xl div.grid div').filter({ hasText: targetPlayer!.name }).first();
+    await courtPlayer.click({ button: 'right' });
+    await page.getByText('Resume Scheduling', { exact: true }).click();
+
+    await expect.poll(async () => {
+      const attendance = await page.evaluate(
+        (sid) => window.api.attendanceListBySession(sid),
+        session.id,
+      ) as StoredAttendance[];
+      return attendance.find(record => record.playerId === targetPlayerId)?.paused ?? 1;
+    }).toBe(0);
+
+    // The attendance change re-triggers silent pre-scheduling: NEXT UP returns.
+    await expect.poll(async () => {
+      const games = await page.evaluate((sid) => window.api.gamesListBySession(sid), session.id) as StoredGame[];
+      return games.filter(game => game.status === 'pending').length;
+    }).toBeGreaterThan(0);
+  });
+
   test('replaces player in pending game via API (IPC test)', async ({ page }) => {
     const { players } = await setupMatch(page, 20);
 

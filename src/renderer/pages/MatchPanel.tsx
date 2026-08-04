@@ -367,13 +367,19 @@ export function MatchPanel() {
   const handlePlayerPause = async (target: ContextMenuTarget) => {
     const wasPending = playerInPendingGames(target.playerId);
     await handleTogglePause(target);
-    if (wasPending) await handleGenerate({ silent: true });
+    if (wasPending) {
+      await handleGenerate({ silent: true });
+      await load();
+    }
   };
 
   const handlePlayerCheckout = async (target: ContextMenuTarget) => {
     const wasPending = playerInPendingGames(target.playerId);
     await handleCheckout(target);
-    if (wasPending) await handleGenerate({ silent: true });
+    if (wasPending) {
+      await handleGenerate({ silent: true });
+      await load();
+    }
   };
 
   const {
@@ -385,6 +391,7 @@ export function MatchPanel() {
     pendingCountdown,
     resumeAll: handleResumeAll,
   } = useMatchRoundLifecycle({
+    attendance,
     activeGames,
     pendingGames,
     pendingRoundKey,
