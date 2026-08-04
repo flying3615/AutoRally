@@ -3,9 +3,10 @@ import type { TimerState } from '../../contexts/GameContext';
 import { getPlayingTimerRecovery } from './time';
 import { usePendingRoundCountdown } from './usePendingRoundCountdown';
 import type { GenerateOptions } from './useMatchGeneration';
-import type { GameInfo } from './types';
+import type { AttendanceInfo, GameInfo } from './types';
 
 interface UseMatchRoundLifecycleParams {
+  attendance: AttendanceInfo[];
   activeGames: GameInfo[];
   pendingGames: GameInfo[];
   pendingRoundKey: string;
@@ -20,6 +21,7 @@ interface UseMatchRoundLifecycleParams {
 }
 
 export function useMatchRoundLifecycle({
+  attendance,
   activeGames,
   pendingGames,
   pendingRoundKey,
@@ -32,31 +34,23 @@ export function useMatchRoundLifecycle({
   load,
   generatePendingRound,
 }: UseMatchRoundLifecycleParams) {
-  const nextRoundGeneratedRef = useRef(false);
   const generatingRef = useRef(false);
   const recoveringGameIdsRef = useRef<Set<string>>(new Set());
 
   // Pre-arrange the next round as soon as a round is live (kept populated all round).
-  // Runs silently; if there aren't enough players yet it will retry as the pool
-  // changes (generatePendingRound identity updates when attendance changes).
+  // Runs silently. Once a pending round exists it is left frozen; if there
+  // aren't enough eligible players yet (generation returned false), the
+  // attendance dependency re-runs this effect whenever the pool changes
+  // (check-in, unpause, pause, checkout) so the NEXT UP round eventually
+  // pre-schedules without requiring manual action.
   useEffect(() => {
-    if (nextRoundGeneratedRef.current || generatingRef.current) return;
+    if (generatingRef.current) return;
     if (activeGames.length === 0) return;
-    if (pendingGames.length > 0) {
-      nextRoundGeneratedRef.current = true;
-      return;
-    }
+    if (pendingGames.length > 0) return;
     generatingRef.current = true;
     Promise.resolve(generatePendingRound({ silent: true }))
-      .then(ok => { if (ok) nextRoundGeneratedRef.current = true; })
       .finally(() => { generatingRef.current = false; });
-  }, [activeGames.length, pendingGames.length, generatePendingRound]);
-
-  useEffect(() => {
-    if (activeGames.length === 0) {
-      nextRoundGeneratedRef.current = false;
-    }
-  }, [activeGames.length]);
+  }, [attendance, activeGames.length, pendingGames.length, generatePendingRound]);
 
   useEffect(() => {
     const durationSeconds = (Number(gameDuration) || 0) * 60;
@@ -87,7 +81,6 @@ export function useMatchRoundLifecycle({
 
   const handleStartRound = useCallback(async () => {
     if (pendingGames.length === 0) return;
-    nextRoundGeneratedRef.current = false;
     const duration = Number(gameDuration);
     for (const game of pendingGames) {
       await window.api.gamesStart(game.id);

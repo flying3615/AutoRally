@@ -275,7 +275,6 @@ export function MatchPanel() {
     pendingGames,
     pendingRoundKey,
     currentRound,
-    playingIds,
     attendedIds,
     pausedPlayerIds,
     checkedOutPlayerIds,
@@ -352,11 +351,32 @@ export function MatchPanel() {
   const handleGenerate = useMatchGeneration({
     sessionId,
     settings,
-    attendance,
-    playingIds,
-    activeGames,
     load,
   });
+
+  const playerInPendingGames = (playerId: string) =>
+    pendingGames.some(g => [
+      g.team1Player1Id,
+      g.team1Player2Id,
+      g.team2Player1Id,
+      g.team2Player2Id,
+    ].includes(playerId));
+
+  // Pausing/checking out a player who is already scheduled into the next round
+  // must re-draft that round, otherwise they would still take the court.
+  const handlePlayerPause = async (target: ContextMenuTarget) => {
+    const wasPending = playerInPendingGames(target.playerId);
+    await handleTogglePause(target);
+    // handleGenerate refreshes renderer state itself (success and failed
+    // re-drafts alike), so no extra load() is needed here.
+    if (wasPending) await handleGenerate({ silent: true });
+  };
+
+  const handlePlayerCheckout = async (target: ContextMenuTarget) => {
+    const wasPending = playerInPendingGames(target.playerId);
+    await handleCheckout(target);
+    if (wasPending) await handleGenerate({ silent: true });
+  };
 
   const {
     anyPaused,
@@ -367,6 +387,7 @@ export function MatchPanel() {
     pendingCountdown,
     resumeAll: handleResumeAll,
   } = useMatchRoundLifecycle({
+    attendance,
     activeGames,
     pendingGames,
     pendingRoundKey,
@@ -506,8 +527,8 @@ export function MatchPanel() {
           target={ctxMenu.target}
           onClose={() => setCtxMenu(null)}
           onEdit={handleEdit}
-          onTogglePause={handleTogglePause}
-          onCheckout={handleCheckout}
+          onTogglePause={handlePlayerPause}
+          onCheckout={handlePlayerCheckout}
           onRestoreCheckin={handleRestoreCheckin}
         />
       )}

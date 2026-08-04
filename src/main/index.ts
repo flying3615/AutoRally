@@ -227,6 +227,12 @@ if (!app.requestSingleInstanceLock()) {
   app
     .whenReady()
     .then(() => {
+      // E2E runs on macOS still create real windows; keep them from stealing
+      // focus by running as a non-activating accessory app.
+      if (process.env.AUTORALLY_E2E === '1' && process.platform === 'darwin') {
+        app.dock?.hide();
+        app.setActivationPolicy('accessory');
+      }
       return runStartupSequence({
         createSplashWindow,
         initializeIpc: registerIpcHandlers,

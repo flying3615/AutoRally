@@ -77,9 +77,10 @@ function game(
   };
 }
 
-function mockApi(games: GameInfo[], maxRound = 5) {
+function mockApi(games: GameInfo[], maxRound = 5, attendanceList: AttendanceInfo[] = []) {
   const api = {
     gamesListBySession: vi.fn().mockResolvedValue(games),
+    attendanceListBySession: vi.fn().mockResolvedValue(attendanceList),
     gamesDelete: vi.fn().mockResolvedValue(undefined),
     gamesMaxRound: vi.fn().mockResolvedValue(maxRound),
     gamesCreate: vi.fn().mockResolvedValue(undefined),
@@ -109,23 +110,20 @@ describe('useMatchGeneration', () => {
   });
 
   it('cleans pending games and schedules checked-in non-paused players into the next round', async () => {
-    const api = mockApi([
-      game('pending-game', 'pending', ['pending-1', 'pending-2', 'pending-3', 'pending-4']),
-      game('completed-game', 'completed', ['history-1', 'history-2', 'history-3', 'history-4'], 4),
-    ]);
-    const load = vi.fn();
     const players = [
       ...Array.from({ length: 4 }, (_, index) => attendance(`m${index + 1}`, 'male', 0, index)),
       ...Array.from({ length: 4 }, (_, index) => attendance(`f${index + 1}`, 'female', 0, index + 4)),
       attendance('paused-player', 'male', 1, 9),
     ];
+    const api = mockApi([
+      game('pending-game', 'pending', ['pending-1', 'pending-2', 'pending-3', 'pending-4']),
+      game('completed-game', 'completed', ['history-1', 'history-2', 'history-3', 'history-4'], 4),
+    ], 5, players);
+    const load = vi.fn();
 
     const result = await captureGenerate({
       sessionId: SESSION_ID,
       settings,
-      attendance: players,
-      playingIds: new Set(),
-      activeGames: [],
       load,
     })();
 
@@ -164,8 +162,6 @@ describe('useMatchGeneration', () => {
         'history-3',
       ]),
     ];
-    const api = mockApi(activeGames);
-    const load = vi.fn();
     const players = [
       attendance(waitingIds[0]!, 'male', 0, 1),
       attendance(waitingIds[1]!, 'female', 0, 2),
@@ -177,14 +173,13 @@ describe('useMatchGeneration', () => {
       attendance(activeIds[3]!, 'female', 0, 8),
       attendance(pausedActiveId, 'male', 1, 0),
     ];
+    const api = mockApi(activeGames, 5, players);
+    const load = vi.fn();
     const eligibleIds = [...waitingIds, ...activeIds];
 
     const result = await captureGenerate({
       sessionId: SESSION_ID,
       settings,
-      attendance: players,
-      playingIds: new Set([...activeIds, pausedActiveId]),
-      activeGames,
       load,
     })();
 
@@ -201,27 +196,51 @@ describe('useMatchGeneration', () => {
   });
 
   it('returns false silently when fewer than four eligible players remain', async () => {
-    const api = mockApi([], 2);
+    const api = mockApi([], 2, [
+      attendance('m1', 'male', 0, 0),
+      attendance('f1', 'female', 0, 1),
+      attendance('m2', 'male', 0, 2),
+    ]);
     const load = vi.fn();
 
     const result = await captureGenerate({
       sessionId: SESSION_ID,
       settings,
-      attendance: [
-        attendance('m1', 'male', 0, 0),
-        attendance('f1', 'female', 0, 1),
-        attendance('m2', 'male', 0, 2),
-      ],
-      playingIds: new Set(),
-      activeGames: [],
       load,
     })({ silent: true });
 
     expect(result).toBe(false);
     expect(api.gamesListBySession).toHaveBeenCalledWith(SESSION_ID);
+    expect(api.attendanceListBySession).toHaveBeenCalledWith(SESSION_ID);
     expect(api.gamesMaxRound).toHaveBeenCalledWith(SESSION_ID);
     expect(api.gamesCreate).not.toHaveBeenCalled();
     expect(alertMock).not.toHaveBeenCalled();
     expect(load).not.toHaveBeenCalled();
+  });
+
+  it('refreshes state after a failed re-draft that deleted pending games', async () => {
+    const api = mockApi(
+      [game('pending-game', 'pending', ['pending-1', 'pending-2', 'pending-3', 'pending-4'])],
+      5,
+      [
+        attendance('m1', 'male', 0, 0),
+        attendance('f1', 'female', 0, 1),
+        attendance('m2', 'male', 0, 2),
+      ],
+    );
+    const load = vi.fn().mockResolvedValue(undefined);
+
+    const result = await captureGenerate({
+      sessionId: SESSION_ID,
+      settings,
+      load,
+    })({ silent: true });
+
+    expect(result).toBe(false);
+    expect(api.gamesDelete).toHaveBeenCalledWith('pending-game');
+    expect(api.gamesCreate).not.toHaveBeenCalled();
+    // The pending round was already deleted in the database, so the renderer
+    // must be refreshed or it keeps showing the stale NEXT UP chips.
+    expect(load).toHaveBeenCalledOnce();
   });
 });

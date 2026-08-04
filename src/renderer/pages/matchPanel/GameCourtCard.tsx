@@ -137,10 +137,11 @@ function PlayerTag({
 
 // ── NEXT UP chip — draggable / droppable next-round slot ──
 function NextUpChip({
-  game, slot, name, gender, onDropPlayer,
+  game, slot, name, gender, onDropPlayer, onContextMenu,
 }: {
   game: GameInfo; slot: CourtSlot; name: string; gender: string;
   onDropPlayer?: DropPlayerHandler;
+  onContextMenu?: PlayerContextHandler;
 }) {
   const [over, setOver] = useState(false);
   const dot = gender === 'male' ? genderColors.male.accent : genderColors.female.accent;
@@ -151,6 +152,7 @@ function NextUpChip({
     <span
       draggable
       title="Drag to swap — or drop a waiting-pool player here"
+      onContextMenu={(e) => { e.preventDefault(); onContextMenu?.(e, playerId); }}
       onDragStart={(e) => {
         e.dataTransfer.setData('application/x-player-id', playerId);
         e.dataTransfer.setData('application/x-source', source);
@@ -439,11 +441,11 @@ export function GameCourtCard({
           <span className="text-[10px] font-bold text-slate-400 shrink-0" style={{ letterSpacing: '0.1em' }}>NEXT UP</span>
           {nextUpGame ? (
             <div className="flex items-center gap-1.5 flex-wrap min-w-0">
-              <NextUpChip game={nextUpGame} slot="team1Player1Id" name={nextUpGame.t1p1Name} gender={nextUpGame.t1p1Gender} onDropPlayer={onDropPlayer} />
-              <NextUpChip game={nextUpGame} slot="team1Player2Id" name={nextUpGame.t1p2Name} gender={nextUpGame.t1p2Gender} onDropPlayer={onDropPlayer} />
+              <NextUpChip game={nextUpGame} slot="team1Player1Id" name={nextUpGame.t1p1Name} gender={nextUpGame.t1p1Gender} onDropPlayer={onDropPlayer} onContextMenu={onContextMenu} />
+              <NextUpChip game={nextUpGame} slot="team1Player2Id" name={nextUpGame.t1p2Name} gender={nextUpGame.t1p2Gender} onDropPlayer={onDropPlayer} onContextMenu={onContextMenu} />
               <span className="text-[11px] font-bold text-slate-300">vs</span>
-              <NextUpChip game={nextUpGame} slot="team2Player1Id" name={nextUpGame.t2p1Name} gender={nextUpGame.t2p1Gender} onDropPlayer={onDropPlayer} />
-              <NextUpChip game={nextUpGame} slot="team2Player2Id" name={nextUpGame.t2p2Name} gender={nextUpGame.t2p2Gender} onDropPlayer={onDropPlayer} />
+              <NextUpChip game={nextUpGame} slot="team2Player1Id" name={nextUpGame.t2p1Name} gender={nextUpGame.t2p1Gender} onDropPlayer={onDropPlayer} onContextMenu={onContextMenu} />
+              <NextUpChip game={nextUpGame} slot="team2Player2Id" name={nextUpGame.t2p2Name} gender={nextUpGame.t2p2Gender} onDropPlayer={onDropPlayer} onContextMenu={onContextMenu} />
             </div>
           ) : (
             <span className="text-[11px] text-zinc-400 font-medium truncate">Waiting for enough players to fill the next round</span>

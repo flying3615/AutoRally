@@ -5,9 +5,6 @@ import type { AttendanceInfo, GameInfo, Settings } from './types';
 interface UseMatchGenerationParams {
   sessionId: string | undefined;
   settings: Settings;
-  attendance: AttendanceInfo[];
-  playingIds: Set<string>;
-  activeGames: GameInfo[];
   load: () => void | Promise<void>;
 }
 
@@ -19,9 +16,6 @@ export interface GenerateOptions {
 export function useMatchGeneration({
   sessionId,
   settings,
-  attendance,
-  playingIds,
-  activeGames,
   load,
 }: UseMatchGenerationParams) {
   return useCallback(async (opts?: GenerateOptions): Promise<boolean> => {
@@ -29,7 +23,12 @@ export function useMatchGeneration({
     if (!sessionId) return false;
 
     try {
-      const freshGames = await window.api.gamesListBySession(sessionId) as GameInfo[];
+      const [freshGames, freshAttendance] = await Promise.all([
+        window.api.gamesListBySession(sessionId) as Promise<GameInfo[]>,
+        window.api.attendanceListBySession(sessionId) as Promise<AttendanceInfo[]>,
+      ]);
+      const hadPending = freshGames.some(g => g.status === 'pending');
+
       for (const game of freshGames) {
         if (game.status === 'pending') {
           await window.api.gamesDelete(game.id);
@@ -39,7 +38,14 @@ export function useMatchGeneration({
       const maxRound = await window.api.gamesMaxRound(sessionId) as number;
       const nextRound = maxRound + 1;
       const courtCount = Number(settings.courtCount) || 3;
-      const waitingAvailable = attendance.filter(a => !playingIds.has(a.playerId) && a.paused !== 1);
+      const activeGames = freshGames.filter(g => g.status === 'playing');
+      const playingIds = new Set(activeGames.flatMap(g => [
+        g.team1Player1Id,
+        g.team1Player2Id,
+        g.team2Player1Id,
+        g.team2Player2Id,
+      ]));
+      const waitingAvailable = freshAttendance.filter(a => !playingIds.has(a.playerId) && a.paused !== 1);
 
       let pool = waitingAvailable.map(a => ({
         id: a.playerId,
@@ -50,13 +56,8 @@ export function useMatchGeneration({
       }));
 
       if (pool.length < courtCount * 4) {
-        const activePlayerIds = new Set(activeGames.flatMap(g => [
-          g.team1Player1Id,
-          g.team1Player2Id,
-          g.team2Player1Id,
-          g.team2Player2Id,
-        ]));
-        const activeAvailable = attendance.filter(a => activePlayerIds.has(a.playerId) && a.paused !== 1);
+        const activePlayerIds = playingIds;
+        const activeAvailable = freshAttendance.filter(a => activePlayerIds.has(a.playerId) && a.paused !== 1);
         const extra = activeAvailable.map(a => ({
           id: a.playerId,
           name: a.name,
@@ -74,6 +75,12 @@ export function useMatchGeneration({
         if (!silent) {
           alert(`Not enough players to generate matches (waiting pool has ${pool.length} players, need at least ${courtCount * 4})`);
         }
+        // A failed re-draft already deleted the old pending games — refresh the
+        // renderer so stale NEXT UP chips disappear. Skipping the reload when
+        // there was nothing to delete avoids a reload → retry → reload loop in
+        // the silent background pre-scheduler (which only runs with no pending
+        // games).
+        if (hadPending) await load();
         return false;
       }
 
@@ -90,7 +97,7 @@ export function useMatchGeneration({
           gameType: match.gameType,
         });
       }
-      load();
+      await load();
       return true;
     } catch (err: unknown) {
       if (!silent) {
@@ -98,5 +105,5 @@ export function useMatchGeneration({
       }
       return false;
     }
-  }, [sessionId, settings, attendance, playingIds, activeGames, load]);
+  }, [sessionId, settings, load]);
 }

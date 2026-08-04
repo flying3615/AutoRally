@@ -82,13 +82,13 @@ export function useMatchPlayerActions({
     const newPaused = !target.paused;
     await window.api.attendanceSetPaused(target.attendanceId, newPaused);
     setCtxMenu(null);
-    load();
+    await load();
   };
 
   const handleCheckout = async (target: ContextMenuTarget) => {
     await window.api.attendanceRemove(target.attendanceId);
     setCtxMenu(null);
-    load();
+    await load();
   };
 
   const handleRestoreCheckin = async (target: ContextMenuTarget) => {
@@ -111,7 +111,7 @@ export function useMatchPlayerActions({
       return;
     }
     setCtxMenu(null);
-    load();
+    await load();
   };
 
   const handleEditSaved = () => {
