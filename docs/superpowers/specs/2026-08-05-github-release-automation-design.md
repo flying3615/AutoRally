@@ -18,7 +18,8 @@ Extend the existing `.github/workflows/ci.yml` workflow with a release job:
 - Check out the commit, install Node.js 22 dependencies with `npm ci`, and run
   `npm run dist:win`.
 - Read the version from `package.json`, create release tag `vVERSION`, and
-  publish a generated GitHub release with the matching
+  publish a GitHub release with automatically generated notes based on merged
+  pull requests and commits, plus the matching
   `release/AutoRally VERSION.exe` artifact.
 - Grant the workflow `contents: write` permission, while keeping pull-request
   validation read-only through job-level conditions.
@@ -34,6 +35,8 @@ guards the release job so ordinary pushes do not create releases. Build or
 test failures stop the release through job dependencies. Missing artifacts,
 invalid versions, or an existing release tag cause an explicit workflow
 failure rather than a successful-looking release.
+Release notes use GitHub's generated-notes support; this automation does not
+maintain a repository `CHANGELOG.md`.
 
 ## Validation
 
