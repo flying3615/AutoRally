@@ -13,7 +13,7 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   quality:
@@ -82,13 +82,40 @@ jobs:
             { encoding: 'utf8' }
           ));
 
-          if (!/^\d+\.\d+\.\d+$/.test(current.version)) {
-            throw new Error(`Invalid application version: ${current.version}`);
+          const parseStrictSemver = (value, label) => {
+            const match = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.exec(value);
+            if (!match) {
+              throw new Error(`Invalid ${label} version: ${value}`);
+            }
+
+            return match.slice(1).map(Number);
+          };
+
+          const compareSemver = (left, right) => {
+            for (let index = 0; index < left.length; index += 1) {
+              if (left[index] !== right[index]) {
+                return left[index] - right[index];
+              }
+            }
+
+            return 0;
+          };
+
+          const currentVersion = current.version;
+          const previousVersion = previous.version;
+          const currentSemver = parseStrictSemver(currentVersion, 'application');
+          const previousSemver = parseStrictSemver(previousVersion, 'previous application');
+          const versionComparison = compareSemver(currentSemver, previousSemver);
+
+          if (versionComparison < 0) {
+            throw new Error(
+              `Application version must be greater than the previous version. Previous: ${previousVersion}, current: ${currentVersion}`
+            );
           }
 
           fs.appendFileSync(
             process.env.GITHUB_OUTPUT,
-            `changed=${current.version !== previous.version}\nversion=${current.version}\n`
+            `changed=${versionComparison > 0}\nversion=${currentVersion}\n`
           );
           '@
           $script | node
@@ -126,13 +153,19 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           $tag = "v$env:VERSION"
-          gh release view $tag --repo "${{ github.repository }}" *> $null
-          if ($LASTEXITCODE -eq 0) {
+          $releaseResponse = (& gh api --include "repos/${{ github.repository }}/releases/tags/$tag" 2>&1 | Out-String).Trim()
+          $releaseExitCode = $LASTEXITCODE
+          $releaseStatusMatch = [regex]::Match($releaseResponse, 'HTTP/\d+(?:\.\d+)?\s+(\d{3})')
+          $releaseStatus = if ($releaseStatusMatch.Success) { [int]$releaseStatusMatch.Groups[1].Value } else { $null }
+
+          if ($releaseExitCode -eq 0) {
             throw "GitHub release already exists: $tag"
           }
-          if ($LASTEXITCODE -ne 1) {
-            throw "Failed to check for existing GitHub release: $tag"
+          if ($releaseStatus -eq 404) {
+            return
           }
+
+          throw "Failed to check for existing GitHub release: $tag`nExit code: $releaseExitCode`nResponse:`n$releaseResponse"
 
       - name: Fail if release tag already exists
         if: steps.version.outputs.changed == 'true'
@@ -142,13 +175,19 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           $tag = "v$env:VERSION"
-          gh api "repos/${{ github.repository }}/git/ref/tags/$tag" *> $null
-          if ($LASTEXITCODE -eq 0) {
+          $tagResponse = (& gh api --include "repos/${{ github.repository }}/git/ref/tags/$tag" 2>&1 | Out-String).Trim()
+          $tagExitCode = $LASTEXITCODE
+          $tagStatusMatch = [regex]::Match($tagResponse, 'HTTP/\d+(?:\.\d+)?\s+(\d{3})')
+          $tagStatus = if ($tagStatusMatch.Success) { [int]$tagStatusMatch.Groups[1].Value } else { $null }
+
+          if ($tagExitCode -eq 0) {
             throw "Git tag already exists: $tag"
           }
-          if ($LASTEXITCODE -ne 1) {
-            throw "Failed to check for existing Git tag: $tag"
+          if ($tagStatus -eq 404) {
+            return
           }
+
+          throw "Failed to check for existing Git tag: $tag`nExit code: $tagExitCode`nResponse:`n$tagResponse"
 
       - name: Publish GitHub release
         if: steps.version.outputs.changed == 'true'
