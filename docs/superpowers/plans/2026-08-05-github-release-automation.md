@@ -4,7 +4,7 @@
 
 **Goal:** Automatically build and publish a Windows GitHub release with generated release notes whenever a changed application version reaches `main`.
 
-**Architecture:** Extend `.github/workflows/ci.yml` with a release job that depends on the existing `quality` and `e2e` jobs. The workflow keeps `contents: read` at the top level, preserves pull-request cancellation plus unique non-canceling push workflow groups, and gives only the `release` job `contents: write`. That job runs only for a push to `main` whose `package.json` version increases from the previous commit, checks out with `fetch-depth: 0` and `persist-credentials: false`, serializes publication through a stable release concurrency group with `cancel-in-progress: false` and `queue: max`, builds the configured Windows portable executable on `windows-latest`, then uses GitHub CLI to create a uniquely tagged release with generated notes and the executable asset.
+**Architecture:** Extend `.github/workflows/ci.yml` with a release job that depends on the existing `quality` and `e2e` jobs. The workflow keeps `contents: read` at the top level, preserves pull-request cancellation plus unique non-canceling push workflow groups, and gives only the `release` job `contents: write`. The `quality`, `e2e`, and `release` checkout steps all use `persist-credentials: false`, with the release checkout also keeping `fetch-depth: 0`. The release job runs only for a push to `main` whose `package.json` version increases from the previous commit, serializes publication through a stable release concurrency group with `cancel-in-progress: false` and `queue: max`, builds the configured Windows portable executable on `windows-latest`, then uses GitHub CLI to create a uniquely tagged release with generated notes and the executable asset. Publication is mutually exclusive, but because independent push validations are retained, closely spaced version bumps are not guaranteed to publish in strict chronological order.
 
 **Tech Stack:** GitHub Actions, Node.js 22, npm, Electron Builder, GitHub CLI (`gh`).
 
@@ -18,8 +18,8 @@
 - Fail explicitly for invalid versions, missing artifacts, or existing release tags.
 - Keep workflow permissions at `contents: read`; grant only the `release` job `contents: write`.
 - Preserve the existing global concurrency behavior: PR runs still cancel superseded validations, while push workflow runs keep unique groups and are not canceled or replaced.
-- Serialize release publication with a stable release job concurrency group, `cancel-in-progress: false`, and `queue: max`.
-- Use `persist-credentials: false` on the release checkout step.
+- Serialize release publication with a stable release job concurrency group, `cancel-in-progress: false`, and `queue: max`, so publication is mutually exclusive without promising strict chronological ordering across closely spaced version bumps.
+- Use `persist-credentials: false` on the `quality`, `e2e`, and `release` checkout steps.
 - Keep pull-request validation read-only and do not change the existing CI commands.
 
 ---
@@ -51,6 +51,18 @@ jobs:
 The existing pull-request jobs remain read-only because they only use checkout,
 dependency installation, tests, and builds; only the `release` job receives
 contents write permission.
+
+Also update the existing `quality` and `e2e` checkout steps so each uses:
+
+```yaml
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+```
+
+This keeps the workflow token out of the npm, test, and build phases. The
+release checkout keeps `fetch-depth: 0` together with
+`persist-credentials: false`.
 
 - [ ] **Step 2: Add a release job after the existing CI jobs**
 
@@ -224,13 +236,14 @@ Append this job to `.github/workflows/ci.yml`:
 
 The workflow-level concurrency block stays unchanged so pull-request runs still
 cancel superseded validations while push workflow runs keep unique groups. The
-release job adds its own stable concurrency group with `queue: max` so only
-one release publishes at a time and additional versioned pushes wait instead
-of canceling or replacing an earlier running or pending publication. The
-checkout step keeps full history available for `github.event.before`
-comparisons and disables credential persistence; every later release step
-still has an explicit `if` guard because a successful "skipping release"
-step does not automatically stop later steps in a GitHub Actions job.
+release job adds its own stable concurrency group so release publication is
+mutually exclusive, but because push validations remain independent, closely
+spaced version bumps are not guaranteed to publish in strict chronological
+order. The checkout steps disable credential persistence everywhere, and the
+release checkout keeps full history available for `github.event.before`
+comparisons; every later release step still has an explicit `if` guard because
+a successful "skipping release" step does not automatically stop later steps
+in a GitHub Actions job.
 
 - [ ] **Step 3: Validate the workflow structure locally**
 
@@ -238,7 +251,7 @@ Run:
 
 ```powershell
 git diff --check
-node -e "const fs=require('fs'); const text=fs.readFileSync('.github/workflows/ci.yml','utf8'); const checks=[/permissions:\s*\r?\n\s*contents:\s*read/,/release:[\s\S]*?concurrency:\s*\r?\n\s*group:\s*\$\{\{ github\.workflow \}\}-release\s*\r?\n\s*cancel-in-progress:\s*false\s*\r?\n\s*queue:\s*max/,/release:[\s\S]*?permissions:\s*\r?\n\s*contents:\s*write/,/persist-credentials:\s*false/,/cancel-in-progress:\s*\$\{\{ github\.event_name == 'pull_request' \}\}/,/generate-notes/,/npm run dist:win/]; if (!checks.every((pattern)=>pattern.test(text))) process.exit(1)"
+node -e "const fs=require('fs'); const text=fs.readFileSync('.github/workflows/ci.yml','utf8'); const checks=[/permissions:\s*\r?\n\s*contents:\s*read/,/concurrency:\s*\r?\n\s*group:\s*\$\{\{ github\.workflow \}\}-\$\{\{ github\.event\.pull_request\.number \|\| github\.run_id \}\}/,/cancel-in-progress:\s*\$\{\{ github\.event_name == 'pull_request' \}\}/,/quality:[\s\S]*?- uses: actions\/checkout@v4\s*\r?\n\s*with:\s*\r?\n\s*persist-credentials:\s*false/,/e2e:[\s\S]*?- uses: actions\/checkout@v4\s*\r?\n\s*with:\s*\r?\n\s*persist-credentials:\s*false/,/release:[\s\S]*?concurrency:\s*\r?\n\s*group:\s*\$\{\{ github\.workflow \}\}-release\s*\r?\n\s*cancel-in-progress:\s*false\s*\r?\n\s*queue:\s*max/,/release:[\s\S]*?permissions:\s*\r?\n\s*contents:\s*write/,/release:[\s\S]*?- uses: actions\/checkout@v4\s*\r?\n\s*with:\s*\r?\n\s*fetch-depth:\s*0\s*\r?\n\s*persist-credentials:\s*false/,/generate-notes/,/npm run dist:win/]; if (!checks.every((pattern)=>pattern.test(text))) process.exit(1)"
 ```
 
 Expected output: both commands exit successfully with no whitespace errors.
