@@ -9,7 +9,7 @@ on:
       - main
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -47,3 +47,121 @@ jobs:
           name: e2e-test-results
           path: test-results/
           if-no-files-found: warn
+
+  release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs:
+      - quality
+      - e2e
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Check for application version bump
+        id: version
+        shell: pwsh
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          $script = @'
+          const childProcess = require('node:child_process');
+          const fs = require('node:fs');
+          const current = require('./package.json');
+          const previous = JSON.parse(childProcess.execFileSync(
+            'git',
+            ['show', `${process.env.BEFORE_SHA}:package.json`],
+            { encoding: 'utf8' }
+          ));
+
+          if (!/^\d+\.\d+\.\d+$/.test(current.version)) {
+            throw new Error(`Invalid application version: ${current.version}`);
+          }
+
+          fs.appendFileSync(
+            process.env.GITHUB_OUTPUT,
+            `changed=${current.version !== previous.version}\nversion=${current.version}\n`
+          );
+          '@
+          $script | node
+
+      - name: Stop when the application version did not change
+        if: steps.version.outputs.changed != 'true'
+        shell: pwsh
+        run: |
+          Write-Output 'No application version bump detected; skipping release.'
+          exit 0
+
+      - run: npm ci
+        if: steps.version.outputs.changed == 'true'
+
+      - name: Build Windows release
+        if: steps.version.outputs.changed == 'true'
+        run: npm run dist:win
+
+      - name: Verify release artifact
+        if: steps.version.outputs.changed == 'true'
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $artifact = "release\AutoRally $env:VERSION.exe"
+          if (-not (Test-Path -LiteralPath $artifact -PathType Leaf)) {
+            throw "Expected release artifact was not created: $artifact"
+          }
+
+      - name: Fail if GitHub release already exists
+        if: steps.version.outputs.changed == 'true'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $tag = "v$env:VERSION"
+          gh release view $tag --repo "${{ github.repository }}" *> $null
+          if ($LASTEXITCODE -eq 0) {
+            throw "GitHub release already exists: $tag"
+          }
+          if ($LASTEXITCODE -ne 1) {
+            throw "Failed to check for existing GitHub release: $tag"
+          }
+
+      - name: Fail if release tag already exists
+        if: steps.version.outputs.changed == 'true'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $tag = "v$env:VERSION"
+          gh api "repos/${{ github.repository }}/git/ref/tags/$tag" *> $null
+          if ($LASTEXITCODE -eq 0) {
+            throw "Git tag already exists: $tag"
+          }
+          if ($LASTEXITCODE -ne 1) {
+            throw "Failed to check for existing Git tag: $tag"
+          }
+
+      - name: Publish GitHub release
+        if: steps.version.outputs.changed == 'true'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $tag = "v$env:VERSION"
+          $artifact = "release\AutoRally $env:VERSION.exe"
+          gh release create $tag $artifact `
+            --repo "${{ github.repository }}" `
+            --title "AutoRally $env:VERSION" `
+            --generate-notes `
+            --target "${{ github.sha }}"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to publish GitHub release: $tag"
+          }
