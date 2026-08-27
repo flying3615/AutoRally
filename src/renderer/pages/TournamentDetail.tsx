@@ -548,7 +548,7 @@ export function TournamentDetail() {
   const pendingBracketMatches = bracketMatches.filter((m: MatchRow) => !isByeMatch(m) && m.status !== 'completed');
   const lastRound = data.rounds[data.rounds.length - 1];
   const lastRoundMatches = lastRound ? matches.filter(m => m.round === lastRound) : [];
-  const canAdvance = data.format === 'knockout'
+  const canAdvance = (data.format === 'knockout' || data.format === 'mixed')
     && Boolean(lastRound)
     && lastRound !== 'F'
     && lastRoundMatches.length > 0
@@ -599,7 +599,7 @@ export function TournamentDetail() {
                 className={`h-8 px-3 text-sm font-semibold rounded-lg active:scale-[0.97] transition-all disabled:opacity-40 ${matches.length > 0 ? 'bg-amber-600 text-white hover:bg-amber-700' : 'bg-emerald-600 text-white hover:bg-emerald-700'}`}>
                 {busyAction === 'generate' ? 'Generating...' : matches.length > 0 ? 'Regenerate' : 'Generate Schedule'}
               </button>
-              {data.format === 'knockout' && (
+              {(data.format === 'knockout' || data.format === 'mixed') && (
                 <button onClick={handleAdvance} disabled={!canAdvance || busyAction !== null}
                   className="h-8 px-3 text-sm font-semibold bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 active:scale-[0.97] transition-all disabled:opacity-40">
                   {busyAction === 'advance' ? 'Advancing...' : 'Advance Winners'}
@@ -1023,7 +1023,7 @@ export function TournamentDetail() {
                 </div>
               );
             })}
-            {matches.length === 0 && <p className="text-sm text-zinc-400">No matches yet. Register players and generate the schedule.</p>}
+            {bracketMatches.length === 0 && <p className="text-sm text-zinc-400">No matches yet. Register players and generate the schedule.</p>}
           </div>
         )}
 

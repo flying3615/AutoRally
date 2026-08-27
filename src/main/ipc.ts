@@ -868,7 +868,9 @@ export async function registerIpcHandlers() {
 
       if (t.format === 'mixed') {
         const groupCount = t.groupCount ?? 0;
+        const advancePerGroup = t.advancePerGroup ?? 1;
         if (groupCount < 2) return [];
+        if (regs.length < groupCount * advancePerGroup) return [];
         const groups: TournamentGroup[] = Array.from({ length: groupCount }, (_, i) => ({
           id: uuid(),
           name: String.fromCharCode('A'.charCodeAt(0) + i),
@@ -955,6 +957,11 @@ export async function registerIpcHandlers() {
     if (!reg) throw new Error('Registration not found');
     if (!reg.groupId) throw new Error('This registration is not in a group');
 
+    const targetGroup = queryOne<{ id: string }>(
+      'SELECT id FROM tournament_groups WHERE id = ? AND tournamentId = ?', [newGroupId, reg.tournamentId]
+    );
+    if (!targetGroup) throw new Error('Target group not found in this tournament');
+
     const currentGroupMatches = queryAll<TournamentMatchRecord>(
       'SELECT * FROM tournament_matches WHERE tournamentId = ? AND groupId = ?', [reg.tournamentId, reg.groupId]
     );
@@ -987,14 +994,14 @@ export async function registerIpcHandlers() {
 
   ipcMain.handle('tournaments:advanceWinners', (_e, tournamentId: string, currentRound: string) => {
     const tournament = queryOne<{ format: string }>('SELECT format FROM tournaments WHERE id = ?', [tournamentId]);
-    if (tournament?.format !== 'knockout') return [];
+    if (tournament?.format !== 'knockout' && tournament?.format !== 'mixed') return [];
 
     const currentRoundMatches = queryAll<TournamentMatchRecord>(
-      'SELECT * FROM tournament_matches WHERE tournamentId = ? AND round = ?',
+      'SELECT * FROM tournament_matches WHERE tournamentId = ? AND round = ? AND groupId IS NULL',
       [tournamentId, currentRound]
     );
     const existingMatches = queryAll<TournamentMatchRecord>(
-      'SELECT * FROM tournament_matches WHERE tournamentId = ? AND round <> ?',
+      'SELECT * FROM tournament_matches WHERE tournamentId = ? AND round <> ? AND groupId IS NULL',
       [tournamentId, currentRound]
     );
     const newMatches = buildNextKnockoutMatches(tournamentId, currentRound, currentRoundMatches, existingMatches, uuid);
