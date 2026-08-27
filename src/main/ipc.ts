@@ -6,6 +6,7 @@ import { backupFileName } from './databaseBackup';
 import { clearHistoricalData } from './historyCleanup';
 import {
   assignRegistrationsToGroups,
+  buildFirstKnockoutRound,
   buildNextKnockoutMatches,
   buildTeamMatchGames,
   computeTournamentStandings,
@@ -15,6 +16,7 @@ import {
   validateMatchReassignment,
   validateTeamReassignment,
   validateTournamentRegistration,
+  type GroupStanding,
   type MatchReassignmentInput,
   type TeamMatchCategory,
   type TeamMatchComposition,
@@ -978,6 +980,68 @@ export async function registerIpcHandlers() {
         player2Name: p2?.name ?? null,
         diff: s.pf - s.pa,
       };
+    });
+  });
+
+  ipcMain.handle('tournaments:groupStandings', (_e, tournamentId: string) => {
+    const groups = queryAll<{ id: string; name: string }>(
+      'SELECT id, name FROM tournament_groups WHERE tournamentId = ? ORDER BY name', [tournamentId]
+    );
+    return groups.map(g => {
+      const matches = queryAll<TournamentMatchRecord>(
+        "SELECT * FROM tournament_matches WHERE tournamentId = ? AND groupId = ? AND status = 'completed'",
+        [tournamentId, g.id]
+      );
+      const standings = computeTournamentStandings(matches).map(s => {
+        const p1 = queryOne<{ name: string }>('SELECT name FROM players WHERE id = ?', [s.player1Id]);
+        const p2 = s.player2Id ? queryOne<{ name: string }>('SELECT name FROM players WHERE id = ?', [s.player2Id]) : null;
+        return { ...s, groupId: g.id, player1Name: p1?.name ?? '?', player2Name: p2?.name ?? null, diff: s.pf - s.pa };
+      });
+      return { groupId: g.id, groupName: g.name, standings };
+    });
+  });
+
+  ipcMain.handle('tournaments:generateKnockoutFromGroups', (_e, tournamentId: string) => {
+    return transaction(() => {
+      const t = queryOne<{ format: string; advancePerGroup: 1 | 2 | null }>(
+        'SELECT format, advancePerGroup FROM tournaments WHERE id = ?', [tournamentId]
+      );
+      if (!t || t.format !== 'mixed' || !t.advancePerGroup) throw new Error('Not a mixed-format tournament');
+
+      const groups = queryAll<{ id: string; name: string }>(
+        'SELECT id, name FROM tournament_groups WHERE tournamentId = ? ORDER BY name', [tournamentId]
+      );
+      if (groups.length === 0) throw new Error('No groups found — generate the group schedule first');
+
+      for (const g of groups) {
+        const incomplete = queryOne<{ id: string }>(
+          "SELECT id FROM tournament_matches WHERE tournamentId = ? AND groupId = ? AND status != 'completed' LIMIT 1",
+          [tournamentId, g.id]
+        );
+        if (incomplete) throw new Error(`Group ${g.name} has unfinished matches`);
+      }
+
+      const existingKnockout = queryOne<{ id: string }>(
+        'SELECT id FROM tournament_matches WHERE tournamentId = ? AND groupId IS NULL LIMIT 1', [tournamentId]
+      );
+      if (existingKnockout) throw new Error('Knockout stage has already been generated');
+
+      const qualifiersByGroup = new Map<string, GroupStanding[]>();
+      for (const g of groups) {
+        const matches = queryAll<TournamentMatchRecord>(
+          "SELECT * FROM tournament_matches WHERE tournamentId = ? AND groupId = ? AND status = 'completed'",
+          [tournamentId, g.id]
+        );
+        const standings = computeTournamentStandings(matches).map(s => ({ ...s, groupId: g.id }));
+        if (standings.length < t.advancePerGroup!) {
+          throw new Error(`Group ${g.name} does not have enough completed standings to advance ${t.advancePerGroup} team(s)`);
+        }
+        qualifiersByGroup.set(g.id, standings);
+      }
+
+      const matches = buildFirstKnockoutRound(tournamentId, groups, qualifiersByGroup, t.advancePerGroup as 1 | 2, uuid);
+      for (const match of matches) insertTournamentMatch(match);
+      return matches;
     });
   });
 
