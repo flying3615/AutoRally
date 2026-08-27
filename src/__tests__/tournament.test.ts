@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  assignRegistrationsToGroups,
   buildNextKnockoutMatches,
   buildTeamMatchGames,
   computeTournamentStandings,
@@ -8,6 +9,7 @@ import {
   validateMatchReassignment,
   validateTeamReassignment,
   validateTournamentRegistration,
+  type TournamentGroup,
   type TournamentMatchRecord,
   type TournamentRegistration,
 } from '../main/tournament';
@@ -186,6 +188,38 @@ describe('tournament scheduling', () => {
     expect(() => validateTournamentRegistration(existing, 'a')).toThrow(/already registered/i);
     expect(() => validateTournamentRegistration(existing, 'd', 'c')).toThrow(/already registered/i);
     expect(validateTournamentRegistration(existing, 'd', 'e')).toBeUndefined();
+  });
+});
+
+describe('assignRegistrationsToGroups', () => {
+  function group(name: string): TournamentGroup {
+    return { id: `g-${name}`, name };
+  }
+
+  it('snake-drafts registrations across groups by level, weakest to strongest reversing each pass', () => {
+    // levels 1..8, group() helper defaults to level 3 so build explicit regs
+    const regs = [1, 2, 3, 4, 5, 6, 7, 8].map(lv => ({
+      id: `r${lv}`, player1Id: `p${lv}`, player1Level: lv, player2Id: null, player2Level: null,
+    }));
+    const groups = [group('A'), group('B'), group('C'), group('D')];
+    const byGroup = assignRegistrationsToGroups(regs, groups);
+
+    expect(byGroup.get('g-A')!.map(r => r.id)).toEqual(['r1', 'r8']);
+    expect(byGroup.get('g-B')!.map(r => r.id)).toEqual(['r2', 'r7']);
+    expect(byGroup.get('g-C')!.map(r => r.id)).toEqual(['r3', 'r6']);
+    expect(byGroup.get('g-D')!.map(r => r.id)).toEqual(['r4', 'r5']);
+  });
+
+  it('distributes leftover registrations as evenly as possible when count is not divisible by group count', () => {
+    const regs = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(lv => ({
+      id: `r${lv}`, player1Id: `p${lv}`, player1Level: lv, player2Id: null, player2Level: null,
+    }));
+    const groups = [group('A'), group('B'), group('C'), group('D')];
+    const byGroup = assignRegistrationsToGroups(regs, groups);
+
+    const sizes = groups.map(g => byGroup.get(g.id)!.length);
+    expect(sizes.sort()).toEqual([2, 2, 3, 3]);
+    expect(sizes.reduce((a, b) => a + b, 0)).toBe(10);
   });
 });
 

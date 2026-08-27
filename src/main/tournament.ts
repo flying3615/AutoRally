@@ -197,6 +197,28 @@ export function generateRoundRobinMatches(
   return matches;
 }
 
+export interface TournamentGroup {
+  id: string;
+  name: string;
+}
+
+export function assignRegistrationsToGroups(
+  registrations: TournamentRegistration[],
+  groups: TournamentGroup[],
+): Map<string, TournamentRegistration[]> {
+  const seeded = [...registrations].sort((a, b) => avgLevel(a) - avgLevel(b));
+  const byGroup = new Map<string, TournamentRegistration[]>(groups.map(g => [g.id, []]));
+  let dir = 1;
+  let idx = 0;
+  for (const reg of seeded) {
+    byGroup.get(groups[idx]!.id)!.push(reg);
+    if (idx === groups.length - 1 && dir === 1) dir = -1;
+    else if (idx === 0 && dir === -1) dir = 1;
+    else idx += dir;
+  }
+  return byGroup;
+}
+
 function winningTeam(match: TournamentMatchRecord): TeamRef | null {
   if (match.status !== 'completed' || !match.winner) return null;
   if (match.winner === 'team1') {
