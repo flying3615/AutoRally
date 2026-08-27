@@ -253,6 +253,18 @@ export function buildFirstKnockoutRound(
     { player1Id: shifted[i]!.player1Id, player2Id: shifted[i]!.player2Id }));
 }
 
+export function validateGroupReassignment(
+  currentGroupMatches: TournamentMatchRecord[],
+  targetGroupMatches: TournamentMatchRecord[],
+): void {
+  if (currentGroupMatches.some(m => m.status !== 'pending')) {
+    throw new Error('This registration\'s group has already started — cannot move them out');
+  }
+  if (targetGroupMatches.some(m => m.status !== 'pending')) {
+    throw new Error('The target group has already started — cannot move them in');
+  }
+}
+
 function winningTeam(match: TournamentMatchRecord): TeamRef | null {
   if (match.status !== 'completed' || !match.winner) return null;
   if (match.winner === 'team1') {

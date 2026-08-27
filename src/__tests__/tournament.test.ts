@@ -7,6 +7,7 @@ import {
   computeTournamentStandings,
   generateKnockoutMatches,
   generateRoundRobinMatches,
+  validateGroupReassignment,
   validateMatchReassignment,
   validateTeamReassignment,
   validateTournamentRegistration,
@@ -255,6 +256,28 @@ describe('buildFirstKnockoutRound', () => {
     }
     const pairs = matches.map(m => [m.team1Player1Id, m.team2Player1Id]);
     expect(pairs).toEqual([['WA', 'RB'], ['WB', 'RC'], ['WC', 'RD'], ['WD', 'RA']]);
+  });
+});
+
+describe('validateGroupReassignment', () => {
+  function match(status: TournamentMatchRecord['status']): TournamentMatchRecord {
+    return {
+      id: 'm1', tournamentId: 't1', round: 'R1', matchNumber: 1, courtNumber: null, status,
+      team1Player1Id: 'a', team1Player2Id: null, team2Player1Id: 'b', team2Player2Id: null,
+      team1Score: null, team2Score: null, winner: null, completedAt: null,
+    };
+  }
+
+  it('allows reassignment when both groups have only pending matches', () => {
+    expect(() => validateGroupReassignment([match('pending')], [match('pending')])).not.toThrow();
+  });
+
+  it('rejects when the source group has already started', () => {
+    expect(() => validateGroupReassignment([match('completed')], [match('pending')])).toThrow(/already started/i);
+  });
+
+  it('rejects when the target group has already started', () => {
+    expect(() => validateGroupReassignment([match('pending')], [match('in_progress')])).toThrow(/already started/i);
   });
 });
 
