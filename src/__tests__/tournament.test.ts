@@ -5,7 +5,8 @@ import {
   computeTournamentStandings,
   generateKnockoutMatches,
   generateRoundRobinMatches,
-  validateMatchReassignment,
+  validateMatchDeletion,
+validateMatchReassignment,
   validateTeamReassignment,
   validateTournamentRegistration,
   type TournamentMatchRecord,
@@ -499,5 +500,27 @@ describe('validateMatchReassignment', () => {
       'm1', 'pending', false, regs, [targetMatch, completedOther],
       { team1RegistrationId: 'reg-c', team2RegistrationId: 'reg-d' },
     )).toThrow(/not currently scheduled/i);
+  });
+});
+
+describe('validateMatchDeletion', () => {
+  it('allows deleting a pending round-robin bracket match', () => {
+    expect(() => validateMatchDeletion('round_robin', 'pending', false)).not.toThrow();
+  });
+
+  it('rejects deleting a knockout match', () => {
+    expect(() => validateMatchDeletion('knockout', 'pending', false)).toThrow(/round-robin/i);
+  });
+
+  it('rejects deleting a match that has already started', () => {
+    expect(() => validateMatchDeletion('round_robin', 'in_progress', false)).toThrow(/already started/i);
+  });
+
+  it('rejects deleting a completed match', () => {
+    expect(() => validateMatchDeletion('round_robin', 'completed', false)).toThrow(/already started/i);
+  });
+
+  it('rejects deleting a team-match rubber', () => {
+    expect(() => validateMatchDeletion('round_robin', 'pending', true)).toThrow(/not a bracket match/i);
   });
 });

@@ -10,6 +10,7 @@ import {
   computeTournamentStandings,
   generateKnockoutMatches,
   generateRoundRobinMatches,
+  validateMatchDeletion,
   validateMatchReassignment,
   validateTeamReassignment,
   validateTournamentRegistration,
@@ -909,6 +910,20 @@ export async function registerIpcHandlers() {
         );
       }
     });
+  });
+
+  ipcMain.handle('tournaments:deleteMatch', (_e, matchId: string) => {
+    const match = queryOne<TournamentMatchRecord & { teamMatchId: string | null }>(
+      'SELECT * FROM tournament_matches WHERE id = ?', [matchId]
+    );
+    if (!match) throw new Error('Match not found');
+
+    const tournament = queryOne<{ format: string }>('SELECT format FROM tournaments WHERE id = ?', [match.tournamentId]);
+    if (!tournament) throw new Error('Tournament not found');
+
+    validateMatchDeletion(tournament.format, match.status, !!match.teamMatchId);
+
+    run('DELETE FROM tournament_matches WHERE id = ?', [matchId]);
   });
 
   ipcMain.handle('tournaments:advanceWinners', (_e, tournamentId: string, currentRound: string) => {

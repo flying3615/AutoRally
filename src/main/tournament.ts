@@ -443,6 +443,19 @@ export function validateMatchReassignment(
   return updates;
 }
 
+// Knockout has no "neither team advances" state — every pending match must
+// resolve to a winner for the bracket to progress, so deletion is limited to
+// round-robin, where a round already tolerates a team sitting out.
+export function validateMatchDeletion(
+  tournamentFormat: string,
+  matchStatus: TournamentMatchRecord['status'],
+  isTeamMatchRubber: boolean,
+): void {
+  if (isTeamMatchRubber) throw new Error('Not a bracket match');
+  if (tournamentFormat !== 'round_robin') throw new Error('Deleting a match is only supported for round-robin tournaments');
+  if (matchStatus !== 'pending') throw new Error('Cannot delete a match that has already started');
+}
+
 export interface TeamMatchComposition {
   ms: number;
   ws: number;

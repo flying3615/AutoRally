@@ -388,6 +388,23 @@ export function TournamentDetail() {
     }
   };
 
+  const handleDeleteMatch = async (match: MatchRow) => {
+    const ok = await confirm({
+      title: 'Delete matchup?',
+      message: 'Both teams will have no match this round. This cannot be undone.',
+      confirmLabel: 'Delete',
+      danger: true,
+    });
+    if (!ok) return;
+    setActionError(null);
+    try {
+      await (window.api as any).tournamentsDeleteMatch(match.id);
+      await load();
+    } catch (err: any) {
+      setActionError(err?.message ?? 'Failed to delete matchup.');
+    }
+  };
+
   const loadTeamPlayers = useCallback(async (teamId: string) => {
     const ps = await (window.api as any).tournamentTeamsListPlayers(teamId) as any[];
     setTeamPlayers(prev => ({ ...prev, [teamId]: ps }));
@@ -852,6 +869,12 @@ export function TournamentDetail() {
                               <button onClick={() => setEditMatchupMatch(m)}
                                 className="h-6 px-2 text-[11px] font-semibold text-zinc-700 border border-zinc-200 rounded-md hover:bg-zinc-50 active:scale-[0.97] transition-all">
                                 Edit Matchup
+                              </button>
+                            )}
+                            {!bye && !m.category && m.status === 'pending' && data.format === 'round_robin' && (
+                              <button onClick={() => handleDeleteMatch(m)}
+                                className="h-6 px-2 text-[11px] font-semibold text-red-600 border border-red-200 rounded-md hover:bg-red-50 active:scale-[0.97] transition-all">
+                                Delete
                               </button>
                             )}
                             {!bye && (
