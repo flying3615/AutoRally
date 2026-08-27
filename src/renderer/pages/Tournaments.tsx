@@ -20,12 +20,18 @@ function formatLabel(fmt: string) {
   return 'Mixed';
 }
 
+function isPowerOfTwoClient(n: number): boolean {
+  return n >= 2 && (n & (n - 1)) === 0;
+}
+
 function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [date, setDate] = useState('');
   const [format, setFormat] = useState('round_robin');
   const [courtCount, setCourtCount] = useState('4');
+  const [groupCount, setGroupCount] = useState('4');
+  const [advancePerGroup, setAdvancePerGroup] = useState<'1' | '2'>('2');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,6 +46,7 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
         date,
         format,
         courtCount: Number(courtCount) || 4,
+        ...(format === 'mixed' ? { groupCount: Number(groupCount) || 0, advancePerGroup: Number(advancePerGroup) as 1 | 2 } : {}),
       }) as { id: string };
       onCreated(created.id);
     } catch (err: any) {
@@ -88,11 +95,35 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
               ))}
             </div>
           </div>
+          {format === 'mixed' && (
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-zinc-500 mb-1.5 uppercase tracking-wider">Groups</label>
+                <input type="number" min="2" value={groupCount} onChange={e => setGroupCount(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-zinc-200 rounded-xl focus:outline-none focus:border-zinc-400" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-zinc-500 mb-1.5 uppercase tracking-wider">Advance per group</label>
+                <div className="flex gap-2">
+                  {(['1', '2'] as const).map(n => (
+                    <button key={n} onClick={() => setAdvancePerGroup(n)}
+                      className={`flex-1 py-2 text-sm font-medium rounded-xl border transition-all ${advancePerGroup === n ? 'bg-zinc-800 border-zinc-900 text-white' : 'bg-white border-zinc-200 text-zinc-500'}`}>
+                      {n}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+          {format === 'mixed' && !isPowerOfTwoClient(Number(groupCount) * Number(advancePerGroup)) && (
+            <p className="text-xs font-medium text-red-600">Groups × advance-per-group must be a power of two (2, 4, 8, 16...).</p>
+          )}
         </div>
 
         <div className="flex justify-end gap-2 mt-6">
           <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-50 rounded-xl transition-colors">Cancel</button>
-          <button onClick={handleCreate} disabled={saving || !name.trim() || !date}
+          <button onClick={handleCreate}
+            disabled={saving || !name.trim() || !date || (format === 'mixed' && !isPowerOfTwoClient(Number(groupCount) * Number(advancePerGroup)))}
             className="px-5 py-2 text-sm font-semibold bg-zinc-800 text-white rounded-xl hover:bg-zinc-700 active:scale-[0.97] transition-all disabled:opacity-40">
             {saving ? 'Creating...' : 'Create'}
           </button>
