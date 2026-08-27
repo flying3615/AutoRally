@@ -137,7 +137,9 @@ export function buildFirstKnockoutRound(
 }
 ```
 
-`ipc.ts` 新增 `tournaments:generateKnockoutFromGroups` 处理器：校验所有小组赛都已 `completed`，对每个小组调用现有 `computeTournamentStandings`（只传该组的对局）取名次，调用 `buildFirstKnockoutRound` 落库。之后的轮次推进（`tournamentsAdvanceWinners`）完全不用改。
+`ipc.ts` 新增 `tournaments:generateKnockoutFromGroups` 处理器：校验所有小组赛都已 `completed`，对每个小组调用现有 `computeTournamentStandings`（只传该组的对局）取名次，调用 `buildFirstKnockoutRound` 落库。
+
+**更新（实现后发现）**：之后的轮次推进 `tournamentsAdvanceWinners` 实际上需要小改动，不是"完全不用改"。原实现只认 `format === 'knockout'`，导致 mixed 赛制打完第一轮淘汰赛后卡死，无法晋级。修复：该接口也要接受 `format === 'mixed'`，并且它查询当前轮次/其他轮次对局时要加上 `AND groupId IS NULL`——原因和 Edit Matchup 的轮次范围问题一样：小组赛的轮次名（"R1"、"R2"...）在每个小组内部是从头编号的，不加这个过滤会把小组赛的轮次也算进去。前端 `canAdvance` 和"Advance Winners"按钮的显示条件也要同时接受 `mixed`。
 
 **举例**（4 组，每组出线 2 名）：
 胜者 WA、WB、WC、WD；亚军 RA、RB、RC、RD 错位 1 位后是 RB、RC、RD、RA。

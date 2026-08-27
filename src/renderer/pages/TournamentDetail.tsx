@@ -546,8 +546,8 @@ export function TournamentDetail() {
   const bracketMatches = matches.filter((m: MatchRow) => !m.groupId);
   const bracketRounds = data.rounds.filter(round => bracketMatches.some((m: MatchRow) => m.round === round));
   const pendingBracketMatches = bracketMatches.filter((m: MatchRow) => !isByeMatch(m) && m.status !== 'completed');
-  const lastRound = data.rounds[data.rounds.length - 1];
-  const lastRoundMatches = lastRound ? matches.filter(m => m.round === lastRound) : [];
+  const lastRound = bracketRounds[bracketRounds.length - 1];
+  const lastRoundMatches = lastRound ? bracketMatches.filter(m => m.round === lastRound) : [];
   const canAdvance = (data.format === 'knockout' || data.format === 'mixed')
     && Boolean(lastRound)
     && lastRound !== 'F'
@@ -1023,7 +1023,13 @@ export function TournamentDetail() {
                 </div>
               );
             })}
-            {bracketMatches.length === 0 && <p className="text-sm text-zinc-400">No matches yet. Register players and generate the schedule.</p>}
+            {bracketMatches.length === 0 && (
+              <p className="text-sm text-zinc-400">
+                {data.format === 'mixed'
+                  ? 'No knockout matches yet. Finish the group stage, then generate the knockout stage from the Groups tab.'
+                  : 'No matches yet. Register players and generate the schedule.'}
+              </p>
+            )}
           </div>
         )}
 
@@ -1042,8 +1048,8 @@ export function TournamentDetail() {
       {editMatchupMatch && (
         <EditMatchupModal
           match={editMatchupMatch}
-          regs={regs}
-          roundMatches={matches.filter((m: MatchRow) => m.round === editMatchupMatch.round)}
+          regs={regs.filter((r: RegRow) => (r.groupId ?? null) === (editMatchupMatch.groupId ?? null))}
+          roundMatches={matches.filter((m: MatchRow) => m.round === editMatchupMatch.round && (m.groupId ?? null) === (editMatchupMatch.groupId ?? null))}
           onClose={() => setEditMatchupMatch(null)}
           onSaved={() => { setEditMatchupMatch(null); load(); }}
         />

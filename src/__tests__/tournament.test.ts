@@ -297,6 +297,17 @@ describe('validateGroupTournamentConfig', () => {
     expect(() => validateGroupTournamentConfig('mixed', 4, 2)).not.toThrow();
     expect(() => validateGroupTournamentConfig('mixed', 2, 1)).not.toThrow();
   });
+
+  it('rejects a non-integer group count even when the bitwise power-of-two check would wrongly pass', () => {
+    // 2.1 * 2 = 4.2, and (4.2 & 3.2) truncates to (4 & 3) === 0, which would
+    // slip past a naive isPowerOfTwo check if group count weren't validated
+    // as an integer first.
+    expect(() => validateGroupTournamentConfig('mixed', 2.1, 2)).toThrow(/whole number/i);
+  });
+
+  it('rejects more than 26 groups', () => {
+    expect(() => validateGroupTournamentConfig('mixed', 32, 1)).toThrow(/26/);
+  });
 });
 
 function rosterPlayer(id: string, gender: 'male' | 'female', level: number) {

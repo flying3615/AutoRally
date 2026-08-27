@@ -869,8 +869,15 @@ export async function registerIpcHandlers() {
       if (t.format === 'mixed') {
         const groupCount = t.groupCount ?? 0;
         const advancePerGroup = t.advancePerGroup ?? 1;
-        if (groupCount < 2) return [];
-        if (regs.length < groupCount * advancePerGroup) return [];
+        if (groupCount < 2) throw new Error('Group count must be at least 2');
+        if (groupCount > 26) throw new Error('Group count cannot exceed 26');
+        // Snake-drafting distributes registrations as evenly as possible, so the
+        // smallest group ends up with floor(regs / groupCount) members. Every
+        // group needs at least 2 to produce any round-robin match, and at least
+        // advancePerGroup to ever produce that many standings entries.
+        if (Math.floor(regs.length / groupCount) < Math.max(2, advancePerGroup)) {
+          throw new Error(`Not enough registrations: each of the ${groupCount} groups needs at least ${Math.max(2, advancePerGroup)} teams`);
+        }
         const groups: TournamentGroup[] = Array.from({ length: groupCount }, (_, i) => ({
           id: uuid(),
           name: String.fromCharCode('A'.charCodeAt(0) + i),
@@ -930,12 +937,17 @@ export async function registerIpcHandlers() {
     const isBye = match.team1Player1Id === match.team2Player1Id
       && (match.team1Player2Id ?? null) === (match.team2Player2Id ?? null);
 
+    // For a grouped match, candidates must come from the same group only —
+    // otherwise a registration idle elsewhere (e.g. a bye in another group's
+    // round) would look "free" and could be swapped in, corrupting that
+    // group's membership and standings. Non-grouped matches (knockout stage,
+    // or knockout/round_robin formats) keep the tournament-wide candidate pool.
     const regs = queryAll<TournamentRegistration>(
       `SELECT tr.id, tr.player1Id, p1.level as player1Level, tr.player2Id, p2.level as player2Level
        FROM tournament_registrations tr
        JOIN players p1 ON tr.player1Id = p1.id
        LEFT JOIN players p2 ON tr.player2Id = p2.id
-       WHERE tr.tournamentId = ?`, [match.tournamentId]
+       WHERE tr.tournamentId = ? AND tr.groupId IS ?`, [match.tournamentId, match.groupId ?? null]
     );
     const roundMatches = queryAll<TournamentMatchRecord>(
       'SELECT * FROM tournament_matches WHERE tournamentId = ? AND round = ? AND groupId IS ?',
@@ -956,6 +968,7 @@ export async function registerIpcHandlers() {
     );
     if (!reg) throw new Error('Registration not found');
     if (!reg.groupId) throw new Error('This registration is not in a group');
+    if (newGroupId === reg.groupId) return;
 
     const targetGroup = queryOne<{ id: string }>(
       'SELECT id FROM tournament_groups WHERE id = ? AND tournamentId = ?', [newGroupId, reg.tournamentId]
@@ -969,6 +982,17 @@ export async function registerIpcHandlers() {
       'SELECT * FROM tournament_matches WHERE tournamentId = ? AND groupId = ?', [reg.tournamentId, newGroupId]
     );
     validateGroupReassignment(currentGroupMatches, targetGroupMatches);
+
+    const tournament = queryOne<{ advancePerGroup: number | null }>(
+      'SELECT advancePerGroup FROM tournaments WHERE id = ?', [reg.tournamentId]
+    );
+    const minGroupSize = Math.max(2, tournament?.advancePerGroup ?? 1);
+    const sourceGroupSize = queryOne<{ count: number }>(
+      'SELECT COUNT(*) as count FROM tournament_registrations WHERE groupId = ?', [reg.groupId]
+    )?.count ?? 0;
+    if (sourceGroupSize - 1 < minGroupSize) {
+      throw new Error(`Moving this registration would leave its current group with fewer than ${minGroupSize} teams`);
+    }
 
     return transaction(() => {
       const oldGroupId = reg.groupId!;

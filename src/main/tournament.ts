@@ -275,7 +275,8 @@ export function validateGroupTournamentConfig(
   advancePerGroup: number | undefined,
 ): void {
   if (format !== 'mixed') return;
-  if (!groupCount || groupCount < 2) throw new Error('Group count must be at least 2');
+  if (!groupCount || !Number.isInteger(groupCount) || groupCount < 2) throw new Error('Group count must be a whole number of at least 2');
+  if (groupCount > 26) throw new Error('Group count cannot exceed 26');
   if (advancePerGroup !== 1 && advancePerGroup !== 2) throw new Error('Advance-per-group must be 1 or 2');
   if (!isPowerOfTwo(groupCount * advancePerGroup)) {
     throw new Error('Group count × advance-per-group must be a power of two (2, 4, 8, 16...)');
