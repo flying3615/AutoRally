@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { AgGridReact } from 'ag-grid-react';
 import { confirm } from '../stores/confirmStore';
+import { SetScoreModal } from '../components/SetScoreModal';
 
 const formatLabel = (f: string) => f === 'knockout' ? 'Knockout' : f === 'round_robin' ? 'Round Robin' : 'Mixed';
 
@@ -30,6 +31,12 @@ interface MatchRow {
   team2Player2Id: string | null;
   team1Score: number | null;
   team2Score: number | null;
+  set1Team1Score: number | null;
+  set1Team2Score: number | null;
+  set2Team1Score: number | null;
+  set2Team2Score: number | null;
+  set3Team1Score: number | null;
+  set3Team2Score: number | null;
   winner: 'team1' | 'team2' | null;
   t1p1Name: string;
   t1p1Level: number;
@@ -49,6 +56,16 @@ const isByeMatch = (match: MatchRow) => (
   (match.team1Player2Id ?? null) === (match.team2Player2Id ?? null)
 );
 
+const formatSetScores = (m: MatchRow): string | null => {
+  const sets = [
+    [m.set1Team1Score, m.set1Team2Score],
+    [m.set2Team1Score, m.set2Team2Score],
+    [m.set3Team1Score, m.set3Team2Score],
+  ].filter((s): s is [number, number] => s[0] != null && s[1] != null);
+  if (sets.length === 0) return null;
+  return sets.map(([a, b]) => `${a}-${b}`).join(', ');
+};
+
 const formatTeam = (match: MatchRow, side: 'team1' | 'team2') => {
   if (side === 'team1') {
     return `${match.t1p1Name} (Lv${match.t1p1Level})${match.t1p2Name ? ` + ${match.t1p2Name} (Lv${match.t1p2Level})` : ''}`;
@@ -56,63 +73,25 @@ const formatTeam = (match: MatchRow, side: 'team1' | 'team2') => {
   return `${match.t2p1Name} (Lv${match.t2p1Level})${match.t2p2Name ? ` + ${match.t2p2Name} (Lv${match.t2p2Level})` : ''}`;
 };
 
-function ScoreModal({ match, onClose, onSaved }: { match: any; onClose: () => void; onSaved: () => void }) {
-  const [sc1, setSc1] = useState(match.team1Score != null ? String(match.team1Score) : '');
-  const [sc2, setSc2] = useState(match.team2Score != null ? String(match.team2Score) : '');
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const handleSave = async () => {
-    const s1 = Number(sc1); const s2 = Number(sc2);
-    if (isNaN(s1) || isNaN(s2) || s1 < 0 || s2 < 0) {
-      setError('Enter valid non-negative scores.');
-      return;
-    }
-    if (s1 === s2) {
-      setError('Tournament matches need a winner.');
-      return;
-    }
-    setSaving(true);
-    setError(null);
-    try {
-      await window.api.tournamentsSetScore(match.id, s1, s2);
-      onSaved();
-    } catch (err: any) {
-      setError(err?.message ?? 'Failed to save score.');
-    } finally {
-      setSaving(false);
-    }
-  };
+function ScoreModal({ match, onClose, onSaved }: { match: MatchRow; onClose: () => void; onSaved: () => void }) {
+  const initialSets = [
+    match.set1Team1Score != null && match.set1Team2Score != null ? { team1: match.set1Team1Score, team2: match.set1Team2Score } : null,
+    match.set2Team1Score != null && match.set2Team2Score != null ? { team1: match.set2Team1Score, team2: match.set2Team2Score } : null,
+    match.set3Team1Score != null && match.set3Team2Score != null ? { team1: match.set3Team1Score, team2: match.set3Team2Score } : null,
+  ].filter((s): s is { team1: number; team2: number } => s !== null);
 
   return (
-    <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-white rounded-2xl p-6 w-[380px] max-w-[90vw]" onClick={e => e.stopPropagation()}
-        style={{ boxShadow: '0 24px 48px -12px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.04)', animation: 'ctxFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)' }}>
-        <h3 className="text-lg font-bold text-zinc-900 mb-4">Enter Score</h3>
-        <div className="space-y-3 mb-4">
-          <div className="text-sm font-semibold text-zinc-700 bg-zinc-50 rounded-lg p-3">
-            <span className="text-zinc-400 text-xs">Team 1</span><br />
-            {match.t1p1Name} ({match.t1p1Level}){match.t1p2Name ? ` + ${match.t1p2Name} (${match.t1p2Level})` : ''}
-          </div>
-          <div className="flex items-center gap-3 justify-center">
-            <input type="number" min="0" value={sc1} onChange={e => setSc1(e.target.value)}
-              className="w-16 px-3 py-2 text-sm font-mono text-center border border-zinc-200 rounded-xl focus:outline-none focus:border-zinc-400" />
-            <span className="text-zinc-400 font-bold text-sm">vs</span>
-            <input type="number" min="0" value={sc2} onChange={e => setSc2(e.target.value)}
-              className="w-16 px-3 py-2 text-sm font-mono text-center border border-zinc-200 rounded-xl focus:outline-none focus:border-zinc-400" />
-          </div>
-          <div className="text-sm font-semibold text-zinc-700 bg-zinc-50 rounded-lg p-3">
-            <span className="text-zinc-400 text-xs">Team 2</span><br />
-            {match.t2p1Name} ({match.t2p1Level}){match.t2p2Name ? ` + ${match.t2p2Name} (${match.t2p2Level})` : ''}
-          </div>
-        </div>
-        {error && <p className="mb-3 text-xs font-medium text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>}
-        <div className="flex justify-end gap-2">
-          <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-50 rounded-xl">Cancel</button>
-          <button onClick={handleSave} disabled={saving} className="px-5 py-2 text-sm font-semibold bg-zinc-800 text-white rounded-xl hover:bg-zinc-700 active:scale-[0.97] transition-all disabled:opacity-40">Save</button>
-        </div>
-      </div>
-    </div>
+    <SetScoreModal
+      title="Enter Score"
+      team1Label={`${match.t1p1Name}${match.t1p2Name ? ` / ${match.t1p2Name}` : ''}`}
+      team2Label={`${match.t2p1Name}${match.t2p2Name ? ` / ${match.t2p2Name}` : ''}`}
+      initialSets={initialSets}
+      onCancel={onClose}
+      onSave={async sets => {
+        await window.api.tournamentsSetScore(match.id, sets);
+        onSaved();
+      }}
+    />
   );
 }
 
@@ -208,6 +187,91 @@ function EditPlayersModal({ match, team1Id, team2Id, onClose, onSaved }: {
   );
 }
 
+const regKeyFor = (p1: string, p2: string | null) => [p1, p2 ?? ''].sort().join('|');
+
+function EditMatchupModal({ match, regs, roundMatches, onClose, onSaved }: {
+  match: MatchRow;
+  regs: RegRow[];
+  roundMatches: MatchRow[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const regLabel = (r: RegRow) =>
+    `${r.player1Name}${r.player2Name ? ` / ${r.player2Name}` : ''} (Lv${r.player1Level}${r.player2Level != null ? `+${r.player2Level}` : ''})`;
+
+  const occupiedKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const m of roundMatches) {
+      if (m.id === match.id || m.status !== 'pending') continue;
+      keys.add(regKeyFor(m.team1Player1Id, m.team1Player2Id));
+      keys.add(regKeyFor(m.team2Player1Id, m.team2Player2Id));
+    }
+    return keys;
+  }, [roundMatches, match.id]);
+
+  const currentTeam1Reg = regs.find(r => regKeyFor(r.player1Id, r.player2Id) === regKeyFor(match.team1Player1Id, match.team1Player2Id));
+  const currentTeam2Reg = regs.find(r => regKeyFor(r.player1Id, r.player2Id) === regKeyFor(match.team2Player1Id, match.team2Player2Id));
+
+  const [team1RegId, setTeam1RegId] = useState(currentTeam1Reg?.id ?? '');
+  const [team2RegId, setTeam2RegId] = useState(currentTeam2Reg?.id ?? '');
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const optionsFor = (currentSelection: string, otherSelection: string) =>
+    regs.filter(r =>
+      r.id === currentSelection ||
+      (!occupiedKeys.has(regKeyFor(r.player1Id, r.player2Id)) && r.id !== otherSelection));
+
+  const handleSave = async () => {
+    setError(null);
+    setSaving(true);
+    try {
+      await (window.api as any).tournamentsReassignMatch(match.id, {
+        team1RegistrationId: team1RegId,
+        team2RegistrationId: team2RegId,
+      });
+      onSaved();
+    } catch (err: any) {
+      setError(err?.message ?? 'Failed to reassign matchup');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50" onClick={onClose}>
+      <div className="bg-white rounded-2xl p-6 w-[420px] max-w-[90vw]" onClick={e => e.stopPropagation()}
+        style={{ boxShadow: '0 24px 48px -12px rgba(0,0,0,0.2)', animation: 'ctxFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)' }}>
+        <h3 className="text-lg font-bold text-zinc-900 mb-4">Edit Matchup — {match.round}</h3>
+        <div className="space-y-3 mb-4">
+          <div>
+            <label className="block text-xs font-semibold text-zinc-500 mb-1">Team 1</label>
+            <select value={team1RegId} onChange={e => setTeam1RegId(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-zinc-200 rounded-xl">
+              {optionsFor(team1RegId, team2RegId).map(r => <option key={r.id} value={r.id}>{regLabel(r)}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-zinc-500 mb-1">Team 2</label>
+            <select value={team2RegId} onChange={e => setTeam2RegId(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-zinc-200 rounded-xl">
+              {optionsFor(team2RegId, team1RegId).map(r => <option key={r.id} value={r.id}>{regLabel(r)}</option>)}
+            </select>
+          </div>
+        </div>
+        {error && <p className="mb-3 text-xs font-medium text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>}
+        <div className="flex justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-50 rounded-xl">Cancel</button>
+          <button onClick={handleSave} disabled={saving || !team1RegId || !team2RegId}
+            className="px-5 py-2 text-sm font-semibold bg-zinc-800 text-white rounded-xl hover:bg-zinc-700 active:scale-[0.97] transition-all disabled:opacity-40">
+            Save
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function TournamentDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -224,6 +288,7 @@ export function TournamentDetail() {
   const [regMode, setRegMode] = useState<'individual' | 'pair'>('individual');
   const [scoreMatch, setScoreMatch] = useState<MatchRow | null>(null);
   const [editPlayersMatch, setEditPlayersMatch] = useState<MatchRow | null>(null);
+  const [editMatchupMatch, setEditMatchupMatch] = useState<MatchRow | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [regError, setRegError] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<'generate' | 'advance' | 'generateTeam' | null>(null);
@@ -781,6 +846,12 @@ export function TournamentDetail() {
                                 Edit Players
                               </button>
                             )}
+                            {!bye && !m.category && m.status === 'pending' && (
+                              <button onClick={() => setEditMatchupMatch(m)}
+                                className="h-6 px-2 text-[11px] font-semibold text-zinc-700 border border-zinc-200 rounded-md hover:bg-zinc-50 active:scale-[0.97] transition-all">
+                                Edit Matchup
+                              </button>
+                            )}
                             {!bye && (
                               <button onClick={() => setScoreMatch(m)}
                                 className="h-6 px-2 text-[11px] font-semibold text-zinc-700 border border-zinc-200 rounded-md hover:bg-zinc-50 active:scale-[0.97] transition-all">
@@ -798,6 +869,9 @@ export function TournamentDetail() {
                             <p className="text-sm font-bold text-zinc-800">{formatTeam(m, 'team2')}</p>
                           </div>
                         </div>
+                        {formatSetScores(m) && (
+                          <p className="text-[11px] text-zinc-400 text-center mt-1 font-mono">{formatSetScores(m)}</p>
+                        )}
                         {m.winner && (
                           <div className="mt-2 pt-2 border-t border-zinc-100 text-[11px] text-emerald-600 font-medium">
                             Winner: {m.winner === 'team1' ? m.t1p1Name + (m.t1p2Name ? ` / ${m.t1p2Name}` : '') : m.t2p1Name + (m.t2p2Name ? ` / ${m.t2p2Name}` : '')}
@@ -825,6 +899,15 @@ export function TournamentDetail() {
       </div>
 
       {scoreMatch && <ScoreModal match={scoreMatch} onClose={() => setScoreMatch(null)} onSaved={() => { setScoreMatch(null); load(); }} />}
+      {editMatchupMatch && (
+        <EditMatchupModal
+          match={editMatchupMatch}
+          regs={regs}
+          roundMatches={matches.filter((m: MatchRow) => m.round === editMatchupMatch.round)}
+          onClose={() => setEditMatchupMatch(null)}
+          onSaved={() => { setEditMatchupMatch(null); load(); }}
+        />
+      )}
       {editPlayersMatch && (() => {
         const tm = teamMatches.find((t: any) => t.id === editPlayersMatch.teamMatchId);
         if (!tm) return null;

@@ -19,6 +19,12 @@ export interface TournamentMatchRecord {
   team2Player2Id: string | null;
   team1Score: number | null;
   team2Score: number | null;
+  set1Team1Score?: number | null;
+  set1Team2Score?: number | null;
+  set2Team1Score?: number | null;
+  set2Team2Score?: number | null;
+  set3Team1Score?: number | null;
+  set3Team2Score?: number | null;
   winner: 'team1' | 'team2' | null;
   completedAt: string | null;
 }
@@ -238,6 +244,25 @@ export function buildNextKnockoutMatches(
   return nextMatches;
 }
 
+// Standings tiebreakers use actual badminton points scored, not sets won.
+// Falls back to team1Score/team2Score (pre-set-scoring legacy matches, where
+// those fields held raw points) when no per-set breakdown is recorded.
+function matchPointDifferential(match: TournamentMatchRecord): { sc1: number; sc2: number } {
+  const setPairs: [number | null | undefined, number | null | undefined][] = [
+    [match.set1Team1Score, match.set1Team2Score],
+    [match.set2Team1Score, match.set2Team2Score],
+    [match.set3Team1Score, match.set3Team2Score],
+  ];
+  const playedSets = setPairs.filter((pair): pair is [number, number] => pair[0] != null && pair[1] != null);
+  if (playedSets.length === 0) {
+    return { sc1: match.team1Score ?? 0, sc2: match.team2Score ?? 0 };
+  }
+  return playedSets.reduce(
+    (acc, [a, b]) => ({ sc1: acc.sc1 + a, sc2: acc.sc2 + b }),
+    { sc1: 0, sc2: 0 },
+  );
+}
+
 export function computeTournamentStandings(matches: TournamentMatchRecord[]): TournamentStanding[] {
   const standings = new Map<string, TournamentStanding>();
 
@@ -258,8 +283,7 @@ export function computeTournamentStandings(matches: TournamentMatchRecord[]): To
 
     const s1 = standings.get(t1k)!;
     const s2 = standings.get(t2k)!;
-    const sc1 = match.team1Score ?? 0;
-    const sc2 = match.team2Score ?? 0;
+    const { sc1, sc2 } = matchPointDifferential(match);
     s1.played++;
     s2.played++;
     s1.pf += sc1;
@@ -296,6 +320,56 @@ export function validateTournamentRegistration(
   if (existingPlayerIds.has(player1Id) || (player2Id && existingPlayerIds.has(player2Id))) {
     throw new Error('Player is already registered in this tournament');
   }
+}
+
+export interface MatchReassignmentInput {
+  team1RegistrationId: string;
+  team2RegistrationId: string;
+}
+
+export interface ResolvedMatchTeams {
+  team1Player1Id: string;
+  team1Player2Id: string | null;
+  team2Player1Id: string;
+  team2Player2Id: string | null;
+}
+
+export function validateMatchReassignment(
+  targetMatchId: string,
+  targetStatus: TournamentMatchRecord['status'],
+  targetIsBye: boolean,
+  registrations: TournamentRegistration[],
+  roundMatches: TournamentMatchRecord[],
+  assignment: MatchReassignmentInput,
+): ResolvedMatchTeams {
+  if (targetStatus !== 'pending') throw new Error('Cannot reassign a match that has already started');
+  if (targetIsBye) throw new Error('Cannot reassign a bye match');
+  if (assignment.team1RegistrationId === assignment.team2RegistrationId) {
+    throw new Error('Team 1 and Team 2 must be different registrations');
+  }
+
+  const regById = new Map(registrations.map(r => [r.id, r]));
+  const reg1 = regById.get(assignment.team1RegistrationId);
+  const reg2 = regById.get(assignment.team2RegistrationId);
+  if (!reg1 || !reg2) throw new Error('Selected team is not registered for this tournament');
+
+  const regKey = (r: TournamentRegistration) => teamKey(r.player1Id, r.player2Id ?? null);
+  const occupiedKeys = new Set<string>();
+  for (const m of roundMatches) {
+    if (m.id === targetMatchId || m.status !== 'pending') continue;
+    occupiedKeys.add(teamKey(m.team1Player1Id, m.team1Player2Id));
+    occupiedKeys.add(teamKey(m.team2Player1Id, m.team2Player2Id));
+  }
+  if (occupiedKeys.has(regKey(reg1)) || occupiedKeys.has(regKey(reg2))) {
+    throw new Error('That team already has a pending match this round');
+  }
+
+  return {
+    team1Player1Id: reg1.player1Id,
+    team1Player2Id: reg1.player2Id ?? null,
+    team2Player1Id: reg2.player1Id,
+    team2Player2Id: reg2.player2Id ?? null,
+  };
 }
 
 export interface TeamMatchComposition {

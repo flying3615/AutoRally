@@ -261,6 +261,12 @@ function migrate(db: Database, options: { seedIfEmpty?: boolean; saveDirty?: boo
   try { db.run('ALTER TABLE tournament_team_matches ADD COLUMN mdCount INTEGER NOT NULL DEFAULT 0'); dirty = true; } catch (_) { /* already exists */ }
   try { db.run('ALTER TABLE tournament_team_matches ADD COLUMN xdCount INTEGER NOT NULL DEFAULT 0'); dirty = true; } catch (_) { /* already exists */ }
   try { db.run('ALTER TABLE tournament_team_matches ADD COLUMN wdCount INTEGER NOT NULL DEFAULT 0'); dirty = true; } catch (_) { /* already exists */ }
+  try { db.run('ALTER TABLE tournament_matches ADD COLUMN set1Team1Score INTEGER DEFAULT NULL'); dirty = true; } catch (_) { /* already exists */ }
+  try { db.run('ALTER TABLE tournament_matches ADD COLUMN set1Team2Score INTEGER DEFAULT NULL'); dirty = true; } catch (_) { /* already exists */ }
+  try { db.run('ALTER TABLE tournament_matches ADD COLUMN set2Team1Score INTEGER DEFAULT NULL'); dirty = true; } catch (_) { /* already exists */ }
+  try { db.run('ALTER TABLE tournament_matches ADD COLUMN set2Team2Score INTEGER DEFAULT NULL'); dirty = true; } catch (_) { /* already exists */ }
+  try { db.run('ALTER TABLE tournament_matches ADD COLUMN set3Team1Score INTEGER DEFAULT NULL'); dirty = true; } catch (_) { /* already exists */ }
+  try { db.run('ALTER TABLE tournament_matches ADD COLUMN set3Team2Score INTEGER DEFAULT NULL'); dirty = true; } catch (_) { /* already exists */ }
   if (migrateGameTypeConstraint(db)) dirty = true;
   if (migrateAttendanceAndBalancesCascade(db)) dirty = true;
 
