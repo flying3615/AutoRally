@@ -543,6 +543,9 @@ export function TournamentDetail() {
   const realMatches = matches.filter(m => !isByeMatch(m));
   const pendingRealMatches = realMatches.filter(m => m.status !== 'completed');
   const completedRealMatches = realMatches.filter(m => m.status === 'completed');
+  const bracketMatches = matches.filter((m: MatchRow) => !m.groupId);
+  const bracketRounds = data.rounds.filter(round => bracketMatches.some((m: MatchRow) => m.round === round));
+  const pendingBracketMatches = bracketMatches.filter((m: MatchRow) => !isByeMatch(m) && m.status !== 'completed');
   const lastRound = data.rounds[data.rounds.length - 1];
   const lastRoundMatches = lastRound ? matches.filter(m => m.round === lastRound) : [];
   const canAdvance = data.format === 'knockout'
@@ -953,10 +956,10 @@ export function TournamentDetail() {
         {tab === 'bracket' && (
           <div>
             <div className="flex items-center justify-between mb-4">
-              <p className="text-sm text-zinc-400">{matches.length} matches · {data.rounds.length} rounds · {pendingRealMatches.length} pending</p>
+              <p className="text-sm text-zinc-400">{bracketMatches.length} matches · {bracketRounds.length} rounds · {pendingBracketMatches.length} pending</p>
             </div>
-            {data.rounds.map(round => {
-              const roundMatches = matches.filter((m: MatchRow) => m.round === round);
+            {bracketRounds.map(round => {
+              const roundMatches = bracketMatches.filter((m: MatchRow) => m.round === round);
               return (
                 <div key={round} className="mb-6">
                   <h3 className="text-sm font-bold text-zinc-700 mb-2">{round}</h3>
