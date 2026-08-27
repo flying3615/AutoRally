@@ -98,7 +98,7 @@ const api = {
   }>,
   tournamentsList: () => ipcRenderer.invoke('tournaments:list'),
   tournamentsGet: (id: string) => ipcRenderer.invoke('tournaments:get', id),
-  tournamentsCreate: (data: { name: string; description?: string; date: string; format: string; courtCount?: number }) => ipcRenderer.invoke('tournaments:create', data),
+  tournamentsCreate: (data: { name: string; description?: string; date: string; format: string; courtCount?: number; groupCount?: number; advancePerGroup?: 1 | 2 }) => ipcRenderer.invoke('tournaments:create', data),
   tournamentsUpdate: (id: string, data: { name?: string; description?: string; date?: string; format?: string; courtCount?: number }) => ipcRenderer.invoke('tournaments:update', id, data),
   tournamentsDelete: (id: string) => ipcRenderer.invoke('tournaments:delete', id),
   tournamentsRegister: (tournamentId: string, player1Id: string, player2Id?: string) => ipcRenderer.invoke('tournaments:register', tournamentId, player1Id, player2Id),

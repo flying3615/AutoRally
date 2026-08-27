@@ -10,6 +10,7 @@ import {
   computeTournamentStandings,
   generateKnockoutMatches,
   generateRoundRobinMatches,
+  validateGroupTournamentConfig,
   validateMatchReassignment,
   validateTeamReassignment,
   validateTournamentRegistration,
@@ -743,11 +744,12 @@ export async function registerIpcHandlers() {
     return { ...t, rounds: rounds.map(r => r.round), matches };
   });
 
-  ipcMain.handle('tournaments:create', (_e, data: { name: string; description?: string; date: string; format: string; courtCount?: number }) => {
+  ipcMain.handle('tournaments:create', (_e, data: { name: string; description?: string; date: string; format: string; courtCount?: number; groupCount?: number; advancePerGroup?: 1 | 2 }) => {
+    validateGroupTournamentConfig(data.format, data.groupCount, data.advancePerGroup);
     const id = uuid();
     const now = new Date().toISOString();
-    run('INSERT INTO tournaments (id, name, description, date, format, status, courtCount, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [id, data.name, data.description ?? '', data.date, data.format, 'upcoming', data.courtCount ?? 4, now]);
+    run('INSERT INTO tournaments (id, name, description, date, format, status, courtCount, groupCount, advancePerGroup, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, data.name, data.description ?? '', data.date, data.format, 'upcoming', data.courtCount ?? 4, data.groupCount ?? null, data.advancePerGroup ?? null, now]);
     return { id, ...data, description: data.description ?? '', status: 'upcoming' as const, courtCount: data.courtCount ?? 4, createdAt: now };
   });
 

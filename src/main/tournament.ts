@@ -265,6 +265,23 @@ export function validateGroupReassignment(
   }
 }
 
+function isPowerOfTwo(n: number): boolean {
+  return n >= 2 && (n & (n - 1)) === 0;
+}
+
+export function validateGroupTournamentConfig(
+  format: string,
+  groupCount: number | undefined,
+  advancePerGroup: number | undefined,
+): void {
+  if (format !== 'mixed') return;
+  if (!groupCount || groupCount < 2) throw new Error('Group count must be at least 2');
+  if (advancePerGroup !== 1 && advancePerGroup !== 2) throw new Error('Advance-per-group must be 1 or 2');
+  if (!isPowerOfTwo(groupCount * advancePerGroup)) {
+    throw new Error('Group count × advance-per-group must be a power of two (2, 4, 8, 16...)');
+  }
+}
+
 function winningTeam(match: TournamentMatchRecord): TeamRef | null {
   if (match.status !== 'completed' || !match.winner) return null;
   if (match.winner === 'team1') {

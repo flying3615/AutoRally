@@ -8,6 +8,7 @@ import {
   generateKnockoutMatches,
   generateRoundRobinMatches,
   validateGroupReassignment,
+  validateGroupTournamentConfig,
   validateMatchReassignment,
   validateTeamReassignment,
   validateTournamentRegistration,
@@ -278,6 +279,23 @@ describe('validateGroupReassignment', () => {
 
   it('rejects when the target group has already started', () => {
     expect(() => validateGroupReassignment([match('pending')], [match('in_progress')])).toThrow(/already started/i);
+  });
+});
+
+describe('validateGroupTournamentConfig', () => {
+  it('allows non-mixed formats regardless of groupCount/advancePerGroup', () => {
+    expect(() => validateGroupTournamentConfig('knockout', undefined, undefined)).not.toThrow();
+  });
+
+  it('requires groupCount and advancePerGroup for mixed format', () => {
+    expect(() => validateGroupTournamentConfig('mixed', undefined, undefined)).toThrow(/group count/i);
+    expect(() => validateGroupTournamentConfig('mixed', 4, undefined)).toThrow(/advance/i);
+  });
+
+  it('rejects a qualifier total that is not a power of two', () => {
+    expect(() => validateGroupTournamentConfig('mixed', 3, 2)).toThrow(/power of two|power of 2/i);
+    expect(() => validateGroupTournamentConfig('mixed', 4, 2)).not.toThrow();
+    expect(() => validateGroupTournamentConfig('mixed', 2, 1)).not.toThrow();
   });
 });
 
