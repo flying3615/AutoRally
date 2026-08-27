@@ -17,6 +17,7 @@ interface RegRow { id: string; player1Id: string; player1Name: string; player1Ge
 interface StandingRow {
   player1Id: string; player1Name: string; player2Id: string | null; player2Name: string | null;
   played: number; wins: number; losses: number; pf: number; pa: number; diff: number;
+  setsWon: number; setsLost: number;
 }
 
 interface MatchRow {
@@ -200,15 +201,18 @@ function EditMatchupModal({ match, regs, roundMatches, onClose, onSaved }: {
   const regLabel = (r: RegRow) =>
     `${r.player1Name}${r.player2Name ? ` / ${r.player2Name}` : ''} (Lv${r.player1Level}${r.player2Level != null ? `+${r.player2Level}` : ''})`;
 
-  const occupiedKeys = useMemo(() => {
-    const keys = new Set<string>();
+  // A round-robin round has no idle registrations — everyone is already seated in
+  // some pending match. So the pickable set is "who's playing this round", and
+  // saving trades places with whoever currently holds the chosen slot.
+  const roundParticipants = useMemo(() => {
+    const seatedKeys = new Set<string>();
     for (const m of roundMatches) {
-      if (m.id === match.id || m.status !== 'pending') continue;
-      keys.add(regKeyFor(m.team1Player1Id, m.team1Player2Id));
-      keys.add(regKeyFor(m.team2Player1Id, m.team2Player2Id));
+      if (m.status !== 'pending') continue;
+      seatedKeys.add(regKeyFor(m.team1Player1Id, m.team1Player2Id));
+      seatedKeys.add(regKeyFor(m.team2Player1Id, m.team2Player2Id));
     }
-    return keys;
-  }, [roundMatches, match.id]);
+    return regs.filter(r => seatedKeys.has(regKeyFor(r.player1Id, r.player2Id)));
+  }, [regs, roundMatches]);
 
   const currentTeam1Reg = regs.find(r => regKeyFor(r.player1Id, r.player2Id) === regKeyFor(match.team1Player1Id, match.team1Player2Id));
   const currentTeam2Reg = regs.find(r => regKeyFor(r.player1Id, r.player2Id) === regKeyFor(match.team2Player1Id, match.team2Player2Id));
@@ -218,10 +222,7 @@ function EditMatchupModal({ match, regs, roundMatches, onClose, onSaved }: {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const optionsFor = (currentSelection: string, otherSelection: string) =>
-    regs.filter(r =>
-      r.id === currentSelection ||
-      (!occupiedKeys.has(regKeyFor(r.player1Id, r.player2Id)) && r.id !== otherSelection));
+  const optionsFor = (otherSelection: string) => roundParticipants.filter(r => r.id !== otherSelection);
 
   const handleSave = async () => {
     setError(null);
@@ -249,14 +250,14 @@ function EditMatchupModal({ match, regs, roundMatches, onClose, onSaved }: {
             <label className="block text-xs font-semibold text-zinc-500 mb-1">Team 1</label>
             <select value={team1RegId} onChange={e => setTeam1RegId(e.target.value)}
               className="w-full px-3 py-2 text-sm border border-zinc-200 rounded-xl">
-              {optionsFor(team1RegId, team2RegId).map(r => <option key={r.id} value={r.id}>{regLabel(r)}</option>)}
+              {optionsFor(team2RegId).map(r => <option key={r.id} value={r.id}>{regLabel(r)}</option>)}
             </select>
           </div>
           <div>
             <label className="block text-xs font-semibold text-zinc-500 mb-1">Team 2</label>
             <select value={team2RegId} onChange={e => setTeam2RegId(e.target.value)}
               className="w-full px-3 py-2 text-sm border border-zinc-200 rounded-xl">
-              {optionsFor(team2RegId, team1RegId).map(r => <option key={r.id} value={r.id}>{regLabel(r)}</option>)}
+              {optionsFor(team1RegId).map(r => <option key={r.id} value={r.id}>{regLabel(r)}</option>)}
             </select>
           </div>
         </div>
@@ -449,6 +450,23 @@ export function TournamentDetail() {
     }
   };
 
+  const handleDeleteMatch = async (match: MatchRow) => {
+    const ok = await confirm({
+      title: 'Delete matchup?',
+      message: 'Both teams will have no match this round. This cannot be undone.',
+      confirmLabel: 'Delete',
+      danger: true,
+    });
+    if (!ok) return;
+    setActionError(null);
+    try {
+      await (window.api as any).tournamentsDeleteMatch(match.id);
+      await load();
+    } catch (err: any) {
+      setActionError(err?.message ?? 'Failed to delete matchup.');
+    }
+  };
+
   const loadTeamPlayers = useCallback(async (teamId: string) => {
     const ps = await (window.api as any).tournamentTeamsListPlayers(teamId) as any[];
     setTeamPlayers(prev => ({ ...prev, [teamId]: ps }));
@@ -528,6 +546,7 @@ export function TournamentDetail() {
     { headerName: 'P', field: 'played', width: 50 },
     { headerName: 'W', field: 'wins', width: 50, cellRenderer: (p: any) => <span className="text-emerald-600">{p.value}</span> },
     { headerName: 'L', field: 'losses', width: 50, cellRenderer: (p: any) => <span className="text-red-500">{p.value}</span> },
+    { headerName: 'Sets', field: 'setsWon', width: 70, cellRenderer: (p: any) => `${p.data.setsWon}-${p.data.setsLost}` },
     { headerName: 'PF', field: 'pf', width: 60 },
     { headerName: 'PA', field: 'pa', width: 60 },
     { headerName: 'Diff', field: 'diff', width: 60, cellRenderer: (p: any) => <span className={p.value >= 0 ? 'text-emerald-600' : 'text-red-500'}>{p.value > 0 ? `+${p.value}` : p.value}</span> },
@@ -990,6 +1009,12 @@ export function TournamentDetail() {
                               <button onClick={() => setEditMatchupMatch(m)}
                                 className="h-6 px-2 text-[11px] font-semibold text-zinc-700 border border-zinc-200 rounded-md hover:bg-zinc-50 active:scale-[0.97] transition-all">
                                 Edit Matchup
+                              </button>
+                            )}
+                            {!bye && !m.category && m.status === 'pending' && data.format === 'round_robin' && (
+                              <button onClick={() => handleDeleteMatch(m)}
+                                className="h-6 px-2 text-[11px] font-semibold text-red-600 border border-red-200 rounded-md hover:bg-red-50 active:scale-[0.97] transition-all">
+                                Delete
                               </button>
                             )}
                             {!bye && (

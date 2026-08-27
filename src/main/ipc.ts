@@ -14,6 +14,7 @@ import {
   generateRoundRobinMatches,
   validateGroupReassignment,
   validateGroupTournamentConfig,
+  validateMatchDeletion,
   validateMatchReassignment,
   validateTeamReassignment,
   validateTournamentRegistration,
@@ -954,12 +955,30 @@ export async function registerIpcHandlers() {
       [match.tournamentId, match.round, match.groupId ?? null]
     );
 
-    const resolved = validateMatchReassignment(matchId, match.status, isBye, regs, roundMatches, assignment);
+    const updates = validateMatchReassignment(matchId, match.status, isBye, regs, roundMatches, assignment);
 
-    run(
-      'UPDATE tournament_matches SET team1Player1Id = ?, team1Player2Id = ?, team2Player1Id = ?, team2Player2Id = ? WHERE id = ?',
-      [resolved.team1Player1Id, resolved.team1Player2Id, resolved.team2Player1Id, resolved.team2Player2Id, matchId]
+    transaction(() => {
+      for (const u of updates) {
+        run(
+          'UPDATE tournament_matches SET team1Player1Id = ?, team1Player2Id = ?, team2Player1Id = ?, team2Player2Id = ? WHERE id = ?',
+          [u.team1Player1Id, u.team1Player2Id, u.team2Player1Id, u.team2Player2Id, u.matchId]
+        );
+      }
+    });
+  });
+
+  ipcMain.handle('tournaments:deleteMatch', (_e, matchId: string) => {
+    const match = queryOne<TournamentMatchRecord & { teamMatchId: string | null }>(
+      'SELECT * FROM tournament_matches WHERE id = ?', [matchId]
     );
+    if (!match) throw new Error('Match not found');
+
+    const tournament = queryOne<{ format: string }>('SELECT format FROM tournaments WHERE id = ?', [match.tournamentId]);
+    if (!tournament) throw new Error('Tournament not found');
+
+    validateMatchDeletion(tournament.format, match.status, !!match.teamMatchId);
+
+    run('DELETE FROM tournament_matches WHERE id = ?', [matchId]);
   });
 
   ipcMain.handle('tournaments:reassignGroup', (_e, registrationId: string, newGroupId: string) => {
