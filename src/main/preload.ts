@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
+import type { SetScore } from '../shared/badminton';
 
 const api = {
   // Settings
@@ -104,8 +105,9 @@ const api = {
   tournamentsUnregister: (id: string) => ipcRenderer.invoke('tournaments:unregister', id),
   tournamentsRegistrations: (tournamentId: string) => ipcRenderer.invoke('tournaments:registrations', tournamentId),
   tournamentsGenerateBracket: (tournamentId: string) => ipcRenderer.invoke('tournaments:generateBracket', tournamentId),
-  tournamentsSetScore: (matchId: string, team1Score: number, team2Score: number) => ipcRenderer.invoke('tournaments:setScore', matchId, team1Score, team2Score),
+  tournamentsSetScore: (matchId: string, sets: SetScore[]) => ipcRenderer.invoke('tournaments:setScore', matchId, sets),
   tournamentsAdvanceWinners: (tournamentId: string, currentRound: string) => ipcRenderer.invoke('tournaments:advanceWinners', tournamentId, currentRound),
+  tournamentsReassignMatch: (matchId: string, assignment: { team1RegistrationId: string; team2RegistrationId: string }) => ipcRenderer.invoke('tournaments:reassignMatch', matchId, assignment),
   tournamentsStandings: (tournamentId: string) => ipcRenderer.invoke('tournaments:standings', tournamentId),
   // Team tournament
   tournamentTeamsList: (tournamentId: string) => ipcRenderer.invoke('tournament:teams:list', tournamentId),
@@ -118,7 +120,7 @@ const api = {
   tournamentTeamMatchesList: (tournamentId: string) => ipcRenderer.invoke('tournament:teamMatches:list', tournamentId),
   tournamentTeamMatchesListGames: (teamMatchId: string) => ipcRenderer.invoke('tournament:teamMatches:listGames', teamMatchId),
   tournamentTeamMatchesAssignCourt: (gameId: string, courtNumber: number) => ipcRenderer.invoke('tournament:teamMatches:assignCourt', gameId, courtNumber),
-  tournamentTeamMatchesSetScore: (gameId: string, team1Score: number, team2Score: number) => ipcRenderer.invoke('tournament:teamMatches:setScore', gameId, team1Score, team2Score),
+  tournamentTeamMatchesSetScore: (gameId: string, sets: SetScore[]) => ipcRenderer.invoke('tournament:teamMatches:setScore', gameId, sets),
   tournamentTeamMatchesReassignPlayers: (gameId: string, assignment: { team1Player1Id: string; team1Player2Id: string | null; team2Player1Id: string; team2Player2Id: string | null }) => ipcRenderer.invoke('tournament:teamMatches:reassignPlayers', gameId, assignment),
   tournamentTeamsStandings: (tournamentId: string) => ipcRenderer.invoke('tournament:teams:standings', tournamentId),
 };

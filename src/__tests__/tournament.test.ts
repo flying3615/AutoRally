@@ -5,6 +5,7 @@ import {
   computeTournamentStandings,
   generateKnockoutMatches,
   generateRoundRobinMatches,
+  validateMatchReassignment,
   validateTeamReassignment,
   validateTournamentRegistration,
   type TournamentMatchRecord,
@@ -142,6 +143,37 @@ describe('tournament scheduling', () => {
     ]);
 
     expect(standings.map(s => s.player1Id)).toEqual(['b', 'c']);
+  });
+
+  it('sums actual per-set points for standings tiebreakers when set scores are recorded', () => {
+    const standings = computeTournamentStandings([
+      {
+        id: 'm1',
+        tournamentId: 't1',
+        round: 'RR',
+        matchNumber: 1,
+        courtNumber: 1,
+        status: 'completed',
+        team1Player1Id: 'b',
+        team1Player2Id: null,
+        team2Player1Id: 'c',
+        team2Player2Id: null,
+        team1Score: 2, // sets won, not points
+        team2Score: 1,
+        set1Team1Score: 21, set1Team2Score: 18,
+        set2Team1Score: 15, set2Team2Score: 21,
+        set3Team1Score: 21, set3Team2Score: 10,
+        winner: 'team1',
+        completedAt: '2026-01-01T00:00:00.000Z',
+      },
+    ]);
+
+    const b = standings.find(s => s.player1Id === 'b')!;
+    const c = standings.find(s => s.player1Id === 'c')!;
+    expect(b.pf).toBe(21 + 15 + 21);
+    expect(b.pa).toBe(18 + 21 + 10);
+    expect(c.pf).toBe(18 + 21 + 10);
+    expect(c.pa).toBe(21 + 15 + 21);
   });
 
   it('rejects duplicate, self, and already-registered tournament registrations', () => {
@@ -302,5 +334,104 @@ describe('validateTeamReassignment', () => {
     expect(() => validateTeamReassignment('XD', team1, team2, {
       team1Player1Id: 't1-m1', team1Player2Id: 't1-f1', team2Player1Id: 't2-m1', team2Player2Id: 't2-f1',
     })).not.toThrow();
+  });
+});
+
+function roundMatch(
+  id: string,
+  status: TournamentMatchRecord['status'],
+  team1Player1Id: string,
+  team2Player1Id: string,
+  team1Player2Id: string | null = null,
+  team2Player2Id: string | null = null,
+): TournamentMatchRecord {
+  return {
+    id,
+    tournamentId: 't1',
+    round: 'R1',
+    matchNumber: 1,
+    courtNumber: null,
+    status,
+    team1Player1Id,
+    team1Player2Id,
+    team2Player1Id,
+    team2Player2Id,
+    team1Score: null,
+    team2Score: null,
+    winner: null,
+    completedAt: null,
+  };
+}
+
+describe('validateMatchReassignment', () => {
+  const regs = [
+    team('a'),
+    team('b'),
+    team('c'),
+    team('d'),
+    { ...team('e'), player2Id: 'f', player2Level: 3 },
+  ];
+  const targetMatch = roundMatch('m1', 'pending', 'a', 'b');
+  const otherMatch = roundMatch('m2', 'pending', 'c', 'd');
+
+  it('accepts a valid reassignment and resolves registrations to player ids', () => {
+    const result = validateMatchReassignment(
+      'm1', 'pending', false, regs, [targetMatch, otherMatch],
+      { team1RegistrationId: 'reg-a', team2RegistrationId: 'reg-e' },
+    );
+    expect(result).toEqual({
+      team1Player1Id: 'a', team1Player2Id: null,
+      team2Player1Id: 'e', team2Player2Id: 'f',
+    });
+  });
+
+  it('rejects assigning the same registration to both sides', () => {
+    expect(() => validateMatchReassignment(
+      'm1', 'pending', false, regs, [targetMatch, otherMatch],
+      { team1RegistrationId: 'reg-a', team2RegistrationId: 'reg-a' },
+    )).toThrow(/must be different/i);
+  });
+
+  it('rejects an unknown registration id', () => {
+    expect(() => validateMatchReassignment(
+      'm1', 'pending', false, regs, [targetMatch, otherMatch],
+      { team1RegistrationId: 'reg-a', team2RegistrationId: 'reg-nope' },
+    )).toThrow(/not registered/i);
+  });
+
+  it('rejects reassigning a match that has already started', () => {
+    expect(() => validateMatchReassignment(
+      'm1', 'in_progress', false, regs, [targetMatch, otherMatch],
+      { team1RegistrationId: 'reg-a', team2RegistrationId: 'reg-b' },
+    )).toThrow(/already started/i);
+  });
+
+  it('rejects reassigning a bye match', () => {
+    expect(() => validateMatchReassignment(
+      'm1', 'pending', true, regs, [targetMatch, otherMatch],
+      { team1RegistrationId: 'reg-a', team2RegistrationId: 'reg-b' },
+    )).toThrow(/bye/i);
+  });
+
+  it('rejects a registration that already has a pending match elsewhere this round', () => {
+    expect(() => validateMatchReassignment(
+      'm1', 'pending', false, regs, [targetMatch, otherMatch],
+      { team1RegistrationId: 'reg-c', team2RegistrationId: 'reg-b' },
+    )).toThrow(/already has a pending match/i);
+  });
+
+  it('allows keeping a registration already seated in the match being edited', () => {
+    expect(() => validateMatchReassignment(
+      'm1', 'pending', false, regs, [targetMatch, otherMatch],
+      { team1RegistrationId: 'reg-a', team2RegistrationId: 'reg-b' },
+    )).not.toThrow();
+  });
+
+  it('ignores a completed match in the same round when checking for conflicts', () => {
+    const completedOther = { ...otherMatch, status: 'completed' as const, winner: 'team1' as const };
+    expect(() => validateMatchReassignment(
+      'm1', 'pending', false, regs, [targetMatch, completedOther],
+      { team1RegistrationId: 'reg-c', team2RegistrationId: 'reg-d' },
+    )).not.toThrow();
   });
 });

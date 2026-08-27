@@ -10,8 +10,10 @@ import {
   computeTournamentStandings,
   generateKnockoutMatches,
   generateRoundRobinMatches,
+  validateMatchReassignment,
   validateTeamReassignment,
   validateTournamentRegistration,
+  type MatchReassignmentInput,
   type TeamMatchCategory,
   type TeamMatchComposition,
   type TeamReassignmentInput,
@@ -20,6 +22,7 @@ import {
   type TournamentRegistration,
 } from './tournament';
 import { averageSessionDurationMinutes, safeSessionEndTime, sessionDurationMinutes } from './sessionDuration';
+import { computeMatchOutcome, type SetScore } from '../shared/badminton';
 import fs from 'fs';
 
 export async function registerIpcHandlers() {
@@ -857,17 +860,51 @@ export async function registerIpcHandlers() {
     });
   });
 
-  ipcMain.handle('tournaments:setScore', (_e, matchId: string, team1Score: number, team2Score: number) => {
-    if (!Number.isInteger(team1Score) || team1Score < 0 || !Number.isInteger(team2Score) || team2Score < 0) {
-      throw new Error('Scores must be non-negative integers');
-    }
-    if (team1Score === team2Score) {
-      throw new Error('Scores cannot be equal');
-    }
-    const winner = team1Score > team2Score ? 'team1' : 'team2';
-    run('UPDATE tournament_matches SET team1Score = ?, team2Score = ?, winner = ?, status = \'completed\', completedAt = ? WHERE id = ?',
-      [team1Score, team2Score, winner, new Date().toISOString(), matchId]);
+  ipcMain.handle('tournaments:setScore', (_e, matchId: string, sets: SetScore[]) => {
+    const { team1Score, team2Score, winner } = computeMatchOutcome(sets);
+    const [set1, set2, set3] = sets;
+    run(
+      `UPDATE tournament_matches SET
+         team1Score = ?, team2Score = ?, winner = ?, status = 'completed', completedAt = ?,
+         set1Team1Score = ?, set1Team2Score = ?, set2Team1Score = ?, set2Team2Score = ?, set3Team1Score = ?, set3Team2Score = ?
+       WHERE id = ?`,
+      [
+        team1Score, team2Score, winner, new Date().toISOString(),
+        set1!.team1, set1!.team2, set2!.team1, set2!.team2, set3?.team1 ?? null, set3?.team2 ?? null,
+        matchId,
+      ],
+    );
     return { winner };
+  });
+
+  ipcMain.handle('tournaments:reassignMatch', (_e, matchId: string, assignment: MatchReassignmentInput) => {
+    const match = queryOne<TournamentMatchRecord & { teamMatchId: string | null }>(
+      'SELECT * FROM tournament_matches WHERE id = ?', [matchId]
+    );
+    if (!match) throw new Error('Match not found');
+    if (match.teamMatchId) throw new Error('Not a bracket match');
+
+    const isBye = match.team1Player1Id === match.team2Player1Id
+      && (match.team1Player2Id ?? null) === (match.team2Player2Id ?? null);
+
+    const regs = queryAll<TournamentRegistration>(
+      `SELECT tr.id, tr.player1Id, p1.level as player1Level, tr.player2Id, p2.level as player2Level
+       FROM tournament_registrations tr
+       JOIN players p1 ON tr.player1Id = p1.id
+       LEFT JOIN players p2 ON tr.player2Id = p2.id
+       WHERE tr.tournamentId = ?`, [match.tournamentId]
+    );
+    const roundMatches = queryAll<TournamentMatchRecord>(
+      'SELECT * FROM tournament_matches WHERE tournamentId = ? AND round = ?',
+      [match.tournamentId, match.round]
+    );
+
+    const resolved = validateMatchReassignment(matchId, match.status, isBye, regs, roundMatches, assignment);
+
+    run(
+      'UPDATE tournament_matches SET team1Player1Id = ?, team1Player2Id = ?, team2Player1Id = ?, team2Player2Id = ? WHERE id = ?',
+      [resolved.team1Player1Id, resolved.team1Player2Id, resolved.team2Player1Id, resolved.team2Player2Id, matchId]
+    );
   });
 
   ipcMain.handle('tournaments:advanceWinners', (_e, tournamentId: string, currentRound: string) => {
@@ -1134,17 +1171,20 @@ export async function registerIpcHandlers() {
     }
   });
 
-  ipcMain.handle('tournament:teamMatches:setScore', (_e, gameId: string, team1Score: number, team2Score: number) => {
-    if (!Number.isInteger(team1Score) || team1Score < 0 || !Number.isInteger(team2Score) || team2Score < 0) {
-      throw new Error('Scores must be non-negative integers');
-    }
-    if (team1Score === team2Score) throw new Error('Scores cannot be equal');
-
-    const winner = team1Score > team2Score ? 'team1' : 'team2';
+  ipcMain.handle('tournament:teamMatches:setScore', (_e, gameId: string, sets: SetScore[]) => {
+    const { team1Score, team2Score, winner } = computeMatchOutcome(sets);
+    const [set1, set2, set3] = sets;
     const now = new Date().toISOString();
     run(
-      "UPDATE tournament_matches SET team1Score = ?, team2Score = ?, winner = ?, status = 'completed', completedAt = ? WHERE id = ?",
-      [team1Score, team2Score, winner, now, gameId]
+      `UPDATE tournament_matches SET
+         team1Score = ?, team2Score = ?, winner = ?, status = 'completed', completedAt = ?,
+         set1Team1Score = ?, set1Team2Score = ?, set2Team1Score = ?, set2Team2Score = ?, set3Team1Score = ?, set3Team2Score = ?
+       WHERE id = ?`,
+      [
+        team1Score, team2Score, winner, now,
+        set1!.team1, set1!.team2, set2!.team1, set2!.team2, set3?.team1 ?? null, set3?.team2 ?? null,
+        gameId,
+      ],
     );
 
     // Recompute team match wins

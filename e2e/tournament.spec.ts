@@ -41,10 +41,10 @@ async function getTournamentDetail(page: Page, id: string) {
   );
 }
 
-async function setScore(page: Page, matchId: string, team1Score: number, team2Score: number) {
+async function setScore(page: Page, matchId: string, sets: [number, number][]) {
   return await page.evaluate(
-    ({ mid, s1, s2 }) => window.api.tournamentsSetScore(mid, s1, s2),
-    { mid: matchId, s1: team1Score, s2: team2Score }
+    ({ mid, sets }) => window.api.tournamentsSetScore(mid, sets.map(([team1, team2]) => ({ team1, team2 }))),
+    { mid: matchId, sets }
   );
 }
 
@@ -124,18 +124,20 @@ test.describe('Knockout Bracket', () => {
     const firstRoundMatches = matchesForRound(detail, detail.rounds[0]);
     expect(firstRoundMatches.length).toBe(2);
 
-    // Score the first match: team1 wins 21-15
-    await setScore(page, firstRoundMatches[0].id, 21, 15);
-    // Score the second match: team2 wins 21-19
-    await setScore(page, firstRoundMatches[1].id, 19, 21);
+    // Score the first match: team1 sweeps 21-15, 21-15
+    await setScore(page, firstRoundMatches[0].id, [[21, 15], [21, 15]]);
+    // Score the second match: team2 sweeps 19-21, 19-21
+    await setScore(page, firstRoundMatches[1].id, [[19, 21], [19, 21]]);
 
     const detail2 = await getTournamentDetail(page, t.id) as any;
     const firstRoundAfter = matchesForRound(detail2, detail.rounds[0]);
     expect(firstRoundAfter[0].winner).toBe('team1');
-    expect(firstRoundAfter[0].team1Score).toBe(21);
-    expect(firstRoundAfter[0].team2Score).toBe(15);
+    expect(firstRoundAfter[0].team1Score).toBe(2); // sets won
+    expect(firstRoundAfter[0].team2Score).toBe(0);
+    expect(firstRoundAfter[0].set1Team1Score).toBe(21);
+    expect(firstRoundAfter[0].set1Team2Score).toBe(15);
     expect(firstRoundAfter[1].winner).toBe('team2');
-    expect(firstRoundAfter[1].team2Score).toBe(21);
+    expect(firstRoundAfter[1].team2Score).toBe(2); // sets won
   });
 
   test('advances winners to final round', async ({ page }) => {
@@ -150,8 +152,8 @@ test.describe('Knockout Bracket', () => {
     const firstRound = d1.rounds[0];
     expect(firstRound).toBe('SF');
     const firstRoundMatches = matchesForRound(d1, firstRound);
-    await setScore(page, firstRoundMatches[0].id, 21, 15);
-    await setScore(page, firstRoundMatches[1].id, 21, 19);
+    await setScore(page, firstRoundMatches[0].id, [[21, 15], [21, 15]]);
+    await setScore(page, firstRoundMatches[1].id, [[21, 19], [21, 19]]);
 
     // Advance winners from R1 to next round
     const advanced = await page.evaluate(
@@ -190,8 +192,8 @@ test.describe('Round-Robin Tournament', () => {
 
     // Score all 6 matches — player 1 wins all
     for (const m of detail.matches) {
-      // team1 always wins 21-15
-      await setScore(page, m.id, 21, 15);
+      // team1 always sweeps 21-15, 21-15
+      await setScore(page, m.id, [[21, 15], [21, 15]]);
     }
 
     const standings = await getStandings(page, t.id) as any[];

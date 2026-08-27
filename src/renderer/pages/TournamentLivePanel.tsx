@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { courtPhase } from '../theme';
+import { SetScoreModal } from '../components/SetScoreModal';
 
 interface TeamMatch {
   id: string;
@@ -24,6 +25,9 @@ interface Game {
   team2Player1Id: string; team2Player1Name: string; team2Player1Level: number;
   team2Player2Id: string | null; team2Player2Name: string | null; team2Player2Level: number | null;
   team1Score: number | null; team2Score: number | null;
+  set1Team1Score: number | null; set1Team2Score: number | null;
+  set2Team1Score: number | null; set2Team2Score: number | null;
+  set3Team1Score: number | null; set3Team2Score: number | null;
   winner: string | null;
   category: 'MS' | 'WS' | 'MD' | 'XD' | 'WD' | null;
   slotNumber: number | null;
@@ -46,64 +50,25 @@ function ScoreModal({ game, teamMatch, onClose, onSaved }: {
   game: Game; teamMatch: TeamMatch | null;
   onClose: () => void; onSaved: () => void;
 }) {
-  const [sc1, setSc1] = useState(game.team1Score != null ? String(game.team1Score) : '');
-  const [sc2, setSc2] = useState(game.team2Score != null ? String(game.team2Score) : '');
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const handleSave = async () => {
-    const s1 = parseInt(sc1); const s2 = parseInt(sc2);
-    if (isNaN(s1) || isNaN(s2) || s1 < 0 || s2 < 0) { setError('Enter valid scores'); return; }
-    if (s1 === s2) { setError('Scores cannot be equal'); return; }
-    setSaving(true); setError(null);
-    try {
-      await (window.api as any).tournamentTeamMatchesSetScore(game.id, s1, s2);
-      onSaved();
-    } catch (err: any) { setError(err?.message ?? 'Failed'); }
-    finally { setSaving(false); }
-  };
-
-  useEffect(() => {
-    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); if (e.key === 'Enter') handleSave(); };
-    document.addEventListener('keydown', h);
-    return () => document.removeEventListener('keydown', h);
-  }, [sc1, sc2]);
-
-  const team1Label = teamMatch ? teamMatch.team1Name : 'Team 1';
-  const team2Label = teamMatch ? teamMatch.team2Name : 'Team 2';
+  const initialSets = [
+    game.set1Team1Score != null && game.set1Team2Score != null ? { team1: game.set1Team1Score, team2: game.set1Team2Score } : null,
+    game.set2Team1Score != null && game.set2Team2Score != null ? { team1: game.set2Team1Score, team2: game.set2Team2Score } : null,
+    game.set3Team1Score != null && game.set3Team2Score != null ? { team1: game.set3Team1Score, team2: game.set3Team2Score } : null,
+  ].filter((s): s is { team1: number; team2: number } => s !== null);
 
   return (
-    <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-white rounded-2xl p-6 w-[380px]" onClick={e => e.stopPropagation()}
-        style={{ boxShadow: '0 24px 48px -12px rgba(0,0,0,0.25)', animation: 'ctxFadeIn 0.2s cubic-bezier(0.16,1,0.3,1)' }}>
-        <h3 className="text-lg font-bold text-zinc-900 mb-1">Record Score</h3>
-        <p className="text-xs text-zinc-400 mb-5">
-          {team1Label} vs {team2Label} · Game {game.matchNumber}
-          {teamMatch && <span className="ml-2">({teamMatch.team1Wins}-{teamMatch.team2Wins} in match)</span>}
-        </p>
-        <div className="grid grid-cols-3 gap-3 items-center mb-5">
-          <div className="text-center">
-            <p className="text-xs font-semibold text-zinc-500 mb-1 truncate">{formatGameSide(game, 'team1')}</p>
-            <input autoFocus type="number" min="0" value={sc1} onChange={e => setSc1(e.target.value)}
-              className="w-full text-center text-2xl font-bold px-3 py-2 border border-zinc-200 rounded-xl focus:outline-none focus:border-zinc-400" />
-          </div>
-          <div className="text-center text-sm font-bold text-zinc-400">vs</div>
-          <div className="text-center">
-            <p className="text-xs font-semibold text-zinc-500 mb-1 truncate">{formatGameSide(game, 'team2')}</p>
-            <input type="number" min="0" value={sc2} onChange={e => setSc2(e.target.value)}
-              className="w-full text-center text-2xl font-bold px-3 py-2 border border-zinc-200 rounded-xl focus:outline-none focus:border-zinc-400" />
-          </div>
-        </div>
-        {error && <p className="mb-3 text-xs text-red-600 font-medium">{error}</p>}
-        <div className="flex justify-end gap-2">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-zinc-600 hover:bg-zinc-50 rounded-xl">Cancel</button>
-          <button onClick={handleSave} disabled={saving || !sc1 || !sc2}
-            className="px-5 py-2 text-sm font-semibold bg-zinc-800 text-white rounded-xl hover:bg-zinc-700 disabled:opacity-40 active:scale-[0.97] transition-all">
-            {saving ? 'Saving…' : 'Save Score'}
-          </button>
-        </div>
-      </div>
-    </div>
+    <SetScoreModal
+      title="Record Score"
+      team1Label={formatGameSide(game, 'team1')}
+      team2Label={formatGameSide(game, 'team2')}
+      matchLabel={`Game ${game.matchNumber}${teamMatch ? ` · ${teamMatch.team1Wins}-${teamMatch.team2Wins} in match` : ''}`}
+      initialSets={initialSets}
+      onCancel={onClose}
+      onSave={async sets => {
+        await (window.api as any).tournamentTeamMatchesSetScore(game.id, sets);
+        onSaved();
+      }}
+    />
   );
 }
 
