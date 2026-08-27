@@ -108,6 +108,7 @@ const api = {
   tournamentsSetScore: (matchId: string, sets: SetScore[]) => ipcRenderer.invoke('tournaments:setScore', matchId, sets),
   tournamentsAdvanceWinners: (tournamentId: string, currentRound: string) => ipcRenderer.invoke('tournaments:advanceWinners', tournamentId, currentRound),
   tournamentsReassignMatch: (matchId: string, assignment: { team1RegistrationId: string; team2RegistrationId: string }) => ipcRenderer.invoke('tournaments:reassignMatch', matchId, assignment),
+  tournamentsReassignGroup: (registrationId: string, newGroupId: string) => ipcRenderer.invoke('tournaments:reassignGroup', registrationId, newGroupId),
   tournamentsStandings: (tournamentId: string) => ipcRenderer.invoke('tournaments:standings', tournamentId),
   tournamentsGroupStandings: (tournamentId: string) => ipcRenderer.invoke('tournaments:groupStandings', tournamentId),
   tournamentsGenerateKnockoutFromGroups: (tournamentId: string) => ipcRenderer.invoke('tournaments:generateKnockoutFromGroups', tournamentId),

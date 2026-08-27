@@ -12,6 +12,7 @@ import {
   computeTournamentStandings,
   generateKnockoutMatches,
   generateRoundRobinMatches,
+  validateGroupReassignment,
   validateGroupTournamentConfig,
   validateMatchReassignment,
   validateTeamReassignment,
@@ -918,7 +919,7 @@ export async function registerIpcHandlers() {
   });
 
   ipcMain.handle('tournaments:reassignMatch', (_e, matchId: string, assignment: MatchReassignmentInput) => {
-    const match = queryOne<TournamentMatchRecord & { teamMatchId: string | null }>(
+    const match = queryOne<TournamentMatchRecord & { teamMatchId: string | null; groupId: string | null }>(
       'SELECT * FROM tournament_matches WHERE id = ?', [matchId]
     );
     if (!match) throw new Error('Match not found');
@@ -935,8 +936,8 @@ export async function registerIpcHandlers() {
        WHERE tr.tournamentId = ?`, [match.tournamentId]
     );
     const roundMatches = queryAll<TournamentMatchRecord>(
-      'SELECT * FROM tournament_matches WHERE tournamentId = ? AND round = ?',
-      [match.tournamentId, match.round]
+      'SELECT * FROM tournament_matches WHERE tournamentId = ? AND round = ? AND groupId IS ?',
+      [match.tournamentId, match.round, match.groupId ?? null]
     );
 
     const resolved = validateMatchReassignment(matchId, match.status, isBye, regs, roundMatches, assignment);
@@ -945,6 +946,43 @@ export async function registerIpcHandlers() {
       'UPDATE tournament_matches SET team1Player1Id = ?, team1Player2Id = ?, team2Player1Id = ?, team2Player2Id = ? WHERE id = ?',
       [resolved.team1Player1Id, resolved.team1Player2Id, resolved.team2Player1Id, resolved.team2Player2Id, matchId]
     );
+  });
+
+  ipcMain.handle('tournaments:reassignGroup', (_e, registrationId: string, newGroupId: string) => {
+    const reg = queryOne<{ id: string; tournamentId: string; groupId: string | null }>(
+      'SELECT id, tournamentId, groupId FROM tournament_registrations WHERE id = ?', [registrationId]
+    );
+    if (!reg) throw new Error('Registration not found');
+    if (!reg.groupId) throw new Error('This registration is not in a group');
+
+    const currentGroupMatches = queryAll<TournamentMatchRecord>(
+      'SELECT * FROM tournament_matches WHERE tournamentId = ? AND groupId = ?', [reg.tournamentId, reg.groupId]
+    );
+    const targetGroupMatches = queryAll<TournamentMatchRecord>(
+      'SELECT * FROM tournament_matches WHERE tournamentId = ? AND groupId = ?', [reg.tournamentId, newGroupId]
+    );
+    validateGroupReassignment(currentGroupMatches, targetGroupMatches);
+
+    return transaction(() => {
+      const oldGroupId = reg.groupId!;
+      run('UPDATE tournament_registrations SET groupId = ? WHERE id = ?', [newGroupId, registrationId]);
+
+      // Both groups' round-robin schedules must be rebuilt with the new membership.
+      run('DELETE FROM tournament_matches WHERE tournamentId = ? AND groupId IN (?, ?)', [reg.tournamentId, oldGroupId, newGroupId]);
+
+      const t = queryOne<{ courtCount: number }>('SELECT courtCount FROM tournaments WHERE id = ?', [reg.tournamentId]);
+      for (const gid of [oldGroupId, newGroupId]) {
+        const groupRegs = queryAll<TournamentRegistration>(
+          `SELECT tr.*, p1.level as player1Level, p2.level as player2Level
+           FROM tournament_registrations tr
+           JOIN players p1 ON tr.player1Id = p1.id
+           LEFT JOIN players p2 ON tr.player2Id = p2.id
+           WHERE tr.groupId = ?`, [gid]
+        );
+        const groupMatches = generateRoundRobinMatches(reg.tournamentId, groupRegs, t?.courtCount ?? 4, uuid);
+        for (const match of groupMatches) insertTournamentMatch({ ...match, groupId: gid });
+      }
+    });
   });
 
   ipcMain.handle('tournaments:advanceWinners', (_e, tournamentId: string, currentRound: string) => {
