@@ -5,6 +5,7 @@ import { exportDatabaseBackup, getDb, importDatabaseBackup, initDb, run, queryAl
 import { backupFileName } from './databaseBackup';
 import { clearHistoricalData } from './historyCleanup';
 import {
+  assignRegistrationsToGroups,
   buildNextKnockoutMatches,
   buildTeamMatchGames,
   computeTournamentStandings,
@@ -19,6 +20,7 @@ import {
   type TeamMatchComposition,
   type TeamReassignmentInput,
   type TeamRosterPlayer,
+  type TournamentGroup,
   type TournamentMatchRecord,
   type TournamentRegistration,
 } from './tournament';
@@ -805,13 +807,13 @@ export async function registerIpcHandlers() {
     run('DELETE FROM tournament_registrations WHERE id = ?', [id]);
   });
 
-  function insertTournamentMatch(match: TournamentMatchRecord & { teamMatchId?: string | null; category?: string | null; slotNumber?: number | null }) {
+  function insertTournamentMatch(match: TournamentMatchRecord & { teamMatchId?: string | null; category?: string | null; slotNumber?: number | null; groupId?: string | null }) {
     run(
       `INSERT INTO tournament_matches (
         id, tournamentId, round, matchNumber, courtNumber, status,
         team1Player1Id, team1Player2Id, team2Player1Id, team2Player2Id,
-        team1Score, team2Score, winner, completedAt, teamMatchId, category, slotNumber
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        team1Score, team2Score, winner, completedAt, teamMatchId, category, slotNumber, groupId
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         match.id,
         match.tournamentId,
@@ -830,17 +832,24 @@ export async function registerIpcHandlers() {
         match.teamMatchId ?? null,
         match.category ?? null,
         match.slotNumber ?? null,
+        match.groupId ?? null,
       ],
     );
   }
 
   ipcMain.handle('tournaments:generateBracket', (_e, tournamentId: string) => {
     return transaction(() => {
-      // Delete existing matches for this tournament
       run('DELETE FROM tournament_matches WHERE tournamentId = ?', [tournamentId]);
       run('DELETE FROM tournament_standings WHERE tournamentId = ?', [tournamentId]);
+      // Must null out registrations' groupId BEFORE deleting the groups they
+      // reference — this DB runs with PRAGMA foreign_keys = ON, so deleting a
+      // still-referenced tournament_groups row would throw a constraint error.
+      run('UPDATE tournament_registrations SET groupId = NULL WHERE tournamentId = ?', [tournamentId]);
+      run('DELETE FROM tournament_groups WHERE tournamentId = ?', [tournamentId]);
 
-      const t = queryOne<{ format: string; courtCount: number }>('SELECT format, courtCount FROM tournaments WHERE id = ?', [tournamentId]);
+      const t = queryOne<{ format: string; courtCount: number; groupCount: number | null; advancePerGroup: number | null }>(
+        'SELECT format, courtCount, groupCount, advancePerGroup FROM tournaments WHERE id = ?', [tournamentId]
+      );
       if (!t) return [];
 
       const regs = queryAll<TournamentRegistration>(
@@ -853,6 +862,33 @@ export async function registerIpcHandlers() {
       );
 
       if (regs.length < 2) return [];
+
+      if (t.format === 'mixed') {
+        const groupCount = t.groupCount ?? 0;
+        if (groupCount < 2) return [];
+        const groups: TournamentGroup[] = Array.from({ length: groupCount }, (_, i) => ({
+          id: uuid(),
+          name: String.fromCharCode('A'.charCodeAt(0) + i),
+        }));
+        for (const g of groups) {
+          run('INSERT INTO tournament_groups (id, tournamentId, name) VALUES (?, ?, ?)', [g.id, tournamentId, g.name]);
+        }
+        const byGroup = assignRegistrationsToGroups(regs, groups);
+        const allMatches: TournamentMatchRecord[] = [];
+        for (const g of groups) {
+          const groupRegs = byGroup.get(g.id) ?? [];
+          if (groupRegs.length > 0) {
+            run('UPDATE tournament_registrations SET groupId = ? WHERE id IN (' + groupRegs.map(() => '?').join(',') + ')',
+              [g.id, ...groupRegs.map(r => r.id)]);
+          }
+          const groupMatches = generateRoundRobinMatches(tournamentId, groupRegs, t.courtCount, uuid);
+          for (const match of groupMatches) {
+            insertTournamentMatch({ ...match, groupId: g.id });
+            allMatches.push(match);
+          }
+        }
+        return allMatches;
+      }
 
       const matches = t.format === 'knockout'
         ? generateKnockoutMatches(tournamentId, regs, uuid)
