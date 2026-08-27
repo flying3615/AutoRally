@@ -392,15 +392,20 @@ export function validateMatchReassignment(
 
   const slotKey = (m: TournamentMatchRecord, side: ReassignmentSide) =>
     side === 'team1' ? teamKey(m.team1Player1Id, m.team1Player2Id) : teamKey(m.team2Player1Id, m.team2Player2Id);
+
+  const working = new Map(pending.map(m => [m.id, { team1: slotKey(m, 'team1'), team2: slotKey(m, 'team2') }]));
+
+  // Searches the current (possibly already-mutated) working state, not the
+  // original match records — the second swapIn call must see where the first
+  // call just relocated a team, or it can overwrite a slot that team was
+  // already moved out of and lose it.
   const findSlot = (key: string): { matchId: string; side: ReassignmentSide } | null => {
-    for (const m of pending) {
-      if (slotKey(m, 'team1') === key) return { matchId: m.id, side: 'team1' };
-      if (slotKey(m, 'team2') === key) return { matchId: m.id, side: 'team2' };
+    for (const [matchId, slots] of working) {
+      if (slots.team1 === key) return { matchId, side: 'team1' };
+      if (slots.team2 === key) return { matchId, side: 'team2' };
     }
     return null;
   };
-
-  const working = new Map(pending.map(m => [m.id, { team1: slotKey(m, 'team1'), team2: slotKey(m, 'team2') }]));
 
   const swapIn = (side: ReassignmentSide, desired: TournamentRegistration) => {
     const desiredKey = teamKey(desired.player1Id, desired.player2Id ?? null);

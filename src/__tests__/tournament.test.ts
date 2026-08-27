@@ -450,6 +450,21 @@ describe('validateMatchReassignment', () => {
     expect(updates).toContainEqual({ matchId: 'm2', team1Player1Id: 'a', team1Player2Id: null, team2Player1Id: 'b', team2Player2Id: null });
   });
 
+  it('does not duplicate or drop a team when the second slot resolves to where the first swap just relocated someone', () => {
+    // Regression: team2's desired team ('a') was originally seated at m1.team1,
+    // but team1's swap (bringing in 'c') already relocated 'a' to m2.team1 by
+    // the time team2 is processed. The lookup must see that new location, not
+    // the stale original one, or 'a' ends up duplicated and 'c' gets dropped.
+    const updates = validateMatchReassignment(
+      'm1', 'pending', false, regs, [targetMatch, otherMatch],
+      { team1RegistrationId: 'reg-c', team2RegistrationId: 'reg-a' },
+    );
+    expect(updates).toContainEqual({ matchId: 'm1', team1Player1Id: 'c', team1Player2Id: null, team2Player1Id: 'a', team2Player2Id: null });
+    expect(updates).toContainEqual({ matchId: 'm2', team1Player1Id: 'b', team1Player2Id: null, team2Player1Id: 'd', team2Player2Id: null });
+    const allIds = updates.flatMap(u => [u.team1Player1Id, u.team2Player1Id]);
+    expect(new Set(allIds).size).toBe(allIds.length);
+  });
+
   it('resolves a doubles pair swapped in from another match', () => {
     const updates = validateMatchReassignment(
       'm1', 'pending', false, regs, [targetMatch, pairMatch],
