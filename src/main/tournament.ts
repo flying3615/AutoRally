@@ -327,13 +327,22 @@ export interface MatchReassignmentInput {
   team2RegistrationId: string;
 }
 
-export interface ResolvedMatchTeams {
+export interface MatchReassignmentUpdate {
+  matchId: string;
   team1Player1Id: string;
   team1Player2Id: string | null;
   team2Player1Id: string;
   team2Player2Id: string | null;
 }
 
+type ReassignmentSide = 'team1' | 'team2';
+
+// A round-robin round schedules every registration into some pending match (no
+// one is "free"), so picking a new occupant for a slot always means trading
+// places with whoever currently holds it, not moving in an idle team. Each
+// side is resolved against the round's original state (not the other side's
+// result), so a same-match team1/team2 relabel and a genuine cross-match swap
+// both fall out of the same logic without special-casing either.
 export function validateMatchReassignment(
   targetMatchId: string,
   targetStatus: TournamentMatchRecord['status'],
@@ -341,7 +350,7 @@ export function validateMatchReassignment(
   registrations: TournamentRegistration[],
   roundMatches: TournamentMatchRecord[],
   assignment: MatchReassignmentInput,
-): ResolvedMatchTeams {
+): MatchReassignmentUpdate[] {
   if (targetStatus !== 'pending') throw new Error('Cannot reassign a match that has already started');
   if (targetIsBye) throw new Error('Cannot reassign a bye match');
   if (assignment.team1RegistrationId === assignment.team2RegistrationId) {
@@ -353,23 +362,60 @@ export function validateMatchReassignment(
   const reg2 = regById.get(assignment.team2RegistrationId);
   if (!reg1 || !reg2) throw new Error('Selected team is not registered for this tournament');
 
-  const regKey = (r: TournamentRegistration) => teamKey(r.player1Id, r.player2Id ?? null);
-  const occupiedKeys = new Set<string>();
-  for (const m of roundMatches) {
-    if (m.id === targetMatchId || m.status !== 'pending') continue;
-    occupiedKeys.add(teamKey(m.team1Player1Id, m.team1Player2Id));
-    occupiedKeys.add(teamKey(m.team2Player1Id, m.team2Player2Id));
-  }
-  if (occupiedKeys.has(regKey(reg1)) || occupiedKeys.has(regKey(reg2))) {
-    throw new Error('That team already has a pending match this round');
-  }
+  const pending = roundMatches.filter(m => m.status === 'pending');
+  if (!pending.some(m => m.id === targetMatchId)) throw new Error('Match not found in this round');
 
-  return {
-    team1Player1Id: reg1.player1Id,
-    team1Player2Id: reg1.player2Id ?? null,
-    team2Player1Id: reg2.player1Id,
-    team2Player2Id: reg2.player2Id ?? null,
+  const slotKey = (m: TournamentMatchRecord, side: ReassignmentSide) =>
+    side === 'team1' ? teamKey(m.team1Player1Id, m.team1Player2Id) : teamKey(m.team2Player1Id, m.team2Player2Id);
+  const findSlot = (key: string): { matchId: string; side: ReassignmentSide } | null => {
+    for (const m of pending) {
+      if (slotKey(m, 'team1') === key) return { matchId: m.id, side: 'team1' };
+      if (slotKey(m, 'team2') === key) return { matchId: m.id, side: 'team2' };
+    }
+    return null;
   };
+
+  const working = new Map(pending.map(m => [m.id, { team1: slotKey(m, 'team1'), team2: slotKey(m, 'team2') }]));
+
+  const swapIn = (side: ReassignmentSide, desired: TournamentRegistration) => {
+    const desiredKey = teamKey(desired.player1Id, desired.player2Id ?? null);
+    const targetSlots = working.get(targetMatchId)!;
+    if (desiredKey === targetSlots[side]) return; // already seated here
+
+    const source = findSlot(desiredKey);
+    if (!source) throw new Error('Selected team is not currently scheduled in a pending match this round');
+
+    const displaced = targetSlots[side];
+    targetSlots[side] = desiredKey;
+    working.get(source.matchId)![source.side] = displaced;
+  };
+
+  swapIn('team1', reg1);
+  swapIn('team2', reg2);
+
+  const regByKey = new Map(registrations.map(r => [teamKey(r.player1Id, r.player2Id ?? null), r]));
+  const resolve = (key: string) => {
+    const reg = regByKey.get(key);
+    if (!reg) throw new Error('Internal error: could not resolve team after reassignment');
+    return { player1Id: reg.player1Id, player2Id: reg.player2Id ?? null };
+  };
+
+  const updates: MatchReassignmentUpdate[] = [];
+  for (const m of pending) {
+    const before = { team1: slotKey(m, 'team1'), team2: slotKey(m, 'team2') };
+    const after = working.get(m.id)!;
+    if (after.team1 === before.team1 && after.team2 === before.team2) continue;
+    const t1 = resolve(after.team1);
+    const t2 = resolve(after.team2);
+    updates.push({
+      matchId: m.id,
+      team1Player1Id: t1.player1Id,
+      team1Player2Id: t1.player2Id,
+      team2Player1Id: t2.player1Id,
+      team2Player2Id: t2.player2Id,
+    });
+  }
+  return updates;
 }
 
 export interface TeamMatchComposition {

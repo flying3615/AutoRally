@@ -899,12 +899,16 @@ export async function registerIpcHandlers() {
       [match.tournamentId, match.round]
     );
 
-    const resolved = validateMatchReassignment(matchId, match.status, isBye, regs, roundMatches, assignment);
+    const updates = validateMatchReassignment(matchId, match.status, isBye, regs, roundMatches, assignment);
 
-    run(
-      'UPDATE tournament_matches SET team1Player1Id = ?, team1Player2Id = ?, team2Player1Id = ?, team2Player2Id = ? WHERE id = ?',
-      [resolved.team1Player1Id, resolved.team1Player2Id, resolved.team2Player1Id, resolved.team2Player2Id, matchId]
-    );
+    transaction(() => {
+      for (const u of updates) {
+        run(
+          'UPDATE tournament_matches SET team1Player1Id = ?, team1Player2Id = ?, team2Player1Id = ?, team2Player2Id = ? WHERE id = ?',
+          [u.team1Player1Id, u.team1Player2Id, u.team2Player1Id, u.team2Player2Id, u.matchId]
+        );
+      }
+    });
   });
 
   ipcMain.handle('tournaments:advanceWinners', (_e, tournamentId: string, currentRound: string) => {
