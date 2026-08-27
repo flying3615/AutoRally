@@ -7,6 +7,7 @@ import {
   computeTournamentStandings,
   generateKnockoutMatches,
   generateRoundRobinMatches,
+  matchKind,
   validateGroupReassignment,
   validateGroupTournamentConfig,
   validateMatchDeletion,
@@ -341,6 +342,21 @@ describe('validateGroupTournamentConfig', () => {
 
   it('rejects more than 26 groups', () => {
     expect(() => validateGroupTournamentConfig('mixed', 32, 1)).toThrow(/26/);
+  });
+});
+
+describe('matchKind', () => {
+  it('classifies a rubber (teamMatchId set) ahead of a group match', () => {
+    expect(matchKind({ teamMatchId: 'tm1', groupId: 'g1' })).toBe('rubber');
+    expect(matchKind({ teamMatchId: 'tm1', groupId: null })).toBe('rubber');
+  });
+
+  it('classifies a group match when only groupId is set', () => {
+    expect(matchKind({ teamMatchId: null, groupId: 'g1' })).toBe('group');
+  });
+
+  it('classifies a bracket match when neither is set', () => {
+    expect(matchKind({ teamMatchId: null, groupId: null })).toBe('bracket');
   });
 });
 

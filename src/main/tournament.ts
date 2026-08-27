@@ -56,7 +56,7 @@ function nextPowerOfTwo(n: number): number {
   return Math.pow(2, Math.ceil(Math.log2(n)));
 }
 
-function knockoutRoundName(entrantCount: number): string {
+export function knockoutRoundName(entrantCount: number): string {
   if (entrantCount <= 2) return 'F';
   if (entrantCount === 4) return 'SF';
   if (entrantCount === 8) return 'QF';
@@ -74,6 +74,14 @@ function sameTeam(
 
 function teamKey(player1Id: string, player2Id: string | null): string {
   return `${player1Id}|${player2Id ?? ''}`;
+}
+
+export type MatchKind = 'rubber' | 'group' | 'bracket';
+
+export function matchKind(row: { teamMatchId: string | null; groupId: string | null }): MatchKind {
+  if (row.teamMatchId) return 'rubber';
+  if (row.groupId) return 'group';
+  return 'bracket';
 }
 
 function pendingMatch(
