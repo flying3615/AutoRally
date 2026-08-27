@@ -37,6 +37,8 @@ export interface TournamentStanding {
   losses: number;
   pf: number;
   pa: number;
+  setsWon: number;
+  setsLost: number;
 }
 
 type IdFactory = () => string;
@@ -263,6 +265,24 @@ function matchPointDifferential(match: TournamentMatchRecord): { sc1: number; sc
   );
 }
 
+// Legacy matches (no per-set breakdown) are treated as a single set decided by
+// the match winner, so older tournaments still get a sensible sets record.
+function matchSetsWon(match: TournamentMatchRecord): { s1: number; s2: number } {
+  const setPairs: [number | null | undefined, number | null | undefined][] = [
+    [match.set1Team1Score, match.set1Team2Score],
+    [match.set2Team1Score, match.set2Team2Score],
+    [match.set3Team1Score, match.set3Team2Score],
+  ];
+  const playedSets = setPairs.filter((pair): pair is [number, number] => pair[0] != null && pair[1] != null);
+  if (playedSets.length === 0) {
+    return match.winner === 'team1' ? { s1: 1, s2: 0 } : { s1: 0, s2: 1 };
+  }
+  return playedSets.reduce(
+    (acc, [a, b]) => a > b ? { s1: acc.s1 + 1, s2: acc.s2 } : { s1: acc.s1, s2: acc.s2 + 1 },
+    { s1: 0, s2: 0 },
+  );
+}
+
 export function computeTournamentStandings(matches: TournamentMatchRecord[]): TournamentStanding[] {
   const standings = new Map<string, TournamentStanding>();
 
@@ -275,21 +295,26 @@ export function computeTournamentStandings(matches: TournamentMatchRecord[]): To
     const t1k = teamKey(match.team1Player1Id, match.team1Player2Id);
     const t2k = teamKey(match.team2Player1Id, match.team2Player2Id);
     if (!standings.has(t1k)) {
-      standings.set(t1k, { player1Id: match.team1Player1Id, player2Id: match.team1Player2Id, played: 0, wins: 0, losses: 0, pf: 0, pa: 0 });
+      standings.set(t1k, { player1Id: match.team1Player1Id, player2Id: match.team1Player2Id, played: 0, wins: 0, losses: 0, pf: 0, pa: 0, setsWon: 0, setsLost: 0 });
     }
     if (!standings.has(t2k)) {
-      standings.set(t2k, { player1Id: match.team2Player1Id, player2Id: match.team2Player2Id, played: 0, wins: 0, losses: 0, pf: 0, pa: 0 });
+      standings.set(t2k, { player1Id: match.team2Player1Id, player2Id: match.team2Player2Id, played: 0, wins: 0, losses: 0, pf: 0, pa: 0, setsWon: 0, setsLost: 0 });
     }
 
     const s1 = standings.get(t1k)!;
     const s2 = standings.get(t2k)!;
     const { sc1, sc2 } = matchPointDifferential(match);
+    const { s1: sets1, s2: sets2 } = matchSetsWon(match);
     s1.played++;
     s2.played++;
     s1.pf += sc1;
     s1.pa += sc2;
     s2.pf += sc2;
     s2.pa += sc1;
+    s1.setsWon += sets1;
+    s1.setsLost += sets2;
+    s2.setsWon += sets2;
+    s2.setsLost += sets1;
     if (match.winner === 'team1') {
       s1.wins++;
       s2.losses++;
@@ -327,13 +352,22 @@ export interface MatchReassignmentInput {
   team2RegistrationId: string;
 }
 
-export interface ResolvedMatchTeams {
+export interface MatchReassignmentUpdate {
+  matchId: string;
   team1Player1Id: string;
   team1Player2Id: string | null;
   team2Player1Id: string;
   team2Player2Id: string | null;
 }
 
+type ReassignmentSide = 'team1' | 'team2';
+
+// A round-robin round schedules every registration into some pending match (no
+// one is "free"), so picking a new occupant for a slot always means trading
+// places with whoever currently holds it, not moving in an idle team. Each
+// side is resolved against the round's original state (not the other side's
+// result), so a same-match team1/team2 relabel and a genuine cross-match swap
+// both fall out of the same logic without special-casing either.
 export function validateMatchReassignment(
   targetMatchId: string,
   targetStatus: TournamentMatchRecord['status'],
@@ -341,7 +375,7 @@ export function validateMatchReassignment(
   registrations: TournamentRegistration[],
   roundMatches: TournamentMatchRecord[],
   assignment: MatchReassignmentInput,
-): ResolvedMatchTeams {
+): MatchReassignmentUpdate[] {
   if (targetStatus !== 'pending') throw new Error('Cannot reassign a match that has already started');
   if (targetIsBye) throw new Error('Cannot reassign a bye match');
   if (assignment.team1RegistrationId === assignment.team2RegistrationId) {
@@ -353,23 +387,78 @@ export function validateMatchReassignment(
   const reg2 = regById.get(assignment.team2RegistrationId);
   if (!reg1 || !reg2) throw new Error('Selected team is not registered for this tournament');
 
-  const regKey = (r: TournamentRegistration) => teamKey(r.player1Id, r.player2Id ?? null);
-  const occupiedKeys = new Set<string>();
-  for (const m of roundMatches) {
-    if (m.id === targetMatchId || m.status !== 'pending') continue;
-    occupiedKeys.add(teamKey(m.team1Player1Id, m.team1Player2Id));
-    occupiedKeys.add(teamKey(m.team2Player1Id, m.team2Player2Id));
-  }
-  if (occupiedKeys.has(regKey(reg1)) || occupiedKeys.has(regKey(reg2))) {
-    throw new Error('That team already has a pending match this round');
-  }
+  const pending = roundMatches.filter(m => m.status === 'pending');
+  if (!pending.some(m => m.id === targetMatchId)) throw new Error('Match not found in this round');
 
-  return {
-    team1Player1Id: reg1.player1Id,
-    team1Player2Id: reg1.player2Id ?? null,
-    team2Player1Id: reg2.player1Id,
-    team2Player2Id: reg2.player2Id ?? null,
+  const slotKey = (m: TournamentMatchRecord, side: ReassignmentSide) =>
+    side === 'team1' ? teamKey(m.team1Player1Id, m.team1Player2Id) : teamKey(m.team2Player1Id, m.team2Player2Id);
+
+  const working = new Map(pending.map(m => [m.id, { team1: slotKey(m, 'team1'), team2: slotKey(m, 'team2') }]));
+
+  // Searches the current (possibly already-mutated) working state, not the
+  // original match records — the second swapIn call must see where the first
+  // call just relocated a team, or it can overwrite a slot that team was
+  // already moved out of and lose it.
+  const findSlot = (key: string): { matchId: string; side: ReassignmentSide } | null => {
+    for (const [matchId, slots] of working) {
+      if (slots.team1 === key) return { matchId, side: 'team1' };
+      if (slots.team2 === key) return { matchId, side: 'team2' };
+    }
+    return null;
   };
+
+  const swapIn = (side: ReassignmentSide, desired: TournamentRegistration) => {
+    const desiredKey = teamKey(desired.player1Id, desired.player2Id ?? null);
+    const targetSlots = working.get(targetMatchId)!;
+    if (desiredKey === targetSlots[side]) return; // already seated here
+
+    const source = findSlot(desiredKey);
+    if (!source) throw new Error('Selected team is not currently scheduled in a pending match this round');
+
+    const displaced = targetSlots[side];
+    targetSlots[side] = desiredKey;
+    working.get(source.matchId)![source.side] = displaced;
+  };
+
+  swapIn('team1', reg1);
+  swapIn('team2', reg2);
+
+  const regByKey = new Map(registrations.map(r => [teamKey(r.player1Id, r.player2Id ?? null), r]));
+  const resolve = (key: string) => {
+    const reg = regByKey.get(key);
+    if (!reg) throw new Error('Internal error: could not resolve team after reassignment');
+    return { player1Id: reg.player1Id, player2Id: reg.player2Id ?? null };
+  };
+
+  const updates: MatchReassignmentUpdate[] = [];
+  for (const m of pending) {
+    const before = { team1: slotKey(m, 'team1'), team2: slotKey(m, 'team2') };
+    const after = working.get(m.id)!;
+    if (after.team1 === before.team1 && after.team2 === before.team2) continue;
+    const t1 = resolve(after.team1);
+    const t2 = resolve(after.team2);
+    updates.push({
+      matchId: m.id,
+      team1Player1Id: t1.player1Id,
+      team1Player2Id: t1.player2Id,
+      team2Player1Id: t2.player1Id,
+      team2Player2Id: t2.player2Id,
+    });
+  }
+  return updates;
+}
+
+// Knockout has no "neither team advances" state — every pending match must
+// resolve to a winner for the bracket to progress, so deletion is limited to
+// round-robin, where a round already tolerates a team sitting out.
+export function validateMatchDeletion(
+  tournamentFormat: string,
+  matchStatus: TournamentMatchRecord['status'],
+  isTeamMatchRubber: boolean,
+): void {
+  if (isTeamMatchRubber) throw new Error('Not a bracket match');
+  if (tournamentFormat !== 'round_robin') throw new Error('Deleting a match is only supported for round-robin tournaments');
+  if (matchStatus !== 'pending') throw new Error('Cannot delete a match that has already started');
 }
 
 export interface TeamMatchComposition {
