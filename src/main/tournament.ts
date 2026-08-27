@@ -219,6 +219,40 @@ export function assignRegistrationsToGroups(
   return byGroup;
 }
 
+export interface GroupStanding extends TournamentStanding {
+  groupId: string;
+}
+
+export function buildFirstKnockoutRound(
+  tournamentId: string,
+  groupsInOrder: TournamentGroup[],
+  qualifiersByGroup: Map<string, GroupStanding[]>,
+  advancePerGroup: 1 | 2,
+  makeId: IdFactory,
+): TournamentMatchRecord[] {
+  const winners = groupsInOrder.map(g => qualifiersByGroup.get(g.id)![0]!);
+
+  if (advancePerGroup === 1) {
+    const round = knockoutRoundName(winners.length);
+    const matches: TournamentMatchRecord[] = [];
+    for (let i = 0; i < winners.length / 2; i++) {
+      const a = winners[i]!;
+      const b = winners[winners.length - 1 - i]!;
+      matches.push(pendingMatch(makeId(), tournamentId, round, i + 1,
+        { player1Id: a.player1Id, player2Id: a.player2Id },
+        { player1Id: b.player1Id, player2Id: b.player2Id }));
+    }
+    return matches;
+  }
+
+  const runnersUp = groupsInOrder.map(g => qualifiersByGroup.get(g.id)![1]!);
+  const shifted = [...runnersUp.slice(1), runnersUp[0]!];
+  const round = knockoutRoundName(winners.length * 2);
+  return winners.map((w, i) => pendingMatch(makeId(), tournamentId, round, i + 1,
+    { player1Id: w.player1Id, player2Id: w.player2Id },
+    { player1Id: shifted[i]!.player1Id, player2Id: shifted[i]!.player2Id }));
+}
+
 function winningTeam(match: TournamentMatchRecord): TeamRef | null {
   if (match.status !== 'completed' || !match.winner) return null;
   if (match.winner === 'team1') {

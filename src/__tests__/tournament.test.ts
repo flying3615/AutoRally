@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   assignRegistrationsToGroups,
+  buildFirstKnockoutRound,
   buildNextKnockoutMatches,
   buildTeamMatchGames,
   computeTournamentStandings,
@@ -9,6 +10,7 @@ import {
   validateMatchReassignment,
   validateTeamReassignment,
   validateTournamentRegistration,
+  type GroupStanding,
   type TournamentGroup,
   type TournamentMatchRecord,
   type TournamentRegistration,
@@ -220,6 +222,39 @@ describe('assignRegistrationsToGroups', () => {
     const sizes = groups.map(g => byGroup.get(g.id)!.length);
     expect(sizes.sort()).toEqual([2, 2, 3, 3]);
     expect(sizes.reduce((a, b) => a + b, 0)).toBe(10);
+  });
+});
+
+describe('buildFirstKnockoutRound', () => {
+  function standing(id: string, groupId: string): GroupStanding {
+    return { groupId, player1Id: id, player2Id: null, played: 2, wins: 2, losses: 0, pf: 42, pa: 20 };
+  }
+
+  it('pairs winners only, seeded-halves style, when one advances per group', () => {
+    const groups = ['A', 'B', 'C', 'D'].map(name => ({ id: `g-${name}`, name }));
+    const qualifiers = new Map(groups.map(g => [g.id, [standing(`W${g.name}`, g.id)]]));
+    const matches = buildFirstKnockoutRound('t1', groups, qualifiers, 1, ids());
+
+    expect(matches).toHaveLength(2);
+    expect(matches.every(m => m.status === 'pending')).toBe(true);
+    const pairs = matches.map(m => [m.team1Player1Id, m.team2Player1Id].sort());
+    expect(pairs).toContainEqual(['WA', 'WD'].sort());
+    expect(pairs).toContainEqual(['WB', 'WC'].sort());
+  });
+
+  it('offsets runners-up by one group so no group meets its own runner-up in round 1', () => {
+    const groups = ['A', 'B', 'C', 'D'].map(name => ({ id: `g-${name}`, name }));
+    const qualifiers = new Map(groups.map(g => [g.id, [standing(`W${g.name}`, g.id), standing(`R${g.name}`, g.id)]]));
+    const matches = buildFirstKnockoutRound('t1', groups, qualifiers, 2, ids());
+
+    expect(matches).toHaveLength(4);
+    for (const m of matches) {
+      const winnerGroup = m.team1Player1Id.slice(1); // 'WA' -> 'A'
+      const runnerUpGroup = m.team2Player1Id.slice(1); // 'RB' -> 'B'
+      expect(winnerGroup).not.toBe(runnerUpGroup);
+    }
+    const pairs = matches.map(m => [m.team1Player1Id, m.team2Player1Id]);
+    expect(pairs).toEqual([['WA', 'RB'], ['WB', 'RC'], ['WC', 'RD'], ['WD', 'RA']]);
   });
 });
 
