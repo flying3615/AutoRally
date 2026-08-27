@@ -17,6 +17,7 @@ interface RegRow { id: string; player1Id: string; player1Name: string; player1Ge
 interface StandingRow {
   player1Id: string; player1Name: string; player2Id: string | null; player2Name: string | null;
   played: number; wins: number; losses: number; pf: number; pa: number; diff: number;
+  setsWon: number; setsLost: number;
 }
 
 interface MatchRow {
@@ -466,6 +467,7 @@ export function TournamentDetail() {
     { headerName: 'P', field: 'played', width: 50 },
     { headerName: 'W', field: 'wins', width: 50, cellRenderer: (p: any) => <span className="text-emerald-600">{p.value}</span> },
     { headerName: 'L', field: 'losses', width: 50, cellRenderer: (p: any) => <span className="text-red-500">{p.value}</span> },
+    { headerName: 'Sets', field: 'setsWon', width: 70, cellRenderer: (p: any) => `${p.data.setsWon}-${p.data.setsLost}` },
     { headerName: 'PF', field: 'pf', width: 60 },
     { headerName: 'PA', field: 'pa', width: 60 },
     { headerName: 'Diff', field: 'diff', width: 60, cellRenderer: (p: any) => <span className={p.value >= 0 ? 'text-emerald-600' : 'text-red-500'}>{p.value > 0 ? `+${p.value}` : p.value}</span> },

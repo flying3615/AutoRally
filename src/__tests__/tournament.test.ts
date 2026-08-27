@@ -174,6 +174,39 @@ describe('tournament scheduling', () => {
     expect(b.pa).toBe(18 + 21 + 10);
     expect(c.pf).toBe(18 + 21 + 10);
     expect(c.pa).toBe(21 + 15 + 21);
+    // b won sets 1 and 3, lost set 2
+    expect(b.setsWon).toBe(2);
+    expect(b.setsLost).toBe(1);
+    expect(c.setsWon).toBe(1);
+    expect(c.setsLost).toBe(2);
+  });
+
+  it('counts a legacy match with no per-set breakdown as a single set for the winner', () => {
+    const standings = computeTournamentStandings([
+      {
+        id: 'm1',
+        tournamentId: 't1',
+        round: 'RR',
+        matchNumber: 1,
+        courtNumber: 1,
+        status: 'completed',
+        team1Player1Id: 'b',
+        team1Player2Id: null,
+        team2Player1Id: 'c',
+        team2Player2Id: null,
+        team1Score: 21,
+        team2Score: 18,
+        winner: 'team1',
+        completedAt: '2026-01-01T00:00:00.000Z',
+      },
+    ]);
+
+    const b = standings.find(s => s.player1Id === 'b')!;
+    const c = standings.find(s => s.player1Id === 'c')!;
+    expect(b.setsWon).toBe(1);
+    expect(b.setsLost).toBe(0);
+    expect(c.setsWon).toBe(0);
+    expect(c.setsLost).toBe(1);
   });
 
   it('rejects duplicate, self, and already-registered tournament registrations', () => {

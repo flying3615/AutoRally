@@ -37,6 +37,8 @@ export interface TournamentStanding {
   losses: number;
   pf: number;
   pa: number;
+  setsWon: number;
+  setsLost: number;
 }
 
 type IdFactory = () => string;
@@ -263,6 +265,24 @@ function matchPointDifferential(match: TournamentMatchRecord): { sc1: number; sc
   );
 }
 
+// Legacy matches (no per-set breakdown) are treated as a single set decided by
+// the match winner, so older tournaments still get a sensible sets record.
+function matchSetsWon(match: TournamentMatchRecord): { s1: number; s2: number } {
+  const setPairs: [number | null | undefined, number | null | undefined][] = [
+    [match.set1Team1Score, match.set1Team2Score],
+    [match.set2Team1Score, match.set2Team2Score],
+    [match.set3Team1Score, match.set3Team2Score],
+  ];
+  const playedSets = setPairs.filter((pair): pair is [number, number] => pair[0] != null && pair[1] != null);
+  if (playedSets.length === 0) {
+    return match.winner === 'team1' ? { s1: 1, s2: 0 } : { s1: 0, s2: 1 };
+  }
+  return playedSets.reduce(
+    (acc, [a, b]) => a > b ? { s1: acc.s1 + 1, s2: acc.s2 } : { s1: acc.s1, s2: acc.s2 + 1 },
+    { s1: 0, s2: 0 },
+  );
+}
+
 export function computeTournamentStandings(matches: TournamentMatchRecord[]): TournamentStanding[] {
   const standings = new Map<string, TournamentStanding>();
 
@@ -275,21 +295,26 @@ export function computeTournamentStandings(matches: TournamentMatchRecord[]): To
     const t1k = teamKey(match.team1Player1Id, match.team1Player2Id);
     const t2k = teamKey(match.team2Player1Id, match.team2Player2Id);
     if (!standings.has(t1k)) {
-      standings.set(t1k, { player1Id: match.team1Player1Id, player2Id: match.team1Player2Id, played: 0, wins: 0, losses: 0, pf: 0, pa: 0 });
+      standings.set(t1k, { player1Id: match.team1Player1Id, player2Id: match.team1Player2Id, played: 0, wins: 0, losses: 0, pf: 0, pa: 0, setsWon: 0, setsLost: 0 });
     }
     if (!standings.has(t2k)) {
-      standings.set(t2k, { player1Id: match.team2Player1Id, player2Id: match.team2Player2Id, played: 0, wins: 0, losses: 0, pf: 0, pa: 0 });
+      standings.set(t2k, { player1Id: match.team2Player1Id, player2Id: match.team2Player2Id, played: 0, wins: 0, losses: 0, pf: 0, pa: 0, setsWon: 0, setsLost: 0 });
     }
 
     const s1 = standings.get(t1k)!;
     const s2 = standings.get(t2k)!;
     const { sc1, sc2 } = matchPointDifferential(match);
+    const { s1: sets1, s2: sets2 } = matchSetsWon(match);
     s1.played++;
     s2.played++;
     s1.pf += sc1;
     s1.pa += sc2;
     s2.pf += sc2;
     s2.pa += sc1;
+    s1.setsWon += sets1;
+    s1.setsLost += sets2;
+    s2.setsWon += sets2;
+    s2.setsLost += sets1;
     if (match.winner === 'team1') {
       s1.wins++;
       s2.losses++;
