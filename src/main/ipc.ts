@@ -1123,7 +1123,7 @@ export async function registerIpcHandlers() {
 
   ipcMain.handle('tournaments:standings', (_e, tournamentId: string) => {
     const matches = queryAll<TournamentMatchRecord>(
-      'SELECT * FROM tournament_matches WHERE tournamentId = ? AND status = \'completed\'',
+      'SELECT * FROM tournament_matches WHERE tournamentId = ? AND status = \'completed\' AND teamMatchId IS NULL AND groupId IS NULL',
       [tournamentId]
     );
     const result = computeTournamentStandings(matches);
@@ -1421,7 +1421,7 @@ export async function registerIpcHandlers() {
 
   ipcMain.handle('tournament:teamMatches:assignCourt', (_e, gameId: string, courtNumber: number) => {
     run(
-      "UPDATE tournament_matches SET courtNumber = ?, status = 'in_progress' WHERE id = ?",
+      "UPDATE tournament_matches SET courtNumber = ?, status = 'in_progress' WHERE id = ? AND status != 'completed'",
       [courtNumber, gameId]
     );
     // Also mark parent team match as in_progress if it was pending
