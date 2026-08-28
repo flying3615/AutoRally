@@ -61,7 +61,7 @@ describe('tournament scheduling', () => {
   });
 
   it('uses bracket-sized knockout round names and advances a four-team semifinal directly to final', () => {
-    const firstRound = generateKnockoutMatches('t1', ['a', 'b', 'c', 'd'].map(team), ids());
+    const firstRound = generateKnockoutMatches('t1', ['a', 'b', 'c', 'd'].map(id => team(id)), ids());
     expect(firstRound.map(m => m.round)).toEqual(['SF', 'SF']);
 
     const completed = firstRound.map((m, index) => ({
