@@ -928,7 +928,7 @@ export async function registerIpcHandlers() {
       // one, the same way buildNextKnockoutMatches does, and only block if
       // THAT round already exists.
       const roundMatches = queryAll<{ id: string }>(
-        'SELECT id FROM tournament_matches WHERE tournamentId = ? AND groupId IS NULL AND round = ?',
+        'SELECT id FROM tournament_matches WHERE tournamentId = ? AND groupId IS NULL AND teamMatchId IS NULL AND round = ?',
         [match.tournamentId, match.round]
       );
       const nextRound = knockoutRoundName(roundMatches.length);
@@ -942,7 +942,7 @@ export async function registerIpcHandlers() {
     }
     if (kind === 'group') {
       const knockoutExists = queryOne<{ id: string }>(
-        'SELECT id FROM tournament_matches WHERE tournamentId = ? AND groupId IS NULL LIMIT 1',
+        'SELECT id FROM tournament_matches WHERE tournamentId = ? AND groupId IS NULL AND teamMatchId IS NULL LIMIT 1',
         [match.tournamentId]
       );
       if (knockoutExists) throw new Error('Cannot edit this score — the knockout stage has already been generated');
