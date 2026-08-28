@@ -1109,11 +1109,11 @@ export async function registerIpcHandlers() {
     if (tournament?.format !== 'knockout' && tournament?.format !== 'mixed') return [];
 
     const currentRoundMatches = queryAll<TournamentMatchRecord>(
-      'SELECT * FROM tournament_matches WHERE tournamentId = ? AND round = ? AND groupId IS NULL',
+      'SELECT * FROM tournament_matches WHERE tournamentId = ? AND round = ? AND groupId IS NULL AND teamMatchId IS NULL',
       [tournamentId, currentRound]
     );
     const existingMatches = queryAll<TournamentMatchRecord>(
-      'SELECT * FROM tournament_matches WHERE tournamentId = ? AND round <> ? AND groupId IS NULL',
+      'SELECT * FROM tournament_matches WHERE tournamentId = ? AND round <> ? AND groupId IS NULL AND teamMatchId IS NULL',
       [tournamentId, currentRound]
     );
     const newMatches = buildNextKnockoutMatches(tournamentId, currentRound, currentRoundMatches, existingMatches, uuid);
@@ -1179,7 +1179,7 @@ export async function registerIpcHandlers() {
       }
 
       const existingKnockout = queryOne<{ id: string }>(
-        'SELECT id FROM tournament_matches WHERE tournamentId = ? AND groupId IS NULL LIMIT 1', [tournamentId]
+        'SELECT id FROM tournament_matches WHERE tournamentId = ? AND groupId IS NULL AND teamMatchId IS NULL LIMIT 1', [tournamentId]
       );
       if (existingKnockout) throw new Error('Knockout stage has already been generated');
 

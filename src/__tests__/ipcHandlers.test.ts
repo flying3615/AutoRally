@@ -25,7 +25,7 @@ vi.mock('fs', () => ({
 }));
 
 import { ipcMain } from 'electron';
-import { closeDb } from '../main/database';
+import { closeDb, run } from '../main/database';
 import { registerIpcHandlers } from '../main/ipc';
 
 type Handler = (event: unknown, ...args: any[]) => any;
@@ -191,6 +191,78 @@ describe('bracket re-score guard ignores team-tournament rubbers sharing a round
     const updated = (await call(handlers, 'tournaments:get', t.id)).matches.find((m: any) => m.id === r1Matches[0].id);
     expect(updated.status).toBe('completed');
     expect(updated.winner).toBe('team1');
+  });
+});
+
+describe('tournaments:advanceWinners ignores team-tournament rubbers sharing a round label (Fix A)', () => {
+  it('does not let a completed R1 rubber inflate advancement of a knockout bracket relabeled to R1', async () => {
+    const handlers = await setupHandlers();
+    const t = await call(handlers, 'tournaments:create', { name: 'K', date: '2026-01-01', format: 'knockout' });
+    const players = [];
+    for (let i = 0; i < 4; i++) players.push(await call(handlers, 'players:create', { name: `P${i}`, gender: 'male', level: 3, phone: '' }));
+    for (const p of players) await call(handlers, 'tournaments:register', t.id, p.id);
+    await call(handlers, 'tournaments:generateBracket', t.id);
+
+    // A real 4-entrant knockout bracket's first round is labeled 'SF'
+    // (knockoutRoundName(4) === 'SF') — knockoutRoundName's R{n} branch only
+    // fires for n > 8, so a genuine bracket round is NEVER literally 'R1'.
+    // Relabel it directly so it collides with a team-tournament rubber's
+    // round label, which IS always 'R1' for a team's first round
+    // (ipc.ts:1333, `R${tm.round}` with tm.round starting at 1) — this
+    // reproduces the exact collision described in the fix ruling, forced
+    // onto the bracket side since it can't arise there naturally at
+    // reachable scale (see the sibling round-robin test above for the same
+    // caveat on knockoutRoundName's reachable values).
+    run("UPDATE tournament_matches SET round = 'R1' WHERE tournamentId = ? AND round = 'SF'", [t.id]);
+
+    let detail = await call(handlers, 'tournaments:get', t.id);
+    const r1BracketMatches = detail.matches.filter((m: any) => m.round === 'R1' && !m.groupId && !m.teamMatchId);
+    expect(r1BracketMatches).toHaveLength(2);
+    for (const m of r1BracketMatches) {
+      await call(handlers, 'tournaments:setScore', m.id, [{ team1: 21, team2: 15 }, { team1: 21, team2: 10 }]);
+    }
+
+    // Team-tournament rubber sharing the 'R1' label, and completed (not left
+    // pending) — this is the scenario the fix ruling specifically calls out:
+    // a completed rubber is indistinguishable from a completed bracket match
+    // by `groupId IS NULL` alone, so it must be excluded by `teamMatchId`
+    // instead, or it gets counted as a real bracket entrant.
+    const teamPlayers = [];
+    for (let i = 0; i < 4; i++) teamPlayers.push(await call(handlers, 'players:create', { name: `T${i}`, gender: 'male', level: 3, phone: '' }));
+    const team1 = await call(handlers, 'tournament:teams:create', t.id, 'Team 1');
+    const team2 = await call(handlers, 'tournament:teams:create', t.id, 'Team 2');
+    await call(handlers, 'tournament:teams:addPlayer', team1.id, teamPlayers[0].id);
+    await call(handlers, 'tournament:teams:addPlayer', team1.id, teamPlayers[1].id);
+    await call(handlers, 'tournament:teams:addPlayer', team2.id, teamPlayers[2].id);
+    await call(handlers, 'tournament:teams:addPlayer', team2.id, teamPlayers[3].id);
+    await call(handlers, 'tournament:teamMatches:generate', t.id, { ms: 1, ws: 0, md: 0, xd: 0, wd: 0 });
+
+    detail = await call(handlers, 'tournaments:get', t.id);
+    const r1Rubbers = detail.matches.filter((m: any) => m.teamMatchId && m.round === 'R1');
+    expect(r1Rubbers).toHaveLength(1);
+    await call(handlers, 'tournaments:setScore', r1Rubbers[0].id, [{ team1: 21, team2: 15 }, { team1: 21, team2: 10 }]);
+
+    // Without `AND teamMatchId IS NULL`, advanceWinners's currentRoundMatches
+    // query (ipc.ts:1112) would pull in the completed rubber alongside the 2
+    // completed bracket matches: 3 rows, all with a real winner via
+    // winningTeam(). buildNextKnockoutMatches would then compute
+    // nextTeams.length === 3 -> knockoutRoundName(3) === 'R3' (not a real
+    // bracket round for a 4-entrant knockout) -> and build 2 matches for
+    // 'R3' (1 real pairing + 1 bye for the odd-one-out), silently mixing the
+    // team's rubber winner into the individual bracket's advancement.
+    //
+    // With the fix, currentRoundMatches contains only the 2 real bracket
+    // matches, both completed -> nextTeams.length === 2 ->
+    // knockoutRoundName(2) === 'F' -> exactly 1 new pending Final match is
+    // created and returned, with no trace of the rubber.
+    const newMatches = await call(handlers, 'tournaments:advanceWinners', t.id, 'R1');
+    expect(newMatches).toHaveLength(1);
+    expect(newMatches[0].round).toBe('F');
+    expect(newMatches[0].status).toBe('pending');
+
+    detail = await call(handlers, 'tournaments:get', t.id);
+    const finalMatches = detail.matches.filter((m: any) => m.round === 'F');
+    expect(finalMatches).toHaveLength(1);
   });
 });
 
