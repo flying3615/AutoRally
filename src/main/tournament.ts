@@ -56,7 +56,7 @@ function nextPowerOfTwo(n: number): number {
   return Math.pow(2, Math.ceil(Math.log2(n)));
 }
 
-function knockoutRoundName(entrantCount: number): string {
+export function knockoutRoundName(entrantCount: number): string {
   if (entrantCount <= 2) return 'F';
   if (entrantCount === 4) return 'SF';
   if (entrantCount === 8) return 'QF';
@@ -74,6 +74,14 @@ function sameTeam(
 
 function teamKey(player1Id: string, player2Id: string | null): string {
   return `${player1Id}|${player2Id ?? ''}`;
+}
+
+export type MatchKind = 'rubber' | 'group' | 'bracket';
+
+export function matchKind(row: { teamMatchId: string | null; groupId: string | null }): MatchKind {
+  if (row.teamMatchId) return 'rubber';
+  if (row.groupId) return 'group';
+  return 'bracket';
 }
 
 function pendingMatch(
@@ -135,7 +143,7 @@ export function generateKnockoutMatches(
   makeId: IdFactory,
   completedAt = new Date().toISOString(),
 ): TournamentMatchRecord[] {
-  const seeded = [...registrations].sort((a, b) => avgLevel(a) - avgLevel(b));
+  const seeded = [...registrations].sort((a, b) => avgLevel(b) - avgLevel(a));
   const targetSize = nextPowerOfTwo(seeded.length);
   const round = knockoutRoundName(targetSize);
   const matches: TournamentMatchRecord[] = [];
@@ -158,17 +166,23 @@ export function generateKnockoutMatches(
   return matches;
 }
 
+export function roundRobinMatchCount(participantCount: number): number {
+  return (participantCount * (participantCount - 1)) / 2;
+}
+
 export function generateRoundRobinMatches(
   tournamentId: string,
   registrations: TournamentRegistration[],
   courtCount: number,
   makeId: IdFactory,
+  startMatchNumber = 1,
+  startCourtIndex = 0,
 ): TournamentMatchRecord[] {
   const participants = registrations.map((_, index) => index);
   if (participants.length % 2 === 1) participants.push(-1);
 
   const matches: TournamentMatchRecord[] = [];
-  let matchNumber = 1;
+  let matchNumber = startMatchNumber;
   const courts = Math.max(1, Math.floor(courtCount) || 1);
 
   for (let roundIndex = 0; roundIndex < participants.length - 1; roundIndex++) {
@@ -187,7 +201,7 @@ export function generateRoundRobinMatches(
         matchNumber,
         { player1Id: teamA.player1Id, player2Id: teamA.player2Id ?? null },
         { player1Id: teamB.player1Id, player2Id: teamB.player2Id ?? null },
-        (matchInRound % courts) + 1,
+        ((startCourtIndex + matchInRound) % courts) + 1,
       ));
       matchNumber++;
       matchInRound++;
@@ -197,6 +211,92 @@ export function generateRoundRobinMatches(
   }
 
   return matches;
+}
+
+export interface TournamentGroup {
+  id: string;
+  name: string;
+}
+
+export function assignRegistrationsToGroups(
+  registrations: TournamentRegistration[],
+  groups: TournamentGroup[],
+): Map<string, TournamentRegistration[]> {
+  const seeded = [...registrations].sort((a, b) => avgLevel(a) - avgLevel(b));
+  const byGroup = new Map<string, TournamentRegistration[]>(groups.map(g => [g.id, []]));
+  let dir = 1;
+  let idx = 0;
+  for (const reg of seeded) {
+    byGroup.get(groups[idx]!.id)!.push(reg);
+    if (idx === groups.length - 1 && dir === 1) dir = -1;
+    else if (idx === 0 && dir === -1) dir = 1;
+    else idx += dir;
+  }
+  return byGroup;
+}
+
+export interface GroupStanding extends TournamentStanding {
+  groupId: string;
+}
+
+export function buildFirstKnockoutRound(
+  tournamentId: string,
+  groupsInOrder: TournamentGroup[],
+  qualifiersByGroup: Map<string, GroupStanding[]>,
+  advancePerGroup: 1 | 2,
+  makeId: IdFactory,
+): TournamentMatchRecord[] {
+  const winners = groupsInOrder.map(g => qualifiersByGroup.get(g.id)![0]!);
+
+  if (advancePerGroup === 1) {
+    const round = knockoutRoundName(winners.length);
+    const matches: TournamentMatchRecord[] = [];
+    for (let i = 0; i < winners.length / 2; i++) {
+      const a = winners[i]!;
+      const b = winners[winners.length - 1 - i]!;
+      matches.push(pendingMatch(makeId(), tournamentId, round, i + 1,
+        { player1Id: a.player1Id, player2Id: a.player2Id },
+        { player1Id: b.player1Id, player2Id: b.player2Id }));
+    }
+    return matches;
+  }
+
+  const runnersUp = groupsInOrder.map(g => qualifiersByGroup.get(g.id)![1]!);
+  const shifted = [...runnersUp.slice(1), runnersUp[0]!];
+  const round = knockoutRoundName(winners.length * 2);
+  return winners.map((w, i) => pendingMatch(makeId(), tournamentId, round, i + 1,
+    { player1Id: w.player1Id, player2Id: w.player2Id },
+    { player1Id: shifted[i]!.player1Id, player2Id: shifted[i]!.player2Id }));
+}
+
+export function validateGroupReassignment(
+  currentGroupMatches: TournamentMatchRecord[],
+  targetGroupMatches: TournamentMatchRecord[],
+): void {
+  if (currentGroupMatches.some(m => m.status !== 'pending')) {
+    throw new Error('This registration\'s group has already started — cannot move them out');
+  }
+  if (targetGroupMatches.some(m => m.status !== 'pending')) {
+    throw new Error('The target group has already started — cannot move them in');
+  }
+}
+
+function isPowerOfTwo(n: number): boolean {
+  return n >= 2 && (n & (n - 1)) === 0;
+}
+
+export function validateGroupTournamentConfig(
+  format: string,
+  groupCount: number | undefined,
+  advancePerGroup: number | undefined,
+): void {
+  if (format !== 'mixed') return;
+  if (!groupCount || !Number.isInteger(groupCount) || groupCount < 2) throw new Error('Group count must be a whole number of at least 2');
+  if (groupCount > 26) throw new Error('Group count cannot exceed 26');
+  if (advancePerGroup !== 1 && advancePerGroup !== 2) throw new Error('Advance-per-group must be 1 or 2');
+  if (!isPowerOfTwo(groupCount * advancePerGroup)) {
+    throw new Error('Group count × advance-per-group must be a power of two (2, 4, 8, 16...)');
+  }
 }
 
 function winningTeam(match: TournamentMatchRecord): TeamRef | null {
@@ -324,7 +424,11 @@ export function computeTournamentStandings(matches: TournamentMatchRecord[]): To
     }
   }
 
-  return [...standings.values()].sort((a, b) => b.wins - a.wins || (b.pf - b.pa) - (a.pf - a.pa));
+  return [...standings.values()].sort((a, b) =>
+    b.wins - a.wins
+    || (b.setsWon - b.setsLost) - (a.setsWon - a.setsLost)
+    || (b.pf - b.pa) - (a.pf - a.pa)
+  );
 }
 
 export function validateTournamentRegistration(
@@ -502,7 +606,7 @@ function pickCycled(pool: TeamRosterPlayer[], count: number): string[] {
 
 function pairAdjacentByLevel(pool: TeamRosterPlayer[], count: number): Array<[string, string]> {
   if (pool.length < 2) return [];
-  const sorted = [...pool].sort((a, b) => a.level - b.level);
+  const sorted = [...pool].sort((a, b) => b.level - a.level);
   const n = sorted.length;
   return Array.from({ length: count }, (_, i) => {
     const idxA = (2 * i) % n;
@@ -513,8 +617,8 @@ function pairAdjacentByLevel(pool: TeamRosterPlayer[], count: number): Array<[st
 
 function pairMixedByLevel(malePool: TeamRosterPlayer[], femalePool: TeamRosterPlayer[], count: number): Array<[string, string]> {
   if (malePool.length === 0 || femalePool.length === 0) return [];
-  const sortedMale = [...malePool].sort((a, b) => a.level - b.level);
-  const sortedFemale = [...femalePool].sort((a, b) => a.level - b.level);
+  const sortedMale = [...malePool].sort((a, b) => b.level - a.level);
+  const sortedFemale = [...femalePool].sort((a, b) => b.level - a.level);
   return Array.from({ length: count }, (_, i) => [
     sortedMale[i % sortedMale.length]!.playerId,
     sortedFemale[i % sortedFemale.length]!.playerId,

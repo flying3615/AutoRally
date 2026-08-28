@@ -1,14 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import {
+  assignRegistrationsToGroups,
+  buildFirstKnockoutRound,
   buildNextKnockoutMatches,
   buildTeamMatchGames,
   computeTournamentStandings,
   generateKnockoutMatches,
   generateRoundRobinMatches,
+  matchKind,
+  roundRobinMatchCount,
+  validateGroupReassignment,
+  validateGroupTournamentConfig,
   validateMatchDeletion,
-validateMatchReassignment,
+  validateMatchReassignment,
   validateTeamReassignment,
   validateTournamentRegistration,
+  type GroupStanding,
+  type TournamentGroup,
   type TournamentMatchRecord,
   type TournamentRegistration,
 } from '../main/tournament';
@@ -45,8 +53,15 @@ describe('tournament scheduling', () => {
     }
   });
 
+  it('offsets match numbers and court assignment when given a starting cursor', () => {
+    const matches = generateRoundRobinMatches('t1', ['a', 'b', 'c', 'd'].map(team), 2, ids(), 10, 1);
+    expect(matches[0]!.matchNumber).toBe(10);
+    expect(matches[0]!.courtNumber).toBe(2); // ((1 + 0) % 2) + 1
+    expect(matches[1]!.matchNumber).toBe(11);
+  });
+
   it('uses bracket-sized knockout round names and advances a four-team semifinal directly to final', () => {
-    const firstRound = generateKnockoutMatches('t1', ['a', 'b', 'c', 'd'].map(team), ids());
+    const firstRound = generateKnockoutMatches('t1', ['a', 'b', 'c', 'd'].map(id => team(id)), ids());
     expect(firstRound.map(m => m.round)).toEqual(['SF', 'SF']);
 
     const completed = firstRound.map((m, index) => ({
@@ -182,6 +197,57 @@ describe('tournament scheduling', () => {
     expect(c.setsLost).toBe(2);
   });
 
+  it('breaks a standings tie on sets won/lost before falling back to point differential', () => {
+    // Both teams: 1 win, 1 loss, identical point differential (+3) — only sets
+    // won/lost differ. b wins straight (2-0) and loses a 3-setter (1-2), for
+    // 3 sets won overall; c wins a 3-setter (2-1) and loses straight (0-2),
+    // for 2 sets won overall. Verified by hand: b.pf-b.pa = 93-90 = 3,
+    // c.pf-c.pa = 96-93 = 3.
+    // c's matches are listed first so c is inserted into the standings map
+    // before b: without the new tiebreak stage, wins and point-diff are tied,
+    // so a stable sort leaves c ahead of b (proving this test actually
+    // exercises the new comparator stage rather than passing by insertion
+    // order coincidence).
+    const standings = computeTournamentStandings([
+      {
+        id: 'm1', tournamentId: 't1', round: 'RR', matchNumber: 1, courtNumber: 1, status: 'completed',
+        team1Player1Id: 'c', team1Player2Id: null, team2Player1Id: 'z', team2Player2Id: null,
+        team1Score: 2, team2Score: 1,
+        set1Team1Score: 21, set1Team2Score: 15, set2Team1Score: 15, set2Team2Score: 21, set3Team1Score: 21, set3Team2Score: 15,
+        winner: 'team1', completedAt: '2026-01-01T00:00:00.000Z',
+      },
+      {
+        id: 'm2', tournamentId: 't1', round: 'RR', matchNumber: 2, courtNumber: 1, status: 'completed',
+        team1Player1Id: 'c', team1Player2Id: null, team2Player1Id: 'w', team2Player2Id: null,
+        team1Score: 0, team2Score: 2,
+        set1Team1Score: 20, set1Team2Score: 21, set2Team1Score: 19, set2Team2Score: 21,
+        winner: 'team2', completedAt: '2026-01-01T00:00:00.000Z',
+      },
+      {
+        id: 'm3', tournamentId: 't1', round: 'RR', matchNumber: 3, courtNumber: 1, status: 'completed',
+        team1Player1Id: 'b', team1Player2Id: null, team2Player1Id: 'x', team2Player2Id: null,
+        team1Score: 2, team2Score: 0,
+        set1Team1Score: 21, set1Team2Score: 15, set2Team1Score: 21, set2Team2Score: 15,
+        winner: 'team1', completedAt: '2026-01-01T00:00:00.000Z',
+      },
+      {
+        id: 'm4', tournamentId: 't1', round: 'RR', matchNumber: 4, courtNumber: 1, status: 'completed',
+        team1Player1Id: 'b', team1Player2Id: null, team2Player1Id: 'y', team2Player2Id: null,
+        team1Score: 1, team2Score: 2,
+        set1Team1Score: 21, set1Team2Score: 18, set2Team1Score: 15, set2Team2Score: 21, set3Team1Score: 15, set3Team2Score: 21,
+        winner: 'team2', completedAt: '2026-01-01T00:00:00.000Z',
+      },
+    ]);
+
+    const b = standings.find(s => s.player1Id === 'b')!;
+    const c = standings.find(s => s.player1Id === 'c')!;
+    expect(b.wins).toBe(c.wins);
+    expect(b.pf - b.pa).toBe(c.pf - c.pa);
+    expect(b.setsWon).toBeGreaterThan(c.setsWon);
+    const order = standings.map(s => s.player1Id);
+    expect(order.indexOf('b')).toBeLessThan(order.indexOf('c'));
+  });
+
   it('counts a legacy match with no per-set breakdown as a single set for the winner', () => {
     const standings = computeTournamentStandings([
       {
@@ -223,6 +289,146 @@ describe('tournament scheduling', () => {
   });
 });
 
+describe('roundRobinMatchCount', () => {
+  it('computes the standard round-robin total for an even participant count', () => {
+    expect(roundRobinMatchCount(4)).toBe(6); // C(4,2)
+  });
+
+  it('computes the standard round-robin total for an odd participant count (byes do not change the total)', () => {
+    expect(roundRobinMatchCount(5)).toBe(10); // C(5,2) — one bye per round, still every pair plays once
+  });
+});
+
+describe('assignRegistrationsToGroups', () => {
+  function group(name: string): TournamentGroup {
+    return { id: `g-${name}`, name };
+  }
+
+  it('snake-drafts registrations across groups by level, weakest to strongest reversing each pass', () => {
+    // levels 1..8, group() helper defaults to level 3 so build explicit regs
+    const regs = [1, 2, 3, 4, 5, 6, 7, 8].map(lv => ({
+      id: `r${lv}`, player1Id: `p${lv}`, player1Level: lv, player2Id: null, player2Level: null,
+    }));
+    const groups = [group('A'), group('B'), group('C'), group('D')];
+    const byGroup = assignRegistrationsToGroups(regs, groups);
+
+    expect(byGroup.get('g-A')!.map(r => r.id)).toEqual(['r1', 'r8']);
+    expect(byGroup.get('g-B')!.map(r => r.id)).toEqual(['r2', 'r7']);
+    expect(byGroup.get('g-C')!.map(r => r.id)).toEqual(['r3', 'r6']);
+    expect(byGroup.get('g-D')!.map(r => r.id)).toEqual(['r4', 'r5']);
+  });
+
+  it('distributes leftover registrations as evenly as possible when count is not divisible by group count', () => {
+    const regs = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(lv => ({
+      id: `r${lv}`, player1Id: `p${lv}`, player1Level: lv, player2Id: null, player2Level: null,
+    }));
+    const groups = [group('A'), group('B'), group('C'), group('D')];
+    const byGroup = assignRegistrationsToGroups(regs, groups);
+
+    const sizes = groups.map(g => byGroup.get(g.id)!.length);
+    expect(sizes.sort()).toEqual([2, 2, 3, 3]);
+    expect(sizes.reduce((a, b) => a + b, 0)).toBe(10);
+  });
+});
+
+describe('buildFirstKnockoutRound', () => {
+  function standing(id: string, groupId: string): GroupStanding {
+    return { groupId, player1Id: id, player2Id: null, played: 2, wins: 2, losses: 0, pf: 42, pa: 20, setsWon: 4, setsLost: 0 };
+  }
+
+  it('pairs winners only, seeded-halves style, when one advances per group', () => {
+    const groups = ['A', 'B', 'C', 'D'].map(name => ({ id: `g-${name}`, name }));
+    const qualifiers = new Map(groups.map(g => [g.id, [standing(`W${g.name}`, g.id)]]));
+    const matches = buildFirstKnockoutRound('t1', groups, qualifiers, 1, ids());
+
+    expect(matches).toHaveLength(2);
+    expect(matches.every(m => m.status === 'pending')).toBe(true);
+    const pairs = matches.map(m => [m.team1Player1Id, m.team2Player1Id].sort());
+    expect(pairs).toContainEqual(['WA', 'WD'].sort());
+    expect(pairs).toContainEqual(['WB', 'WC'].sort());
+  });
+
+  it('offsets runners-up by one group so no group meets its own runner-up in round 1', () => {
+    const groups = ['A', 'B', 'C', 'D'].map(name => ({ id: `g-${name}`, name }));
+    const qualifiers = new Map(groups.map(g => [g.id, [standing(`W${g.name}`, g.id), standing(`R${g.name}`, g.id)]]));
+    const matches = buildFirstKnockoutRound('t1', groups, qualifiers, 2, ids());
+
+    expect(matches).toHaveLength(4);
+    for (const m of matches) {
+      const winnerGroup = m.team1Player1Id.slice(1); // 'WA' -> 'A'
+      const runnerUpGroup = m.team2Player1Id.slice(1); // 'RB' -> 'B'
+      expect(winnerGroup).not.toBe(runnerUpGroup);
+    }
+    const pairs = matches.map(m => [m.team1Player1Id, m.team2Player1Id]);
+    expect(pairs).toEqual([['WA', 'RB'], ['WB', 'RC'], ['WC', 'RD'], ['WD', 'RA']]);
+  });
+});
+
+describe('validateGroupReassignment', () => {
+  function match(status: TournamentMatchRecord['status']): TournamentMatchRecord {
+    return {
+      id: 'm1', tournamentId: 't1', round: 'R1', matchNumber: 1, courtNumber: null, status,
+      team1Player1Id: 'a', team1Player2Id: null, team2Player1Id: 'b', team2Player2Id: null,
+      team1Score: null, team2Score: null, winner: null, completedAt: null,
+    };
+  }
+
+  it('allows reassignment when both groups have only pending matches', () => {
+    expect(() => validateGroupReassignment([match('pending')], [match('pending')])).not.toThrow();
+  });
+
+  it('rejects when the source group has already started', () => {
+    expect(() => validateGroupReassignment([match('completed')], [match('pending')])).toThrow(/already started/i);
+  });
+
+  it('rejects when the target group has already started', () => {
+    expect(() => validateGroupReassignment([match('pending')], [match('in_progress')])).toThrow(/already started/i);
+  });
+});
+
+describe('validateGroupTournamentConfig', () => {
+  it('allows non-mixed formats regardless of groupCount/advancePerGroup', () => {
+    expect(() => validateGroupTournamentConfig('knockout', undefined, undefined)).not.toThrow();
+  });
+
+  it('requires groupCount and advancePerGroup for mixed format', () => {
+    expect(() => validateGroupTournamentConfig('mixed', undefined, undefined)).toThrow(/group count/i);
+    expect(() => validateGroupTournamentConfig('mixed', 4, undefined)).toThrow(/advance/i);
+  });
+
+  it('rejects a qualifier total that is not a power of two', () => {
+    expect(() => validateGroupTournamentConfig('mixed', 3, 2)).toThrow(/power of two|power of 2/i);
+    expect(() => validateGroupTournamentConfig('mixed', 4, 2)).not.toThrow();
+    expect(() => validateGroupTournamentConfig('mixed', 2, 1)).not.toThrow();
+  });
+
+  it('rejects a non-integer group count even when the bitwise power-of-two check would wrongly pass', () => {
+    // 2.1 * 2 = 4.2, and (4.2 & 3.2) truncates to (4 & 3) === 0, which would
+    // slip past a naive isPowerOfTwo check if group count weren't validated
+    // as an integer first.
+    expect(() => validateGroupTournamentConfig('mixed', 2.1, 2)).toThrow(/whole number/i);
+  });
+
+  it('rejects more than 26 groups', () => {
+    expect(() => validateGroupTournamentConfig('mixed', 32, 1)).toThrow(/26/);
+  });
+});
+
+describe('matchKind', () => {
+  it('classifies a rubber (teamMatchId set) ahead of a group match', () => {
+    expect(matchKind({ teamMatchId: 'tm1', groupId: 'g1' })).toBe('rubber');
+    expect(matchKind({ teamMatchId: 'tm1', groupId: null })).toBe('rubber');
+  });
+
+  it('classifies a group match when only groupId is set', () => {
+    expect(matchKind({ teamMatchId: null, groupId: 'g1' })).toBe('group');
+  });
+
+  it('classifies a bracket match when neither is set', () => {
+    expect(matchKind({ teamMatchId: null, groupId: null })).toBe('bracket');
+  });
+});
+
 function rosterPlayer(id: string, gender: 'male' | 'female', level: number) {
   return { playerId: id, gender, level };
 }
@@ -245,10 +451,10 @@ describe('buildTeamMatchGames', () => {
     const result = buildTeamMatchGames(team1, team2, { ms: 0, ws: 0, md: 2, xd: 0, wd: 0 });
 
     expect(result.skipped).toEqual([]);
-    // Sorted by level: weak(1), mid1(3), mid2(3), strong(5) -> pairs: [weak,mid1], [mid2,strong]
+    // Sorted by level descending: strong(5), mid1(3), mid2(3), weak(1) -> pairs: [strong,mid1], [mid2,weak]
     expect(result.games).toHaveLength(2);
-    expect(result.games[0]).toMatchObject({ category: 'MD', slotNumber: 1, team1Player1Id: 'weak', team1Player2Id: 'mid1' });
-    expect(result.games[1]).toMatchObject({ category: 'MD', slotNumber: 2, team1Player1Id: 'mid2', team1Player2Id: 'strong' });
+    expect(result.games[0]).toMatchObject({ category: 'MD', slotNumber: 1, team1Player1Id: 'strong', team1Player2Id: 'mid1' });
+    expect(result.games[1]).toMatchObject({ category: 'MD', slotNumber: 2, team1Player1Id: 'mid2', team1Player2Id: 'weak' });
   });
 
   it('pairs mixed doubles by matching rank between the male and female pools', () => {
@@ -260,9 +466,9 @@ describe('buildTeamMatchGames', () => {
     const result = buildTeamMatchGames(team1, team2, { ms: 0, ws: 0, md: 0, xd: 2, wd: 0 });
 
     expect(result.skipped).toEqual([]);
-    // Male sorted: m-low(1), m-high(5). Female sorted: f-low(2), f-high(4). Rank-matched pairs: [m-low,f-low], [m-high,f-high]
-    expect(result.games[0]).toMatchObject({ category: 'XD', slotNumber: 1, team1Player1Id: 'm-low', team1Player2Id: 'f-low' });
-    expect(result.games[1]).toMatchObject({ category: 'XD', slotNumber: 2, team1Player1Id: 'm-high', team1Player2Id: 'f-high' });
+    // Male sorted descending: m-high(5), m-low(1). Female sorted descending: f-high(4), f-low(2). Rank-matched pairs: [m-high,f-high], [m-low,f-low]
+    expect(result.games[0]).toMatchObject({ category: 'XD', slotNumber: 1, team1Player1Id: 'm-high', team1Player2Id: 'f-high' });
+    expect(result.games[1]).toMatchObject({ category: 'XD', slotNumber: 2, team1Player1Id: 'm-low', team1Player2Id: 'f-low' });
   });
 
   it('skips a category when one team has no eligible players for it', () => {
@@ -295,14 +501,17 @@ describe('buildTeamMatchGames', () => {
 
   it('locks in the documented forced-reuse wraparound: scarce pools can wrap lowest-to-highest', () => {
     // Design spec (docs/superpowers/specs/2026-07-12-team-match-composition-design.md, Edge Cases):
-    // a 3-player pool at levels [1,3,5] asked for 2 pairs produces [1,3] then wraps to [5,1].
+    // a 3-player pool asked for 2 pairs produces a first pair from the top two
+    // sorted players, then wraps so the pair straddling the wrap point is
+    // always the sorted list's first and last entries — direction-independent.
     const team1 = [rosterPlayer('lvl1', 'male', 1), rosterPlayer('lvl3', 'male', 3), rosterPlayer('lvl5', 'male', 5)];
     const team2 = [rosterPlayer('a', 'male', 2), rosterPlayer('b', 'male', 2)];
     const result = buildTeamMatchGames(team1, team2, { ms: 0, ws: 0, md: 2, xd: 0, wd: 0 });
 
     expect(result.skipped).toEqual([]);
-    expect(result.games[0]).toMatchObject({ slotNumber: 1, team1Player1Id: 'lvl1', team1Player2Id: 'lvl3' });
-    expect(result.games[1]).toMatchObject({ slotNumber: 2, team1Player1Id: 'lvl5', team1Player2Id: 'lvl1' });
+    // Sorted descending: lvl5, lvl3, lvl1. Pairs: [lvl5,lvl3], then wraps to [lvl1,lvl5].
+    expect(result.games[0]).toMatchObject({ slotNumber: 1, team1Player1Id: 'lvl5', team1Player2Id: 'lvl3' });
+    expect(result.games[1]).toMatchObject({ slotNumber: 2, team1Player1Id: 'lvl1', team1Player2Id: 'lvl5' });
   });
 });
 

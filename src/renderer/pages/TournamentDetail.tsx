@@ -12,7 +12,7 @@ interface TourData {
   rounds: string[]; matches: any[];
 }
 
-interface RegRow { id: string; player1Id: string; player1Name: string; player1Gender: string; player1Level: number; player2Id: string | null; player2Name: string | null; player2Gender: string | null; player2Level: number | null; }
+interface RegRow { id: string; player1Id: string; player1Name: string; player1Gender: string; player1Level: number; player2Id: string | null; player2Name: string | null; player2Gender: string | null; player2Level: number | null; groupId: string | null; }
 
 interface StandingRow {
   player1Id: string; player1Name: string; player2Id: string | null; player2Name: string | null;
@@ -50,6 +50,7 @@ interface MatchRow {
   teamMatchId: string | null;
   category: 'MS' | 'WS' | 'MD' | 'XD' | 'WD' | null;
   slotNumber: number | null;
+  groupId: string | null;
 }
 
 const isByeMatch = (match: MatchRow) => (
@@ -273,12 +274,54 @@ function EditMatchupModal({ match, regs, roundMatches, onClose, onSaved }: {
   );
 }
 
+function EditGroupModal({ reg, groups, onClose, onSaved }: {
+  reg: RegRow;
+  groups: { groupId: string; groupName: string }[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [groupId, setGroupId] = useState(reg.groupId ?? '');
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    setError(null);
+    setSaving(true);
+    try {
+      await (window.api as any).tournamentsReassignGroup(reg.id, groupId);
+      onSaved();
+    } catch (err: any) {
+      setError(err?.message ?? 'Failed to move registration');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50" onClick={onClose}>
+      <div className="bg-white rounded-2xl p-6 w-[360px]" onClick={e => e.stopPropagation()}
+        style={{ boxShadow: '0 24px 48px -12px rgba(0,0,0,0.2)', animation: 'ctxFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)' }}>
+        <h3 className="text-lg font-bold text-zinc-900 mb-4">Move {reg.player1Name}{reg.player2Name ? ` / ${reg.player2Name}` : ''}</h3>
+        <select value={groupId} onChange={e => setGroupId(e.target.value)}
+          className="w-full px-3 py-2 text-sm border border-zinc-200 rounded-xl focus:outline-none focus:border-zinc-400">
+          {groups.map(g => <option key={g.groupId} value={g.groupId}>Group {g.groupName}</option>)}
+        </select>
+        {error && <p className="mt-3 text-xs font-medium text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>}
+        <div className="flex justify-end gap-2 mt-5">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-zinc-600 hover:bg-zinc-50 rounded-xl">Cancel</button>
+          <button onClick={handleSave} disabled={saving || !groupId} className="px-5 py-2 text-sm font-semibold bg-zinc-800 text-white rounded-xl hover:bg-zinc-700 disabled:opacity-40">Save</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function TournamentDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [data, setData] = useState<TourData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<'overview' | 'registration' | 'teams' | 'bracket' | 'standings'>('overview');
+  const [tab, setTab] = useState<'overview' | 'registration' | 'teams' | 'groups' | 'bracket' | 'standings'>('overview');
   const [regs, setRegs] = useState<RegRow[]>([]);
   const [standings, setStandings] = useState<StandingRow[]>([]);
   const [teamStandings, setTeamStandings] = useState<any[]>([]);
@@ -290,6 +333,8 @@ export function TournamentDetail() {
   const [scoreMatch, setScoreMatch] = useState<MatchRow | null>(null);
   const [editPlayersMatch, setEditPlayersMatch] = useState<MatchRow | null>(null);
   const [editMatchupMatch, setEditMatchupMatch] = useState<MatchRow | null>(null);
+  const [groupStandings, setGroupStandings] = useState<{ groupId: string; groupName: string; standings: any[] }[]>([]);
+  const [editGroupReg, setEditGroupReg] = useState<RegRow | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [regError, setRegError] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<'generate' | 'advance' | 'generateTeam' | null>(null);
@@ -306,7 +351,7 @@ export function TournamentDetail() {
 
   const load = useCallback(async () => {
     if (!id) return;
-    const [t, r, p, s, tms, ts, tmatches] = await Promise.all([
+    const [t, r, p, s, tms, ts, tmatches, gs] = await Promise.all([
       window.api.tournamentsGet(id) as Promise<TourData>,
       window.api.tournamentsRegistrations(id) as Promise<RegRow[]>,
       window.api.playersList() as Promise<any[]>,
@@ -314,9 +359,11 @@ export function TournamentDetail() {
       (window.api as any).tournamentTeamsList(id) as Promise<any[]>,
       (window.api as any).tournamentTeamsStandings(id) as Promise<any[]>,
       (window.api as any).tournamentTeamMatchesList(id) as Promise<any[]>,
+      (window.api as any).tournamentsGroupStandings(id) as Promise<any[]>,
     ]);
     setData(t); setRegs(r); setPlayers(p); setStandings(s);
     setTeams(tms); setTeamStandings(ts); setTeamMatches(tmatches);
+    setGroupStandings(gs);
     setLoading(false);
   }, [id]);
 
@@ -388,6 +435,21 @@ export function TournamentDetail() {
     }
   };
 
+  const handleGenerateKnockout = async () => {
+    if (!id) return;
+    setActionError(null);
+    setBusyAction('advance');
+    try {
+      await (window.api as any).tournamentsGenerateKnockoutFromGroups(id);
+      setTab('bracket');
+      await load();
+    } catch (err: any) {
+      setActionError(err?.message ?? 'Failed to generate knockout stage.');
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
   const handleDeleteMatch = async (match: MatchRow) => {
     const ok = await confirm({
       title: 'Delete matchup?',
@@ -423,8 +485,13 @@ export function TournamentDetail() {
   const handleDeleteTeam = async (teamId: string) => {
     const ok = await confirm({ title: 'Delete team?', message: 'This will remove all team members from this team.', confirmLabel: 'Delete', danger: true });
     if (!ok) return;
-    await (window.api as any).tournamentTeamsDelete(teamId);
-    await load();
+    setTeamError(null);
+    try {
+      await (window.api as any).tournamentTeamsDelete(teamId);
+      await load();
+    } catch (err: any) {
+      setTeamError(err?.message ?? 'Failed to delete team');
+    }
   };
 
   const handleAddPlayerToTeam = async (teamId: string, playerId: string) => {
@@ -437,9 +504,14 @@ export function TournamentDetail() {
   };
 
   const handleRemovePlayerFromTeam = async (teamId: string, playerId: string) => {
-    await (window.api as any).tournamentTeamsRemovePlayer(teamId, playerId);
-    await loadTeamPlayers(teamId);
-    await load();
+    setTeamError(null);
+    try {
+      await (window.api as any).tournamentTeamsRemovePlayer(teamId, playerId);
+      await loadTeamPlayers(teamId);
+      await load();
+    } catch (err: any) {
+      setTeamError(err?.message ?? 'Failed to remove player');
+    }
   };
 
   const handleGenerateTeamMatches = async () => {
@@ -500,9 +572,12 @@ export function TournamentDetail() {
   const realMatches = matches.filter(m => !isByeMatch(m));
   const pendingRealMatches = realMatches.filter(m => m.status !== 'completed');
   const completedRealMatches = realMatches.filter(m => m.status === 'completed');
-  const lastRound = data.rounds[data.rounds.length - 1];
-  const lastRoundMatches = lastRound ? matches.filter(m => m.round === lastRound) : [];
-  const canAdvance = data.format === 'knockout'
+  const bracketMatches = matches.filter((m: MatchRow) => !m.groupId);
+  const bracketRounds = data.rounds.filter(round => bracketMatches.some((m: MatchRow) => m.round === round));
+  const pendingBracketMatches = bracketMatches.filter((m: MatchRow) => !isByeMatch(m) && m.status !== 'completed');
+  const lastRound = bracketRounds[bracketRounds.length - 1];
+  const lastRoundMatches = lastRound ? bracketMatches.filter(m => m.round === lastRound) : [];
+  const canAdvance = (data.format === 'knockout' || data.format === 'mixed')
     && Boolean(lastRound)
     && lastRound !== 'F'
     && lastRoundMatches.length > 0
@@ -553,7 +628,7 @@ export function TournamentDetail() {
                 className={`h-8 px-3 text-sm font-semibold rounded-lg active:scale-[0.97] transition-all disabled:opacity-40 ${matches.length > 0 ? 'bg-amber-600 text-white hover:bg-amber-700' : 'bg-emerald-600 text-white hover:bg-emerald-700'}`}>
                 {busyAction === 'generate' ? 'Generating...' : matches.length > 0 ? 'Regenerate' : 'Generate Schedule'}
               </button>
-              {data.format === 'knockout' && (
+              {(data.format === 'knockout' || data.format === 'mixed') && (
                 <button onClick={handleAdvance} disabled={!canAdvance || busyAction !== null}
                   className="h-8 px-3 text-sm font-semibold bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 active:scale-[0.97] transition-all disabled:opacity-40">
                   {busyAction === 'advance' ? 'Advancing...' : 'Advance Winners'}
@@ -578,7 +653,7 @@ export function TournamentDetail() {
 
         {/* Tabs */}
         <div className="flex items-center gap-1 mb-6 mt-4">
-          {(['overview', 'registration', 'teams', 'bracket', 'standings'] as const).map(t => (
+          {(['overview', 'registration', 'teams', ...(data.format === 'mixed' ? (['groups'] as const) : []), 'bracket', 'standings'] as const).map(t => (
             <button key={t} onClick={() => setTab(t)}
               className={`text-sm font-medium px-3 py-1.5 rounded-lg transition-colors capitalize ${tab === t ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600'}`}
             >{t}</button>
@@ -831,14 +906,89 @@ export function TournamentDetail() {
           </div>
         )}
 
+        {tab === 'groups' && data.format === 'mixed' && (
+          <div>
+            {(() => {
+              const allGroupsComplete = groupStandings.length > 0
+                && matches.filter(m => m.groupId).every(m => m.status === 'completed');
+              const knockoutAlreadyGenerated = matches.some(m => !m.groupId && !m.teamMatchId);
+              return (
+                <div className="flex items-center justify-between mb-4">
+                  <p className="text-sm text-zinc-400">{groupStandings.length} groups</p>
+                  {!knockoutAlreadyGenerated && (
+                    <button onClick={handleGenerateKnockout} disabled={!allGroupsComplete || busyAction !== null}
+                      className="h-8 px-3 text-sm font-semibold bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 active:scale-[0.97] transition-all disabled:opacity-40">
+                      {busyAction === 'advance' ? 'Generating...' : 'Generate Knockout'}
+                    </button>
+                  )}
+                </div>
+              );
+            })()}
+            {groupStandings.map(group => {
+              const groupMatches = matches.filter(m => m.groupId === group.groupId);
+              const groupRegs = regs.filter(r => r.groupId === group.groupId);
+              const groupStarted = groupMatches.some(m => m.status !== 'pending');
+              return (
+                <div key={group.groupId} className="mb-8">
+                  <h3 className="text-sm font-bold text-zinc-700 mb-2">Group {group.groupName}</h3>
+                  <div className="space-y-1.5 mb-3">
+                    {groupRegs.map(r => (
+                      <div key={r.id} className="flex items-center justify-between px-3 py-1.5 bg-white border border-zinc-200/60 rounded-lg">
+                        <span className="text-sm text-zinc-700">{r.player1Name}{r.player2Name ? ` / ${r.player2Name}` : ''}</span>
+                        {!groupStarted && (
+                          <button onClick={() => setEditGroupReg(r)}
+                            className="h-6 px-2 text-[11px] font-semibold text-zinc-700 border border-zinc-200 rounded-md hover:bg-zinc-50 active:scale-[0.97] transition-all">
+                            Edit Group
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                    {groupMatches.map(m => (
+                      <div key={m.id} className="bg-white border border-zinc-200/60 rounded-xl p-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-[11px] font-semibold text-zinc-400 uppercase">{m.round} · Court {m.courtNumber ?? '—'}</span>
+                          <div className="flex items-center gap-2">
+                            <span className={`text-[11px] font-semibold px-2 py-0.5 rounded ${m.status === 'completed' ? 'bg-emerald-50 text-emerald-700' : m.status === 'in_progress' ? 'bg-amber-50 text-amber-700' : 'bg-zinc-100 text-zinc-500'}`}>{m.status}</span>
+                            {m.status === 'pending' && (
+                              <button onClick={() => setEditMatchupMatch(m)}
+                                className="h-6 px-2 text-[11px] font-semibold text-zinc-700 border border-zinc-200 rounded-md hover:bg-zinc-50 active:scale-[0.97] transition-all">
+                                Edit Matchup
+                              </button>
+                            )}
+                            <button onClick={() => setScoreMatch(m)}
+                              className="h-6 px-2 text-[11px] font-semibold text-zinc-700 border border-zinc-200 rounded-md hover:bg-zinc-50 active:scale-[0.97] transition-all">
+                              {m.status === 'completed' ? 'Edit Score' : 'Enter Score'}
+                            </button>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm font-bold text-zinc-800 flex-1">{formatTeam(m, 'team1')}</p>
+                          <span className="text-sm font-mono font-bold mx-3 text-zinc-400">{m.team1Score != null ? m.team1Score : '—'} : {m.team2Score != null ? m.team2Score : '—'}</span>
+                          <p className="text-sm font-bold text-zinc-800 flex-1 text-right">{formatTeam(m, 'team2')}</p>
+                        </div>
+                        {formatSetScores(m) && <p className="text-[11px] text-zinc-400 text-center mt-1 font-mono">{formatSetScores(m)}</p>}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="ag-theme-quartz" style={{ width: '100%' }}>
+                    <AgGridReact rowData={group.standings} columnDefs={standingsCols} defaultColDef={{ sortable: true, resizable: true, flex: 1 }} domLayout="autoHeight" rowHeight={32} headerHeight={32} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
         {/* Bracket */}
         {tab === 'bracket' && (
           <div>
             <div className="flex items-center justify-between mb-4">
-              <p className="text-sm text-zinc-400">{matches.length} matches · {data.rounds.length} rounds · {pendingRealMatches.length} pending</p>
+              <p className="text-sm text-zinc-400">{bracketMatches.length} matches · {bracketRounds.length} rounds · {pendingBracketMatches.length} pending</p>
             </div>
-            {data.rounds.map(round => {
-              const roundMatches = matches.filter((m: MatchRow) => m.round === round);
+            {bracketRounds.map(round => {
+              const roundMatches = bracketMatches.filter((m: MatchRow) => m.round === round);
               return (
                 <div key={round} className="mb-6">
                   <h3 className="text-sm font-bold text-zinc-700 mb-2">{round}</h3>
@@ -908,7 +1058,13 @@ export function TournamentDetail() {
                 </div>
               );
             })}
-            {matches.length === 0 && <p className="text-sm text-zinc-400">No matches yet. Register players and generate the schedule.</p>}
+            {bracketMatches.length === 0 && (
+              <p className="text-sm text-zinc-400">
+                {data.format === 'mixed'
+                  ? 'No knockout matches yet. Finish the group stage, then generate the knockout stage from the Groups tab.'
+                  : 'No matches yet. Register players and generate the schedule.'}
+              </p>
+            )}
           </div>
         )}
 
@@ -927,8 +1083,8 @@ export function TournamentDetail() {
       {editMatchupMatch && (
         <EditMatchupModal
           match={editMatchupMatch}
-          regs={regs}
-          roundMatches={matches.filter((m: MatchRow) => m.round === editMatchupMatch.round)}
+          regs={editMatchupMatch.groupId ? regs.filter((r: RegRow) => r.groupId === editMatchupMatch.groupId) : regs}
+          roundMatches={matches.filter((m: MatchRow) => m.round === editMatchupMatch.round && (m.groupId ?? null) === (editMatchupMatch.groupId ?? null))}
           onClose={() => setEditMatchupMatch(null)}
           onSaved={() => { setEditMatchupMatch(null); load(); }}
         />
@@ -946,6 +1102,14 @@ export function TournamentDetail() {
           />
         );
       })()}
+      {editGroupReg && (
+        <EditGroupModal
+          reg={editGroupReg}
+          groups={groupStandings.map(g => ({ groupId: g.groupId, groupName: g.groupName }))}
+          onClose={() => setEditGroupReg(null)}
+          onSaved={() => { setEditGroupReg(null); load(); }}
+        />
+      )}
     </div>
   );
 }

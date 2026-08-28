@@ -240,6 +240,13 @@ function migrate(db: Database, options: { seedIfEmpty?: boolean; saveDirty?: boo
       createdAt TEXT NOT NULL
     );
   `);
+  db.run(`
+    CREATE TABLE IF NOT EXISTS tournament_groups (
+      id TEXT PRIMARY KEY,
+      tournamentId TEXT NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+      name TEXT NOT NULL
+    );
+  `);
 
   db.run("INSERT OR IGNORE INTO settings (key, value) VALUES ('courtCount', '4')");
   db.run("INSERT OR IGNORE INTO settings (key, value) VALUES ('sessionFee', '10')");
@@ -267,6 +274,10 @@ function migrate(db: Database, options: { seedIfEmpty?: boolean; saveDirty?: boo
   try { db.run('ALTER TABLE tournament_matches ADD COLUMN set2Team2Score INTEGER DEFAULT NULL'); dirty = true; } catch (_) { /* already exists */ }
   try { db.run('ALTER TABLE tournament_matches ADD COLUMN set3Team1Score INTEGER DEFAULT NULL'); dirty = true; } catch (_) { /* already exists */ }
   try { db.run('ALTER TABLE tournament_matches ADD COLUMN set3Team2Score INTEGER DEFAULT NULL'); dirty = true; } catch (_) { /* already exists */ }
+  try { db.run('ALTER TABLE tournaments ADD COLUMN groupCount INTEGER'); dirty = true; } catch (_) { /* already exists */ }
+  try { db.run('ALTER TABLE tournaments ADD COLUMN advancePerGroup INTEGER'); dirty = true; } catch (_) { /* already exists */ }
+  try { db.run('ALTER TABLE tournament_registrations ADD COLUMN groupId TEXT REFERENCES tournament_groups(id)'); dirty = true; } catch (_) { /* already exists */ }
+  try { db.run('ALTER TABLE tournament_matches ADD COLUMN groupId TEXT REFERENCES tournament_groups(id)'); dirty = true; } catch (_) { /* already exists */ }
   if (migrateGameTypeConstraint(db)) dirty = true;
   if (migrateAttendanceAndBalancesCascade(db)) dirty = true;
 
