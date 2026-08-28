@@ -197,6 +197,57 @@ describe('tournament scheduling', () => {
     expect(c.setsLost).toBe(2);
   });
 
+  it('breaks a standings tie on sets won/lost before falling back to point differential', () => {
+    // Both teams: 1 win, 1 loss, identical point differential (+3) — only sets
+    // won/lost differ. b wins straight (2-0) and loses a 3-setter (1-2), for
+    // 3 sets won overall; c wins a 3-setter (2-1) and loses straight (0-2),
+    // for 2 sets won overall. Verified by hand: b.pf-b.pa = 93-90 = 3,
+    // c.pf-c.pa = 96-93 = 3.
+    // c's matches are listed first so c is inserted into the standings map
+    // before b: without the new tiebreak stage, wins and point-diff are tied,
+    // so a stable sort leaves c ahead of b (proving this test actually
+    // exercises the new comparator stage rather than passing by insertion
+    // order coincidence).
+    const standings = computeTournamentStandings([
+      {
+        id: 'm1', tournamentId: 't1', round: 'RR', matchNumber: 1, courtNumber: 1, status: 'completed',
+        team1Player1Id: 'c', team1Player2Id: null, team2Player1Id: 'z', team2Player2Id: null,
+        team1Score: 2, team2Score: 1,
+        set1Team1Score: 21, set1Team2Score: 15, set2Team1Score: 15, set2Team2Score: 21, set3Team1Score: 21, set3Team2Score: 15,
+        winner: 'team1', completedAt: '2026-01-01T00:00:00.000Z',
+      },
+      {
+        id: 'm2', tournamentId: 't1', round: 'RR', matchNumber: 2, courtNumber: 1, status: 'completed',
+        team1Player1Id: 'c', team1Player2Id: null, team2Player1Id: 'w', team2Player2Id: null,
+        team1Score: 0, team2Score: 2,
+        set1Team1Score: 20, set1Team2Score: 21, set2Team1Score: 19, set2Team2Score: 21,
+        winner: 'team2', completedAt: '2026-01-01T00:00:00.000Z',
+      },
+      {
+        id: 'm3', tournamentId: 't1', round: 'RR', matchNumber: 3, courtNumber: 1, status: 'completed',
+        team1Player1Id: 'b', team1Player2Id: null, team2Player1Id: 'x', team2Player2Id: null,
+        team1Score: 2, team2Score: 0,
+        set1Team1Score: 21, set1Team2Score: 15, set2Team1Score: 21, set2Team2Score: 15,
+        winner: 'team1', completedAt: '2026-01-01T00:00:00.000Z',
+      },
+      {
+        id: 'm4', tournamentId: 't1', round: 'RR', matchNumber: 4, courtNumber: 1, status: 'completed',
+        team1Player1Id: 'b', team1Player2Id: null, team2Player1Id: 'y', team2Player2Id: null,
+        team1Score: 1, team2Score: 2,
+        set1Team1Score: 21, set1Team2Score: 18, set2Team1Score: 15, set2Team2Score: 21, set3Team1Score: 15, set3Team2Score: 21,
+        winner: 'team2', completedAt: '2026-01-01T00:00:00.000Z',
+      },
+    ]);
+
+    const b = standings.find(s => s.player1Id === 'b')!;
+    const c = standings.find(s => s.player1Id === 'c')!;
+    expect(b.wins).toBe(c.wins);
+    expect(b.pf - b.pa).toBe(c.pf - c.pa);
+    expect(b.setsWon).toBeGreaterThan(c.setsWon);
+    const order = standings.map(s => s.player1Id);
+    expect(order.indexOf('b')).toBeLessThan(order.indexOf('c'));
+  });
+
   it('counts a legacy match with no per-set breakdown as a single set for the winner', () => {
     const standings = computeTournamentStandings([
       {

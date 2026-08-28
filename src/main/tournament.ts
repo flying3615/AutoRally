@@ -424,7 +424,11 @@ export function computeTournamentStandings(matches: TournamentMatchRecord[]): To
     }
   }
 
-  return [...standings.values()].sort((a, b) => b.wins - a.wins || (b.pf - b.pa) - (a.pf - a.pa));
+  return [...standings.values()].sort((a, b) =>
+    b.wins - a.wins
+    || (b.setsWon - b.setsLost) - (a.setsWon - a.setsLost)
+    || (b.pf - b.pa) - (a.pf - a.pa)
+  );
 }
 
 export function validateTournamentRegistration(
