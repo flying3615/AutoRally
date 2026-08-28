@@ -1083,7 +1083,7 @@ export function TournamentDetail() {
       {editMatchupMatch && (
         <EditMatchupModal
           match={editMatchupMatch}
-          regs={regs.filter((r: RegRow) => (r.groupId ?? null) === (editMatchupMatch.groupId ?? null))}
+          regs={editMatchupMatch.groupId ? regs.filter((r: RegRow) => r.groupId === editMatchupMatch.groupId) : regs}
           roundMatches={matches.filter((m: MatchRow) => m.round === editMatchupMatch.round && (m.groupId ?? null) === (editMatchupMatch.groupId ?? null))}
           onClose={() => setEditMatchupMatch(null)}
           onSaved={() => { setEditMatchupMatch(null); load(); }}

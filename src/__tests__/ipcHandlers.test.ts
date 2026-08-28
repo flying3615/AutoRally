@@ -366,3 +366,90 @@ describe('tournaments:standings scoping (I5) and assignCourt guard (I7)', () => 
     expect(teamMatchAfterAssignCourt.status).toBe('in_progress');
   });
 });
+
+describe('applyMatchScore bracket guard is gated to knockout/mixed formats', () => {
+  it('does not block re-scoring a round_robin match whose round label collides with a later round', async () => {
+    const handlers = await setupHandlers();
+
+    // 6-player round_robin: 5 rounds (R1..R5), 3 matches per round.
+    // knockoutRoundName(3) === 'R3' (3 isn't 2/4/8, so it falls through to
+    // the `R${n}` branch) — and 'R3' genuinely exists as this tournament's
+    // own third round, generated up-front alongside every other round.
+    // Before this fix, matchKind() classified these matches as 'bracket'
+    // (groupId/teamMatchId both null) and the guard treated 'R3' as a
+    // "later round already generated", falsely blocking every round_robin
+    // match outside R3 itself. The fix gates the whole guard on tournament
+    // format, since round_robin has no "later round" concept at all.
+    const t = await call(handlers, 'tournaments:create', { name: 'RR6', date: '2026-01-01', format: 'round_robin' });
+    const players = [];
+    for (let i = 0; i < 6; i++) players.push(await call(handlers, 'players:create', { name: `P${i}`, gender: 'male', level: 3, phone: '' }));
+    for (const p of players) await call(handlers, 'tournaments:register', t.id, p.id);
+    await call(handlers, 'tournaments:generateBracket', t.id);
+
+    const detail = await call(handlers, 'tournaments:get', t.id);
+    const r1Matches = detail.matches.filter((m: any) => m.round === 'R1');
+    expect(r1Matches).toHaveLength(3);
+    const r3Matches = detail.matches.filter((m: any) => m.round === 'R3');
+    expect(r3Matches).toHaveLength(3); // confirms 'R3' really does exist as a real round
+
+    expect(() =>
+      call(handlers, 'tournaments:setScore', r1Matches[0].id, [{ team1: 21, team2: 15 }, { team1: 21, team2: 10 }])
+    ).not.toThrow();
+
+    const updated = (await call(handlers, 'tournaments:get', t.id)).matches.find((m: any) => m.id === r1Matches[0].id);
+    expect(updated.status).toBe('completed');
+  });
+});
+
+describe('tournaments:reassignMatch candidate pool for knockout-stage matches in a mixed tournament', () => {
+  it('does not filter out every registration when the edited match is a knockout-stage match', async () => {
+    const handlers = await setupHandlers();
+
+    // 2 groups of 4, advancePerGroup 2 (product 4, a valid power of two) ->
+    // 4 qualifiers advance to a 'SF' knockout round (2 matches). A knockout
+    // match's own groupId is null, but the qualifying registrations still
+    // carry the non-null groupId they were assigned during the group stage
+    // (never cleared) — so scoping the reassign candidate pool by
+    // "registration.groupId IS NULL" finds nothing in a mixed tournament.
+    const t = await call(handlers, 'tournaments:create', { name: 'MixedKO', date: '2026-01-01', format: 'mixed', groupCount: 2, advancePerGroup: 2 });
+    const players = [];
+    for (let i = 0; i < 8; i++) players.push(await call(handlers, 'players:create', { name: `P${i}`, gender: 'male', level: 3, phone: '' }));
+    for (const p of players) await call(handlers, 'tournaments:register', t.id, p.id);
+    await call(handlers, 'tournaments:generateBracket', t.id);
+
+    let detail = await call(handlers, 'tournaments:get', t.id);
+    const groupMatches = detail.matches.filter((m: any) => m.groupId);
+    for (const m of groupMatches) {
+      await call(handlers, 'tournaments:setScore', m.id, [{ team1: 21, team2: 15 }, { team1: 21, team2: 10 }]);
+    }
+    await call(handlers, 'tournaments:generateKnockoutFromGroups', t.id);
+
+    detail = await call(handlers, 'tournaments:get', t.id);
+    const sfMatches = detail.matches.filter((m: any) => m.round === 'SF' && !m.groupId);
+    expect(sfMatches).toHaveLength(2);
+
+    const regs = await call(handlers, 'tournaments:registrations', t.id);
+    // Every registration retains a non-null groupId from the group stage —
+    // confirms the premise the fix relies on, not just the fix's effect.
+    expect(regs.every((r: any) => r.groupId != null)).toBe(true);
+
+    // Swap SF match 0's team1 with SF match 1's team1 — a genuine, valid
+    // reassignment among real knockout qualifiers. Before the fix this
+    // throws "Selected team is not registered for this tournament" because
+    // the candidate pool was scoped to groupId IS NULL and came back empty.
+    const m0 = sfMatches[0];
+    const m1 = sfMatches[1];
+    const m1Team1Reg = regs.find((r: any) => r.player1Id === m1.team1Player1Id);
+    const m0Team2Reg = regs.find((r: any) => r.player1Id === m0.team2Player1Id);
+
+    expect(() =>
+      call(handlers, 'tournaments:reassignMatch', m0.id, {
+        team1RegistrationId: m1Team1Reg.id,
+        team2RegistrationId: m0Team2Reg.id,
+      })
+    ).not.toThrow();
+
+    const updatedM0 = (await call(handlers, 'tournaments:get', t.id)).matches.find((m: any) => m.id === m0.id);
+    expect(updatedM0.team1Player1Id).toBe(m1Team1Reg.player1Id);
+  });
+});

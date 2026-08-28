@@ -21,7 +21,7 @@ function formatLabel(fmt: string) {
 }
 
 function isPowerOfTwoClient(n: number): boolean {
-  return n >= 2 && (n & (n - 1)) === 0;
+  return Number.isInteger(n) && n >= 2 && (n & (n - 1)) === 0;
 }
 
 function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {

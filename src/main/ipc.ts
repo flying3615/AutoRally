@@ -927,22 +927,30 @@ export async function registerIpcHandlers() {
     const kind = matchKind(match);
 
     if (kind === 'bracket') {
-      // A naive "any other round exists" check would also match an EARLIER
-      // round (e.g. editing the Final's own score would see the SF round and
-      // false-block). Compute the round that would immediately follow this
-      // one, the same way buildNextKnockoutMatches does, and only block if
-      // THAT round already exists.
-      const roundMatches = queryAll<{ id: string }>(
-        'SELECT id FROM tournament_matches WHERE tournamentId = ? AND groupId IS NULL AND teamMatchId IS NULL AND round = ?',
-        [match.tournamentId, match.round]
-      );
-      const nextRound = knockoutRoundName(roundMatches.length);
-      if (nextRound !== match.round) {
-        const nextRoundExists = queryOne<{ id: string }>(
-          'SELECT id FROM tournament_matches WHERE tournamentId = ? AND groupId IS NULL AND teamMatchId IS NULL AND round = ? LIMIT 1',
-          [match.tournamentId, nextRound]
+      // matchKind() classifies any match with no groupId/teamMatchId as
+      // 'bracket', but that also covers plain round_robin-format matches —
+      // round_robin generates every round upfront and has no "later round"
+      // concept at all, so this guard only makes sense for tournaments that
+      // actually progress one knockout round at a time.
+      const tournament = queryOne<{ format: string }>('SELECT format FROM tournaments WHERE id = ?', [match.tournamentId]);
+      if (tournament?.format === 'knockout' || tournament?.format === 'mixed') {
+        // A naive "any other round exists" check would also match an EARLIER
+        // round (e.g. editing the Final's own score would see the SF round and
+        // false-block). Compute the round that would immediately follow this
+        // one, the same way buildNextKnockoutMatches does, and only block if
+        // THAT round already exists.
+        const roundMatches = queryAll<{ id: string }>(
+          'SELECT id FROM tournament_matches WHERE tournamentId = ? AND groupId IS NULL AND teamMatchId IS NULL AND round = ?',
+          [match.tournamentId, match.round]
         );
-        if (nextRoundExists) throw new Error('Cannot edit this score — a later round has already been generated');
+        const nextRound = knockoutRoundName(roundMatches.length);
+        if (nextRound !== match.round) {
+          const nextRoundExists = queryOne<{ id: string }>(
+            'SELECT id FROM tournament_matches WHERE tournamentId = ? AND groupId IS NULL AND teamMatchId IS NULL AND round = ? LIMIT 1',
+            [match.tournamentId, nextRound]
+          );
+          if (nextRoundExists) throw new Error('Cannot edit this score — a later round has already been generated');
+        }
       }
     }
     if (kind === 'group') {
@@ -1003,13 +1011,28 @@ export async function registerIpcHandlers() {
     // round) would look "free" and could be swapped in, corrupting that
     // group's membership and standings. Non-grouped matches (knockout stage,
     // or knockout/round_robin formats) keep the tournament-wide candidate pool.
-    const regs = queryAll<TournamentRegistration>(
-      `SELECT tr.id, tr.player1Id, p1.level as player1Level, tr.player2Id, p2.level as player2Level
-       FROM tournament_registrations tr
-       JOIN players p1 ON tr.player1Id = p1.id
-       LEFT JOIN players p2 ON tr.player2Id = p2.id
-       WHERE tr.tournamentId = ? AND tr.groupId IS ?`, [match.tournamentId, match.groupId ?? null]
-    );
+    //
+    // A knockout-stage match's own groupId is null (it isn't a group match),
+    // but its qualifying registrations still carry the non-null groupId they
+    // were assigned during the group stage — that assignment is never
+    // cleared. So the group filter can only be applied when THIS match is
+    // itself a group-stage match; scoping by "registration.groupId IS NULL"
+    // would find no registrations at all in a mixed tournament.
+    const regs = match.groupId
+      ? queryAll<TournamentRegistration>(
+          `SELECT tr.id, tr.player1Id, p1.level as player1Level, tr.player2Id, p2.level as player2Level
+           FROM tournament_registrations tr
+           JOIN players p1 ON tr.player1Id = p1.id
+           LEFT JOIN players p2 ON tr.player2Id = p2.id
+           WHERE tr.tournamentId = ? AND tr.groupId = ?`, [match.tournamentId, match.groupId]
+        )
+      : queryAll<TournamentRegistration>(
+          `SELECT tr.id, tr.player1Id, p1.level as player1Level, tr.player2Id, p2.level as player2Level
+           FROM tournament_registrations tr
+           JOIN players p1 ON tr.player1Id = p1.id
+           LEFT JOIN players p2 ON tr.player2Id = p2.id
+           WHERE tr.tournamentId = ?`, [match.tournamentId]
+        );
     const roundMatches = queryAll<TournamentMatchRecord>(
       'SELECT * FROM tournament_matches WHERE tournamentId = ? AND round = ? AND groupId IS ? AND teamMatchId IS NULL',
       [match.tournamentId, match.round, match.groupId ?? null]
