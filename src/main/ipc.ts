@@ -1211,6 +1211,10 @@ export async function registerIpcHandlers() {
   });
 
   ipcMain.handle('tournament:teams:delete', (_e, teamId: string) => {
+    const referencing = queryOne<{ id: string }>(
+      'SELECT id FROM tournament_team_matches WHERE team1Id = ? OR team2Id = ? LIMIT 1', [teamId, teamId]
+    );
+    if (referencing) throw new Error('Cannot delete a team that already has generated matches');
     transaction(() => {
       run('DELETE FROM tournament_team_players WHERE teamId = ?', [teamId]);
       run('DELETE FROM tournament_teams WHERE id = ?', [teamId]);

@@ -485,8 +485,13 @@ export function TournamentDetail() {
   const handleDeleteTeam = async (teamId: string) => {
     const ok = await confirm({ title: 'Delete team?', message: 'This will remove all team members from this team.', confirmLabel: 'Delete', danger: true });
     if (!ok) return;
-    await (window.api as any).tournamentTeamsDelete(teamId);
-    await load();
+    setTeamError(null);
+    try {
+      await (window.api as any).tournamentTeamsDelete(teamId);
+      await load();
+    } catch (err: any) {
+      setTeamError(err?.message ?? 'Failed to delete team');
+    }
   };
 
   const handleAddPlayerToTeam = async (teamId: string, playerId: string) => {
@@ -499,9 +504,14 @@ export function TournamentDetail() {
   };
 
   const handleRemovePlayerFromTeam = async (teamId: string, playerId: string) => {
-    await (window.api as any).tournamentTeamsRemovePlayer(teamId, playerId);
-    await loadTeamPlayers(teamId);
-    await load();
+    setTeamError(null);
+    try {
+      await (window.api as any).tournamentTeamsRemovePlayer(teamId, playerId);
+      await loadTeamPlayers(teamId);
+      await load();
+    } catch (err: any) {
+      setTeamError(err?.message ?? 'Failed to remove player');
+    }
   };
 
   const handleGenerateTeamMatches = async () => {
