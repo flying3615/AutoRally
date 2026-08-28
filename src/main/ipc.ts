@@ -939,7 +939,7 @@ export async function registerIpcHandlers() {
       const nextRound = knockoutRoundName(roundMatches.length);
       if (nextRound !== match.round) {
         const nextRoundExists = queryOne<{ id: string }>(
-          'SELECT id FROM tournament_matches WHERE tournamentId = ? AND groupId IS NULL AND round = ? LIMIT 1',
+          'SELECT id FROM tournament_matches WHERE tournamentId = ? AND groupId IS NULL AND teamMatchId IS NULL AND round = ? LIMIT 1',
           [match.tournamentId, nextRound]
         );
         if (nextRoundExists) throw new Error('Cannot edit this score — a later round has already been generated');

@@ -127,6 +127,73 @@ describe('tournaments:setScore / tournament:teamMatches:setScore (applyMatchScor
   });
 });
 
+describe('bracket re-score guard ignores team-tournament rubbers sharing a round label', () => {
+  it('does not let an R1 team-match rubber pollute the roundMatches count for an R1 individual match', async () => {
+    const handlers = await setupHandlers();
+
+    // format: 'round_robin' with 4 players — generateRoundRobinMatches labels
+    // rounds 'R1'/'R2'/'R3' (2 matches each), and these individual matches have
+    // groupId = null, teamMatchId = null, so matchKind() classifies them as
+    // 'bracket' — the same guard branch a knockout Final/SF uses. This is the
+    // ONLY realistic way to get a genuine round-LABEL collision with a
+    // team-match rubber's 'R1' at small scale: knockoutRoundName() never
+    // returns 'R1' or 'R2' (n<=2 always maps to 'F'), and every knockout/mixed
+    // round's match count is forced to a power of two by construction (mixed
+    // additionally gated by validateGroupTournamentConfig), so a genuine
+    // collision on the *computed next round* (nextRoundExists, ipc.ts:942)
+    // only arises at R16/R32 bracket scale — covered by symmetry/construction
+    // rather than by a small failing-without-fix fixture. This test instead
+    // targets the sibling roundMatches query (ipc.ts:936, fixed in an earlier
+    // task) via the one collision that IS reachable at small scale, which
+    // still exercises the identical `AND teamMatchId IS NULL` clause shape.
+    const t = await call(handlers, 'tournaments:create', { name: 'RR', date: '2026-01-01', format: 'round_robin' });
+    const players = [];
+    for (let i = 0; i < 4; i++) players.push(await call(handlers, 'players:create', { name: `P${i}`, gender: 'male', level: 3, phone: '' }));
+    for (const p of players) await call(handlers, 'tournaments:register', t.id, p.id);
+    // Generate the individual bracket BEFORE any team matches exist —
+    // generateBracket deletes ALL of this tournament's matches (ipc.ts:849),
+    // which would wipe out rubbers created first.
+    await call(handlers, 'tournaments:generateBracket', t.id);
+
+    let detail = await call(handlers, 'tournaments:get', t.id);
+    const r1Matches = detail.matches.filter((m: any) => m.round === 'R1' && !m.groupId && !m.teamMatchId);
+    expect(r1Matches).toHaveLength(2);
+
+    // 2 teams round-robin produces exactly 1 round, labeled 'R1' — the exact
+    // label tournament:teamMatches:generate assigns for its first round.
+    const teamPlayers = [];
+    for (let i = 0; i < 4; i++) teamPlayers.push(await call(handlers, 'players:create', { name: `T${i}`, gender: 'male', level: 3, phone: '' }));
+    const team1 = await call(handlers, 'tournament:teams:create', t.id, 'Team 1');
+    const team2 = await call(handlers, 'tournament:teams:create', t.id, 'Team 2');
+    await call(handlers, 'tournament:teams:addPlayer', team1.id, teamPlayers[0].id);
+    await call(handlers, 'tournament:teams:addPlayer', team1.id, teamPlayers[1].id);
+    await call(handlers, 'tournament:teams:addPlayer', team2.id, teamPlayers[2].id);
+    await call(handlers, 'tournament:teams:addPlayer', team2.id, teamPlayers[3].id);
+    await call(handlers, 'tournament:teamMatches:generate', t.id, { ms: 1, ws: 0, md: 0, xd: 0, wd: 0 });
+
+    detail = await call(handlers, 'tournaments:get', t.id);
+    const r1Rubbers = detail.matches.filter((m: any) => m.teamMatchId && m.round === 'R1');
+    expect(r1Rubbers).toHaveLength(1);
+
+    // With the fix: roundMatches('R1') counts only the 2 real individual
+    // matches -> knockoutRoundName(2) = 'F' -> no 'F' round exists -> no throw.
+    //
+    // Without `AND teamMatchId IS NULL` on the roundMatches query, the rubber
+    // would inflate the count to 3 -> knockoutRoundName(3) = 'R3' -> and 'R3'
+    // DOES already exist (this round-robin's own third round, generated
+    // up-front by generateBracket) -> the guard would wrongly throw "a later
+    // round has already been generated" for a match that has no real
+    // successor round yet.
+    expect(() =>
+      call(handlers, 'tournaments:setScore', r1Matches[0].id, [{ team1: 21, team2: 15 }, { team1: 21, team2: 10 }])
+    ).not.toThrow();
+
+    const updated = (await call(handlers, 'tournaments:get', t.id)).matches.find((m: any) => m.id === r1Matches[0].id);
+    expect(updated.status).toBe('completed');
+    expect(updated.winner).toBe('team1');
+  });
+});
+
 describe('tournament:teams:delete', () => {
   it('rejects deleting a team that already has generated matches', async () => {
     const handlers = await setupHandlers();
