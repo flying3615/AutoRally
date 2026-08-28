@@ -1082,8 +1082,12 @@ export async function registerIpcHandlers() {
 
       const t = queryOne<{ courtCount: number }>('SELECT courtCount FROM tournaments WHERE id = ?', [reg.tournamentId]);
       const courtCount = t?.courtCount ?? 4;
-      let matchNumberCursor = 1;
-      let courtIndexCursor = 0;
+      const survivingState = queryOne<{ maxMatchNumber: number | null; matchCount: number }>(
+        'SELECT MAX(matchNumber) as maxMatchNumber, COUNT(*) as matchCount FROM tournament_matches WHERE tournamentId = ? AND groupId IS NOT NULL',
+        [reg.tournamentId]
+      );
+      let matchNumberCursor = (survivingState?.maxMatchNumber ?? 0) + 1;
+      let courtIndexCursor = (survivingState?.matchCount ?? 0) % courtCount;
       for (const gid of [oldGroupId, newGroupId]) {
         const groupRegs = queryAll<TournamentRegistration>(
           `SELECT tr.*, p1.level as player1Level, p2.level as player2Level
