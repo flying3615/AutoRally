@@ -1011,7 +1011,7 @@ export async function registerIpcHandlers() {
        WHERE tr.tournamentId = ? AND tr.groupId IS ?`, [match.tournamentId, match.groupId ?? null]
     );
     const roundMatches = queryAll<TournamentMatchRecord>(
-      'SELECT * FROM tournament_matches WHERE tournamentId = ? AND round = ? AND groupId IS ?',
+      'SELECT * FROM tournament_matches WHERE tournamentId = ? AND round = ? AND groupId IS ? AND teamMatchId IS NULL',
       [match.tournamentId, match.round, match.groupId ?? null]
     );
 

@@ -911,7 +911,7 @@ export function TournamentDetail() {
             {(() => {
               const allGroupsComplete = groupStandings.length > 0
                 && matches.filter(m => m.groupId).every(m => m.status === 'completed');
-              const knockoutAlreadyGenerated = matches.some(m => !m.groupId);
+              const knockoutAlreadyGenerated = matches.some(m => !m.groupId && !m.teamMatchId);
               return (
                 <div className="flex items-center justify-between mb-4">
                   <p className="text-sm text-zinc-400">{groupStandings.length} groups</p>
