@@ -8,6 +8,7 @@ import {
   generateKnockoutMatches,
   generateRoundRobinMatches,
   matchKind,
+  roundRobinMatchCount,
   validateGroupReassignment,
   validateGroupTournamentConfig,
   validateMatchDeletion,
@@ -50,6 +51,13 @@ describe('tournament scheduling', () => {
       expect(new Set(players).size).toBe(6);
       expect(roundMatches.map(m => m.courtNumber)).toEqual([1, 2, 1]);
     }
+  });
+
+  it('offsets match numbers and court assignment when given a starting cursor', () => {
+    const matches = generateRoundRobinMatches('t1', ['a', 'b', 'c', 'd'].map(team), 2, ids(), 10, 1);
+    expect(matches[0]!.matchNumber).toBe(10);
+    expect(matches[0]!.courtNumber).toBe(2); // ((1 + 0) % 2) + 1
+    expect(matches[1]!.matchNumber).toBe(11);
   });
 
   it('uses bracket-sized knockout round names and advances a four-team semifinal directly to final', () => {
@@ -227,6 +235,16 @@ describe('tournament scheduling', () => {
     expect(() => validateTournamentRegistration(existing, 'a')).toThrow(/already registered/i);
     expect(() => validateTournamentRegistration(existing, 'd', 'c')).toThrow(/already registered/i);
     expect(validateTournamentRegistration(existing, 'd', 'e')).toBeUndefined();
+  });
+});
+
+describe('roundRobinMatchCount', () => {
+  it('computes the standard round-robin total for an even participant count', () => {
+    expect(roundRobinMatchCount(4)).toBe(6); // C(4,2)
+  });
+
+  it('computes the standard round-robin total for an odd participant count (byes do not change the total)', () => {
+    expect(roundRobinMatchCount(5)).toBe(10); // C(5,2) — one bye per round, still every pair plays once
   });
 });
 

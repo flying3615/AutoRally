@@ -14,6 +14,7 @@ import {
   generateRoundRobinMatches,
   knockoutRoundName,
   matchKind,
+  roundRobinMatchCount,
   validateGroupReassignment,
   validateGroupTournamentConfig,
   validateMatchDeletion,
@@ -890,17 +891,21 @@ export async function registerIpcHandlers() {
         }
         const byGroup = assignRegistrationsToGroups(regs, groups);
         const allMatches: TournamentMatchRecord[] = [];
+        let matchNumberCursor = 1;
+        let courtIndexCursor = 0;
         for (const g of groups) {
           const groupRegs = byGroup.get(g.id) ?? [];
           if (groupRegs.length > 0) {
             run('UPDATE tournament_registrations SET groupId = ? WHERE id IN (' + groupRegs.map(() => '?').join(',') + ')',
               [g.id, ...groupRegs.map(r => r.id)]);
           }
-          const groupMatches = generateRoundRobinMatches(tournamentId, groupRegs, t.courtCount, uuid);
+          const groupMatches = generateRoundRobinMatches(tournamentId, groupRegs, t.courtCount, uuid, matchNumberCursor, courtIndexCursor);
           for (const match of groupMatches) {
             insertTournamentMatch({ ...match, groupId: g.id });
             allMatches.push(match);
           }
+          matchNumberCursor += roundRobinMatchCount(groupRegs.length);
+          courtIndexCursor = (courtIndexCursor + roundRobinMatchCount(groupRegs.length)) % t.courtCount;
         }
         return allMatches;
       }
@@ -1076,6 +1081,9 @@ export async function registerIpcHandlers() {
       run('DELETE FROM tournament_matches WHERE tournamentId = ? AND groupId IN (?, ?)', [reg.tournamentId, oldGroupId, newGroupId]);
 
       const t = queryOne<{ courtCount: number }>('SELECT courtCount FROM tournaments WHERE id = ?', [reg.tournamentId]);
+      const courtCount = t?.courtCount ?? 4;
+      let matchNumberCursor = 1;
+      let courtIndexCursor = 0;
       for (const gid of [oldGroupId, newGroupId]) {
         const groupRegs = queryAll<TournamentRegistration>(
           `SELECT tr.*, p1.level as player1Level, p2.level as player2Level
@@ -1084,8 +1092,10 @@ export async function registerIpcHandlers() {
            LEFT JOIN players p2 ON tr.player2Id = p2.id
            WHERE tr.groupId = ?`, [gid]
         );
-        const groupMatches = generateRoundRobinMatches(reg.tournamentId, groupRegs, t?.courtCount ?? 4, uuid);
+        const groupMatches = generateRoundRobinMatches(reg.tournamentId, groupRegs, courtCount, uuid, matchNumberCursor, courtIndexCursor);
         for (const match of groupMatches) insertTournamentMatch({ ...match, groupId: gid });
+        matchNumberCursor += roundRobinMatchCount(groupRegs.length);
+        courtIndexCursor = (courtIndexCursor + roundRobinMatchCount(groupRegs.length)) % courtCount;
       }
     });
   });

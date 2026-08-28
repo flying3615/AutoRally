@@ -166,17 +166,23 @@ export function generateKnockoutMatches(
   return matches;
 }
 
+export function roundRobinMatchCount(participantCount: number): number {
+  return (participantCount * (participantCount - 1)) / 2;
+}
+
 export function generateRoundRobinMatches(
   tournamentId: string,
   registrations: TournamentRegistration[],
   courtCount: number,
   makeId: IdFactory,
+  startMatchNumber = 1,
+  startCourtIndex = 0,
 ): TournamentMatchRecord[] {
   const participants = registrations.map((_, index) => index);
   if (participants.length % 2 === 1) participants.push(-1);
 
   const matches: TournamentMatchRecord[] = [];
-  let matchNumber = 1;
+  let matchNumber = startMatchNumber;
   const courts = Math.max(1, Math.floor(courtCount) || 1);
 
   for (let roundIndex = 0; roundIndex < participants.length - 1; roundIndex++) {
@@ -195,7 +201,7 @@ export function generateRoundRobinMatches(
         matchNumber,
         { player1Id: teamA.player1Id, player2Id: teamA.player2Id ?? null },
         { player1Id: teamB.player1Id, player2Id: teamB.player2Id ?? null },
-        (matchInRound % courts) + 1,
+        ((startCourtIndex + matchInRound) % courts) + 1,
       ));
       matchNumber++;
       matchInRound++;
