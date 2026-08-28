@@ -12,6 +12,8 @@ import {
   computeTournamentStandings,
   generateKnockoutMatches,
   generateRoundRobinMatches,
+  knockoutRoundName,
+  matchKind,
   validateGroupReassignment,
   validateGroupTournamentConfig,
   validateMatchDeletion,
@@ -911,22 +913,75 @@ export async function registerIpcHandlers() {
     });
   });
 
-  ipcMain.handle('tournaments:setScore', (_e, matchId: string, sets: SetScore[]) => {
+  function applyMatchScore(matchId: string, sets: SetScore[]): { winner: 'team1' | 'team2' } {
+    const match = queryOne<TournamentMatchRecord & { teamMatchId: string | null; groupId: string | null }>(
+      'SELECT * FROM tournament_matches WHERE id = ?', [matchId]
+    );
+    if (!match) throw new Error('Match not found');
+
+    const kind = matchKind(match);
+
+    if (kind === 'bracket') {
+      // A naive "any other round exists" check would also match an EARLIER
+      // round (e.g. editing the Final's own score would see the SF round and
+      // false-block). Compute the round that would immediately follow this
+      // one, the same way buildNextKnockoutMatches does, and only block if
+      // THAT round already exists.
+      const roundMatches = queryAll<{ id: string }>(
+        'SELECT id FROM tournament_matches WHERE tournamentId = ? AND groupId IS NULL AND round = ?',
+        [match.tournamentId, match.round]
+      );
+      const nextRound = knockoutRoundName(roundMatches.length);
+      if (nextRound !== match.round) {
+        const nextRoundExists = queryOne<{ id: string }>(
+          'SELECT id FROM tournament_matches WHERE tournamentId = ? AND groupId IS NULL AND round = ? LIMIT 1',
+          [match.tournamentId, nextRound]
+        );
+        if (nextRoundExists) throw new Error('Cannot edit this score — a later round has already been generated');
+      }
+    }
+    if (kind === 'group') {
+      const knockoutExists = queryOne<{ id: string }>(
+        'SELECT id FROM tournament_matches WHERE tournamentId = ? AND groupId IS NULL LIMIT 1',
+        [match.tournamentId]
+      );
+      if (knockoutExists) throw new Error('Cannot edit this score — the knockout stage has already been generated');
+    }
+
     const { team1Score, team2Score, winner } = computeMatchOutcome(sets);
     const [set1, set2, set3] = sets;
-    run(
-      `UPDATE tournament_matches SET
-         team1Score = ?, team2Score = ?, winner = ?, status = 'completed', completedAt = ?,
-         set1Team1Score = ?, set1Team2Score = ?, set2Team1Score = ?, set2Team2Score = ?, set3Team1Score = ?, set3Team2Score = ?
-       WHERE id = ?`,
-      [
-        team1Score, team2Score, winner, new Date().toISOString(),
-        set1!.team1, set1!.team2, set2!.team1, set2!.team2, set3?.team1 ?? null, set3?.team2 ?? null,
-        matchId,
-      ],
-    );
-    return { winner };
-  });
+
+    return transaction(() => {
+      run(
+        `UPDATE tournament_matches SET
+           team1Score = ?, team2Score = ?, winner = ?, status = 'completed', completedAt = ?,
+           set1Team1Score = ?, set1Team2Score = ?, set2Team1Score = ?, set2Team2Score = ?, set3Team1Score = ?, set3Team2Score = ?
+         WHERE id = ?`,
+        [
+          team1Score, team2Score, winner, new Date().toISOString(),
+          set1!.team1, set1!.team2, set2!.team1, set2!.team2, set3?.team1 ?? null, set3?.team2 ?? null,
+          matchId,
+        ],
+      );
+
+      if (kind === 'rubber') {
+        const games = queryAll<{ winner: string | null; status: string }>(
+          'SELECT winner, status FROM tournament_matches WHERE teamMatchId = ?', [match.teamMatchId]
+        );
+        const t1Wins = games.filter(g => g.winner === 'team1').length;
+        const t2Wins = games.filter(g => g.winner === 'team2').length;
+        const allDone = games.every(g => g.status === 'completed');
+        run(
+          'UPDATE tournament_team_matches SET team1Wins = ?, team2Wins = ?, status = ? WHERE id = ?',
+          [t1Wins, t2Wins, allDone ? 'completed' : 'in_progress', match.teamMatchId]
+        );
+      }
+
+      return { winner };
+    });
+  }
+
+  ipcMain.handle('tournaments:setScore', (_e, matchId: string, sets: SetScore[]) => applyMatchScore(matchId, sets));
 
   ipcMain.handle('tournaments:reassignMatch', (_e, matchId: string, assignment: MatchReassignmentInput) => {
     const match = queryOne<TournamentMatchRecord & { teamMatchId: string | null; groupId: string | null }>(
@@ -1361,41 +1416,7 @@ export async function registerIpcHandlers() {
     }
   });
 
-  ipcMain.handle('tournament:teamMatches:setScore', (_e, gameId: string, sets: SetScore[]) => {
-    const { team1Score, team2Score, winner } = computeMatchOutcome(sets);
-    const [set1, set2, set3] = sets;
-    const now = new Date().toISOString();
-    run(
-      `UPDATE tournament_matches SET
-         team1Score = ?, team2Score = ?, winner = ?, status = 'completed', completedAt = ?,
-         set1Team1Score = ?, set1Team2Score = ?, set2Team1Score = ?, set2Team2Score = ?, set3Team1Score = ?, set3Team2Score = ?
-       WHERE id = ?`,
-      [
-        team1Score, team2Score, winner, now,
-        set1!.team1, set1!.team2, set2!.team1, set2!.team2, set3?.team1 ?? null, set3?.team2 ?? null,
-        gameId,
-      ],
-    );
-
-    // Recompute team match wins
-    const game = queryOne<{ teamMatchId: string | null }>('SELECT teamMatchId FROM tournament_matches WHERE id = ?', [gameId]);
-    if (game?.teamMatchId) {
-      const games = queryAll<{ winner: string | null; status: string }>(
-        "SELECT winner, status FROM tournament_matches WHERE teamMatchId = ?",
-        [game.teamMatchId]
-      );
-      const t1Wins = games.filter(g => g.winner === 'team1').length;
-      const t2Wins = games.filter(g => g.winner === 'team2').length;
-      const allDone = games.every(g => g.status === 'completed');
-      const tmStatus = allDone ? 'completed' : 'in_progress';
-      run(
-        'UPDATE tournament_team_matches SET team1Wins = ?, team2Wins = ?, status = ? WHERE id = ?',
-        [t1Wins, t2Wins, tmStatus, game.teamMatchId]
-      );
-    }
-
-    return { winner };
-  });
+  ipcMain.handle('tournament:teamMatches:setScore', (_e, gameId: string, sets: SetScore[]) => applyMatchScore(gameId, sets));
 
   ipcMain.handle('tournament:teams:standings', (_e, tournamentId: string) => {
     const teams = queryAll<{ id: string; name: string; color: string }>(
