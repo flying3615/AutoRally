@@ -451,10 +451,10 @@ describe('buildTeamMatchGames', () => {
     const result = buildTeamMatchGames(team1, team2, { ms: 0, ws: 0, md: 2, xd: 0, wd: 0 });
 
     expect(result.skipped).toEqual([]);
-    // Sorted by level: weak(1), mid1(3), mid2(3), strong(5) -> pairs: [weak,mid1], [mid2,strong]
+    // Sorted by level descending: strong(5), mid1(3), mid2(3), weak(1) -> pairs: [strong,mid1], [mid2,weak]
     expect(result.games).toHaveLength(2);
-    expect(result.games[0]).toMatchObject({ category: 'MD', slotNumber: 1, team1Player1Id: 'weak', team1Player2Id: 'mid1' });
-    expect(result.games[1]).toMatchObject({ category: 'MD', slotNumber: 2, team1Player1Id: 'mid2', team1Player2Id: 'strong' });
+    expect(result.games[0]).toMatchObject({ category: 'MD', slotNumber: 1, team1Player1Id: 'strong', team1Player2Id: 'mid1' });
+    expect(result.games[1]).toMatchObject({ category: 'MD', slotNumber: 2, team1Player1Id: 'mid2', team1Player2Id: 'weak' });
   });
 
   it('pairs mixed doubles by matching rank between the male and female pools', () => {
@@ -466,9 +466,9 @@ describe('buildTeamMatchGames', () => {
     const result = buildTeamMatchGames(team1, team2, { ms: 0, ws: 0, md: 0, xd: 2, wd: 0 });
 
     expect(result.skipped).toEqual([]);
-    // Male sorted: m-low(1), m-high(5). Female sorted: f-low(2), f-high(4). Rank-matched pairs: [m-low,f-low], [m-high,f-high]
-    expect(result.games[0]).toMatchObject({ category: 'XD', slotNumber: 1, team1Player1Id: 'm-low', team1Player2Id: 'f-low' });
-    expect(result.games[1]).toMatchObject({ category: 'XD', slotNumber: 2, team1Player1Id: 'm-high', team1Player2Id: 'f-high' });
+    // Male sorted descending: m-high(5), m-low(1). Female sorted descending: f-high(4), f-low(2). Rank-matched pairs: [m-high,f-high], [m-low,f-low]
+    expect(result.games[0]).toMatchObject({ category: 'XD', slotNumber: 1, team1Player1Id: 'm-high', team1Player2Id: 'f-high' });
+    expect(result.games[1]).toMatchObject({ category: 'XD', slotNumber: 2, team1Player1Id: 'm-low', team1Player2Id: 'f-low' });
   });
 
   it('skips a category when one team has no eligible players for it', () => {
@@ -501,14 +501,17 @@ describe('buildTeamMatchGames', () => {
 
   it('locks in the documented forced-reuse wraparound: scarce pools can wrap lowest-to-highest', () => {
     // Design spec (docs/superpowers/specs/2026-07-12-team-match-composition-design.md, Edge Cases):
-    // a 3-player pool at levels [1,3,5] asked for 2 pairs produces [1,3] then wraps to [5,1].
+    // a 3-player pool asked for 2 pairs produces a first pair from the top two
+    // sorted players, then wraps so the pair straddling the wrap point is
+    // always the sorted list's first and last entries — direction-independent.
     const team1 = [rosterPlayer('lvl1', 'male', 1), rosterPlayer('lvl3', 'male', 3), rosterPlayer('lvl5', 'male', 5)];
     const team2 = [rosterPlayer('a', 'male', 2), rosterPlayer('b', 'male', 2)];
     const result = buildTeamMatchGames(team1, team2, { ms: 0, ws: 0, md: 2, xd: 0, wd: 0 });
 
     expect(result.skipped).toEqual([]);
-    expect(result.games[0]).toMatchObject({ slotNumber: 1, team1Player1Id: 'lvl1', team1Player2Id: 'lvl3' });
-    expect(result.games[1]).toMatchObject({ slotNumber: 2, team1Player1Id: 'lvl5', team1Player2Id: 'lvl1' });
+    // Sorted descending: lvl5, lvl3, lvl1. Pairs: [lvl5,lvl3], then wraps to [lvl1,lvl5].
+    expect(result.games[0]).toMatchObject({ slotNumber: 1, team1Player1Id: 'lvl5', team1Player2Id: 'lvl3' });
+    expect(result.games[1]).toMatchObject({ slotNumber: 2, team1Player1Id: 'lvl1', team1Player2Id: 'lvl5' });
   });
 });
 

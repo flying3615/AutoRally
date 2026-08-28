@@ -143,7 +143,7 @@ export function generateKnockoutMatches(
   makeId: IdFactory,
   completedAt = new Date().toISOString(),
 ): TournamentMatchRecord[] {
-  const seeded = [...registrations].sort((a, b) => avgLevel(a) - avgLevel(b));
+  const seeded = [...registrations].sort((a, b) => avgLevel(b) - avgLevel(a));
   const targetSize = nextPowerOfTwo(seeded.length);
   const round = knockoutRoundName(targetSize);
   const matches: TournamentMatchRecord[] = [];
@@ -606,7 +606,7 @@ function pickCycled(pool: TeamRosterPlayer[], count: number): string[] {
 
 function pairAdjacentByLevel(pool: TeamRosterPlayer[], count: number): Array<[string, string]> {
   if (pool.length < 2) return [];
-  const sorted = [...pool].sort((a, b) => a.level - b.level);
+  const sorted = [...pool].sort((a, b) => b.level - a.level);
   const n = sorted.length;
   return Array.from({ length: count }, (_, i) => {
     const idxA = (2 * i) % n;
@@ -617,8 +617,8 @@ function pairAdjacentByLevel(pool: TeamRosterPlayer[], count: number): Array<[st
 
 function pairMixedByLevel(malePool: TeamRosterPlayer[], femalePool: TeamRosterPlayer[], count: number): Array<[string, string]> {
   if (malePool.length === 0 || femalePool.length === 0) return [];
-  const sortedMale = [...malePool].sort((a, b) => a.level - b.level);
-  const sortedFemale = [...femalePool].sort((a, b) => a.level - b.level);
+  const sortedMale = [...malePool].sort((a, b) => b.level - a.level);
+  const sortedFemale = [...femalePool].sort((a, b) => b.level - a.level);
   return Array.from({ length: count }, (_, i) => [
     sortedMale[i % sortedMale.length]!.playerId,
     sortedFemale[i % sortedFemale.length]!.playerId,
